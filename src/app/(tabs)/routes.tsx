@@ -98,7 +98,7 @@ export default function RoutesScreen(): React.ReactElement {
   const ranked = results?.ranked ?? [];
   const filtered = results?.filtered ?? [];
   const categories = [...new Set(routes.map((route) => route.category))];
-  const nearMiss = useNearMissToast(routes);
+  const nearMiss = useNearMissToast(ranked);
 
   async function handleRefresh(): Promise<void> {
     if (isHistorical || !sessionParams) return;

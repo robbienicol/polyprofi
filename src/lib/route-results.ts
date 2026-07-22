@@ -21,6 +21,41 @@ export interface RouteResults {
   selectedStake: (route: Route) => number;
 }
 
+/**
+ * Near-miss relevance. A route that MISSES the goal at the amount the user actually
+ * intends to invest is only worth showing if it's close on BOTH axes: close to the goal,
+ * and reachable without demanding far more capital than the user wants to put in. Otherwise
+ * it's noise (e.g. a T-bill projecting +$199 toward a +$300 goal that would need $3k more).
+ * Thresholds are reciprocals by design (1 / 0.8 = 1.25), so for a route whose return scales
+ * linearly with stake the two checks coincide; both are kept so non-linear routes still get
+ * judged on each axis.
+ */
+export const NEAR_MISS_MIN_PROXIMITY = 0.8; // show only if projected ≥ 80% of the goal
+export const NEAR_MISS_MAX_STAKE_STRETCH = 1.25; // …and reachable within 1.25× the intended amount
+
+export interface RouteRelevanceInput {
+  target: number;
+  projectedReturn: number; // profit at the user's INTENDED stake (not an auto-sized one)
+  requiredInvestment: number | null; // stake needed to actually hit the goal
+  intendedInvestment: number; // what the user wants to invest
+}
+
+export function isRelevantRoute({
+  target,
+  projectedReturn,
+  requiredInvestment,
+  intendedInvestment,
+}: RouteRelevanceInput): boolean {
+  if (target <= 0) return true; // no goal set → nothing to be irrelevant against
+  if (projectedReturn >= target) return true; // hits the goal at the intended amount → always show
+  const closeToGoal = projectedReturn >= target * NEAR_MISS_MIN_PROXIMITY;
+  const withinPriceRange =
+    requiredInvestment != null &&
+    intendedInvestment > 0 &&
+    requiredInvestment <= intendedInvestment * NEAR_MISS_MAX_STAKE_STRETCH;
+  return closeToGoal && withinPriceRange;
+}
+
 export function buildRouteResults(
   routes: Route[],
   params: RouteParams,
@@ -30,16 +65,28 @@ export function buildRouteResults(
 ): RouteResults {
   const referenceStake = params.balance || 1;
   const target = params.target || 1;
+  const intendedInvestment = investment || target || referenceStake;
   const requiredInvestmentById = new Map(
     routes.map((route) => [
       route.id,
       stakeNeededForReturn(route, referenceStake, target),
     ] as const)
   );
+  // Drop irrelevant near-misses before anything else, so scores, ranking, and the
+  // "N ways to make $X" count all reflect only routes worth showing (judged against
+  // the amount the user intends to invest, independent of the auto-size toggle).
+  const relevantRoutes = routes.filter((route) =>
+    isRelevantRoute({
+      target,
+      projectedReturn: rescoreForStake([route], referenceStake, intendedInvestment, target)[0].expectedReturn,
+      requiredInvestment: requiredInvestmentById.get(route.id) ?? null,
+      intendedInvestment,
+    })
+  );
   const selectedStake = (route: Route): number => autoSize
     ? requiredInvestmentById.get(route.id) ?? referenceStake
     : investment || target || referenceStake;
-  const rescored = routes.map((route) => (
+  const rescored = relevantRoutes.map((route) => (
     rescoreForStake([route], referenceStake, selectedStake(route), target)[0]
   ));
   const scoreContext = (route: Route): GoalScoreContext => ({
@@ -62,6 +109,43 @@ export function buildRouteResults(
   if (filters.sort !== 'score') filtered = [...filtered].sort(sortComparator(filters.sort));
 
   return { ranked, filtered, requiredInvestmentById, scoreById, selectedStake };
+}
+
+// ── self-check ──────────────────────────────────────────────────────────────
+export function __selfCheck(): void {
+  // The reported case: +$300 goal, intends $4,901; T-bill projects +$199 and needs $7,378.
+  const tbill = { target: 300, projectedReturn: 199, requiredInvestment: 7378, intendedInvestment: 4901 };
+  console.assert(!isRelevantRoute(tbill), 'far-off T-bill (66% of goal, 1.5× capital) is hidden');
+
+  // Hits the goal at the intended amount → always shown.
+  console.assert(
+    isRelevantRoute({ target: 300, projectedReturn: 300, requiredInvestment: 4901, intendedInvestment: 4901 }),
+    'route that hits the goal at the intended amount is shown',
+  );
+
+  // Genuine near-miss: 81% of goal, needs only ~1.23× the intended amount → shown.
+  console.assert(
+    isRelevantRoute({ target: 300, projectedReturn: 244, requiredInvestment: 6000, intendedInvestment: 4901 }),
+    'near-miss within both bars is shown',
+  );
+
+  // Just over the price-range line (needs >1.25× intended) → hidden.
+  console.assert(
+    !isRelevantRoute({ target: 300, projectedReturn: 235, requiredInvestment: 6200, intendedInvestment: 4901 }),
+    'needs more than 1.25× the intended amount → hidden',
+  );
+
+  // Route that can never reach the goal at any stake (no required investment) → hidden.
+  console.assert(
+    !isRelevantRoute({ target: 300, projectedReturn: 150, requiredInvestment: null, intendedInvestment: 4901 }),
+    'route with no path to the goal is hidden',
+  );
+
+  // No goal set → never filtered.
+  console.assert(
+    isRelevantRoute({ target: 0, projectedReturn: 0, requiredInvestment: null, intendedInvestment: 4901 }),
+    'no goal → nothing is filtered out',
+  );
 }
 
 function sortComparator(sort: Exclude<RouteSort, 'score'>): (a: Route, b: Route) => number {
