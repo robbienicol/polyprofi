@@ -3,7 +3,7 @@ import { isRecord, responseJson } from '@/lib/runtime-validation';
 import { dailyVolatility } from '@/lib/volatility-probability';
 
 const STOCK_SYMBOLS = [
-  'SPY', 'VOO', 'VTI', 'QQQ', 'DIA', 'IWM', 'BND', 'SGOV', 'SHY', 'TLT', 'GLD', 'BRK-B',
+  'SPY', 'VOO', 'VTI', 'VXUS', 'QQQ', 'DIA', 'IWM', 'BND', 'SGOV', 'SHY', 'TLT', 'GLD', 'BRK-B',
   'AAPL', 'TSLA', 'NVDA', 'MSFT', 'AMZN', 'META', '^IRX', '^FVX', '^TNX',
 ];
 const TREASURY_YEAR = new Date().getFullYear();

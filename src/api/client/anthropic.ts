@@ -21,6 +21,7 @@ import { getDailyPool, setDailyPool } from '@/api/client/storage';
 import { applySourcedDebtFacts } from '@/lib/factual-route-data';
 import { buildPolymarketRoutes } from '@/lib/polymarket-routes';
 import { enforceRouteIntegrity, filterRoutesForQuiz } from '@/lib/quiz-profile';
+import { buildEtfRoutes } from '@/lib/etf-routes';
 import { isDebtRoute } from '@/lib/route-investment-metrics';
 import { isRecord, isRoute, parseJson, responseJson } from '@/lib/runtime-validation';
 import { buildTreasuryRoutes } from '@/lib/savings-treasury-routes';
@@ -144,8 +145,9 @@ function mergeAndRankRoutes(
   const { balance, target, timeframe } = params;
   const baselineRoutes = playbookRoutes(returnPct, timeframe, target, { stocks: market.stocks });
   const treasuryRoutes = buildTreasuryRoutes({ yields: market.treasuryBillYields, balance, target, deadlineDays: fallbackMaturity });
+  const etfRoutes = buildEtfRoutes({ quotes: market.stocks, balance, target, deadlineDays: fallbackMaturity });
   const baselines = treasuryRoutes.length > 0 ? baselineRoutes.filter((route) => !isDebtRoute(route)) : baselineRoutes;
-  const sourced = applySourcedDebtFacts([...treasuryRoutes, ...baselines, ...aiRoutes], market.stocks, balance, fallbackMaturity, target);
+  const sourced = applySourcedDebtFacts([...treasuryRoutes, ...etfRoutes, ...baselines, ...aiRoutes], market.stocks, balance, fallbackMaturity, target);
   const tailored = filterRoutesForQuiz(enforceRouteIntegrity(sourced, target), params);
   const livePolymarket = enforceRouteIntegrity(buildPolymarketRoutes(polymarketUniverse, params), target);
   const unique = [...new Map([...tailored, ...livePolymarket].map((route) => [route.id, route])).values()];
