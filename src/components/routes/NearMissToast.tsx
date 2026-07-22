@@ -1,7 +1,7 @@
 import { Animated, Pressable, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { Accent, BottomTabInset, Radius, Shadow } from '@/constants/theme';
+import { Accent, Radius, Shadow } from '@/constants/theme';
 import type { Route } from '@/types/routes';
 
 interface NearMissToastProps {
@@ -12,7 +12,7 @@ interface NearMissToastProps {
 
 export function NearMissToast({ route, opacity, onDismiss }: NearMissToastProps): React.ReactElement {
   return (
-    <Animated.View style={{ opacity, transform: [{ translateY: opacity.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }], position: 'absolute', bottom: BottomTabInset + 12, left: 16, right: 16 }} pointerEvents="box-none">
+    <Animated.View style={{ opacity, transform: [{ translateY: opacity.interpolate({ inputRange: [0, 1], outputRange: [-12, 0] }) }], position: 'absolute', top: 12, left: 16, right: 16 }} pointerEvents="box-none">
       <View className="flex-row items-center" style={{ borderRadius: Radius.lg, backgroundColor: '#000', borderWidth: 1, borderColor: Accent.gold + '55', paddingVertical: 12, paddingLeft: 14, paddingRight: 8, gap: 11, ...Shadow.float }}>
         <ThemedText style={{ fontSize: 18 }}>{route.emoji}</ThemedText>
         <View className="flex-1">
