@@ -1,15 +1,46 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
+import '@/global.css';
+
+import { ClerkProvider } from '@clerk/clerk-expo';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import * as Notifications from 'expo-notifications';
+import { Stack, router, type Href } from 'expo-router';
+import { useEffect } from 'react';
 import { useColorScheme } from 'react-native';
 
-import { AnimatedSplashOverlay } from '@/components/animated-icon';
-import AppTabs from '@/components/app-tabs';
+import { clerkTokenCache } from '@/lib/clerk-cache';
 
-export default function TabLayout() {
-  const colorScheme = useColorScheme();
+const queryClient = new QueryClient();
+const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ?? '';
+
+function useNotificationObserver() {
+  useEffect(() => {
+    function redirect(notification: Notifications.Notification) {
+      const url = notification.request.content.data?.url;
+      if (typeof url === 'string') router.push(url as Href);
+    }
+
+    Notifications.getLastNotificationResponseAsync()
+      .then((response) => {
+        const notification = response?.notification;
+        if (notification) redirect(notification);
+      })
+      .catch(() => {});
+
+    const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
+      redirect(response.notification);
+    });
+    return () => subscription.remove();
+  }, []);
+}
+
+export default function RootLayout(): React.ReactElement {
+  useColorScheme(); // subscribe to color scheme changes
+  useNotificationObserver();
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AnimatedSplashOverlay />
-      <AppTabs />
-    </ThemeProvider>
+    <ClerkProvider publishableKey={publishableKey} tokenCache={clerkTokenCache}>
+      <QueryClientProvider client={queryClient}>
+        <Stack screenOptions={{ headerShown: false }} />
+      </QueryClientProvider>
+    </ClerkProvider>
   );
 }

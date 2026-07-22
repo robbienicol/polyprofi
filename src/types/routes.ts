@@ -1,0 +1,55 @@
+import { QuizAnswers } from '@/types/bets';
+
+interface ExpertSentiment {
+  lean: 'bullish' | 'bearish' | 'mixed' | 'no_signal';
+  confidence: 'high' | 'medium' | 'low';
+  summary: string;
+}
+
+export interface Route {
+  id: string;
+  category: string;
+  emoji: string;
+  description: string;
+  riskLevel: number; // 1–5
+  probability: number; // 0–100
+  expectedReturn: number; // profit in dollars if successful
+  platform: string;
+  strategy: string;
+  // For sports/binary bets: the actual line, e.g. "France ML -200", "Over 2.5 +110". Optional.
+  line?: string;
+  // Calendar days until the position resolves / pays out (Polymarket end date,
+  // bond term, or the goal timeframe). Drives the "matures in Nd" label + sort.
+  maturesInDays?: number;
+  // 'binary': lose entire stake if wrong (sports, Polymarket)
+  // 'partial': capital preserved if thesis doesn't play out (crypto, stocks)
+  lossProfile: 'binary' | 'partial';
+  // true if expectedReturn >= user's target
+  meetsTarget: boolean;
+  expertSentiment?: ExpertSentiment;
+  investmentFacts?: RouteInvestmentFacts;
+}
+
+interface RouteInvestmentFacts {
+  yieldPct?: number;
+  yieldLabel?: string;
+  yieldAsOf?: string;
+  yieldSource?: string;
+  yieldSourceUrl?: string;
+  projectedProfit?: number;
+  projectionBasis?: string;
+  liquidity?: string;
+  expenseRatioPct?: number;
+  sourceCheckedAt?: string;
+}
+
+export type RouteParams = QuizAnswers;
+
+export interface SavedRoutesBatch {
+  id: string;
+  generatedAt: string;
+  quizSnapshot: QuizAnswers;
+  routes: Route[];
+  rerankedAt?: string;
+  previousTopRouteId?: string;
+}
