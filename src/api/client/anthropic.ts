@@ -90,31 +90,46 @@ async function generateRoutes(params: RouteParams): Promise<Route[]> {
   return mergeAndRankRoutes(aiRoutes, polymarketUniverse, marketContext, params, returnPct, fallbackMaturity);
 }
 
+// AI generation now only SUPPLEMENTS Polymarket routes — the deterministic builders
+// (treasury / ETF / playbook) and the live Polymarket universe cover a full result set on
+// their own. So every failure here is non-fatal: log and return [], and let the merge
+// proceed. An empty or thin Polymarket feed must never blow up the whole search.
 async function requestAiRoutes(systemPrompt: string, userPrompt: string, fallbackMaturity: number): Promise<Route[]> {
-  if (!API_KEY) throw new Error('Missing EXPO_PUBLIC_OPENAI_API_KEY');
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${API_KEY}` },
-    body: JSON.stringify({
-      model: 'gpt-4o',
-      max_tokens: 5_000,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-    }),
-  });
-  if (!response.ok) throw new Error(`OpenAI error ${response.status}: ${await response.text()}`);
-  const payload = await responseJson(response);
-  const content = readAssistantContent(payload);
-  const parsed = parseJson(extractJson(content));
-  const values = Array.isArray(parsed) ? parsed : isRecord(parsed) && Array.isArray(parsed.routes) ? parsed.routes : [];
-  const routes = values.filter(isRoute).map((route) => ({
-    ...route,
-    maturesInDays: route.maturesInDays && route.maturesInDays > 0 ? Math.round(route.maturesInDays) : fallbackMaturity,
-  }));
-  if (routes.length === 0) throw new Error('Failed to parse AI response. Please try again.');
-  return routes;
+  if (!API_KEY) {
+    console.warn('[routes:ai] missing EXPO_PUBLIC_OPENAI_API_KEY — skipping AI Polymarket enrichment');
+    return [];
+  }
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${API_KEY}` },
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        max_tokens: 5_000,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+      }),
+    });
+    if (!response.ok) {
+      console.warn(`[routes:ai] OpenAI error ${response.status}: ${await response.text()}`);
+      return [];
+    }
+    const payload = await responseJson(response);
+    const content = readAssistantContent(payload);
+    const parsed = parseJson(extractJson(content));
+    const values = Array.isArray(parsed) ? parsed : isRecord(parsed) && Array.isArray(parsed.routes) ? parsed.routes : [];
+    const routes = values.filter(isRoute).map((route) => ({
+      ...route,
+      maturesInDays: route.maturesInDays && route.maturesInDays > 0 ? Math.round(route.maturesInDays) : fallbackMaturity,
+    }));
+    if (routes.length === 0) console.warn('[routes:ai] no valid Polymarket routes parsed — using deterministic + live routes only');
+    return routes;
+  } catch (error) {
+    console.warn(`[routes:ai] ${error instanceof Error ? error.message : String(error)}`);
+    return [];
+  }
 }
 
 function mergeAndRankRoutes(
