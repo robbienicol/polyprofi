@@ -1,4 +1,7 @@
 import { __selfCheck as checkPlaybook } from '@/api/client/playbook';
+import { __selfCheck as checkEtfRoutes } from '@/lib/etf-routes';
+import { __selfCheck as checkMethodology } from '@/lib/methodology';
+import { __selfCheck as checkRouteResults } from '@/lib/route-results';
 import { __selfCheck as checkPolymarketRoutes } from '@/lib/polymarket-routes';
 import { __selfCheck as checkPortfolio } from '@/lib/portfolio';
 import { __selfCheck as checkQuizProfile } from '@/lib/quiz-profile';
@@ -8,6 +11,9 @@ import { __selfCheck as checkVolatilityProbability } from '@/lib/volatility-prob
 
 const checks = [
   ['playbook', checkPlaybook],
+  ['etf routes', checkEtfRoutes],
+  ['methodology', checkMethodology],
+  ['route results', checkRouteResults],
   ['polymarket routes', checkPolymarketRoutes],
   ['portfolio math', checkPortfolio],
   ['quiz profile', checkQuizProfile],

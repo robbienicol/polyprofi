@@ -43,16 +43,17 @@ export const METHODOLOGY: Record<ProbabilityMethod, MethodologyCopy> = {
   volatility: {
     method: 'volatility',
     badge: 'Volatility estimate',
-    short: "Estimated from this fund's own recent price swings — not a forecast of direction.",
+    short: "Estimated from this fund's recent price swings plus a modest, capped assumed return.",
     long:
       'This probability is the chance the price moves at least your target amount within your ' +
-      'timeframe, estimated from how much it has moved day-to-day over roughly the last 90 trading ' +
-      'days. We assume no view on whether it goes up or down (zero drift) — the number reflects how ' +
-      'much this thing wobbles, projected forward, and nothing about where we think it is headed.',
+      'timeframe. It combines how much the fund has moved day-to-day over roughly the last 90 ' +
+      'trading days with a modest assumed return equal to the fund’s own long-run (5-year) trend — ' +
+      'capped at 8% per year so we credit its upward tendency without assuming it repeats a recent ' +
+      'boom. It is an estimate of the odds, not a forecast of what will happen.',
     caveats: [
-      'Because it ignores the market’s long-run upward tendency, the odds shown for broad index funds are conservative — historically they have risen more often than a no-drift model implies.',
+      'The assumed return is capped at 8%/yr — we credit a fund’s long-run tendency but never project a hot streak forward. A fund whose own trend is lower (e.g. bonds) is credited less.',
       'It assumes a normal spread of daily returns, so it understates rare crashes and sharp rallies (real markets have fatter tails).',
-      'It is based on recent volatility, which is not a guarantee of future volatility.',
+      'It is based on recent volatility and past trend, neither of which is a guarantee of the future.',
       'You keep your capital minus any price decline — this is not a bet you lose entirely.',
     ],
   },
@@ -99,3 +100,34 @@ export const PROBABILITY_DISCLAIMER =
   'PolyProfit shows information and statistical estimates to help you compare options. It is not ' +
   'personalized investment advice and not a recommendation to buy or sell any security. Probabilities ' +
   'are estimates, not guarantees. You are responsible for your own decisions.';
+
+// ── self-check ──────────────────────────────────────────────────────────────
+export function __selfCheck(): void {
+  const base = {
+    id: 'x', category: '', emoji: '', description: '', riskLevel: 3, probability: 50,
+    expectedReturn: 100, platform: '', strategy: '', lossProfile: 'partial' as const, meetsTarget: true,
+  };
+
+  console.assert(
+    probabilityMethodForRoute({ ...base, category: 'Savings & Treasuries', platform: 'TreasuryDirect' }) === 'contractual-yield',
+    'treasury/HYSA → contractual-yield',
+  );
+  console.assert(
+    probabilityMethodForRoute({ ...base, category: 'Stocks & ETFs', platform: 'Brokerage' }) === 'volatility',
+    'ETF/stock → volatility',
+  );
+  console.assert(
+    probabilityMethodForRoute({ ...base, category: 'Polymarket', platform: 'Polymarket', lossProfile: 'binary' }) === 'market-implied',
+    'Polymarket → market-implied',
+  );
+  console.assert(
+    probabilityMethodForRoute({ ...base, category: 'Sports', platform: 'Sportsbook', lossProfile: 'binary', line: 'France ML -200' }) === 'market-implied',
+    'sportsbook line → market-implied',
+  );
+
+  // every method has copy with the pieces the detail screen renders
+  for (const key of ['volatility', 'market-implied', 'contractual-yield'] as const) {
+    const copy = METHODOLOGY[key];
+    console.assert(!!copy.badge && !!copy.short && !!copy.long && copy.caveats.length > 0, `${key} copy is complete`);
+  }
+}
