@@ -4,8 +4,6 @@ import {
   formatMetaculusContext,
   formatPolymarketContext,
   formatPopularPolymarketContext,
-  formatStocksContext,
-  formatTreasuryBillContext,
 } from '@/api/client/market-data';
 import { fetchPolymarketSnapshot } from '@/api/client/polymarket-market-data';
 import {
@@ -15,7 +13,7 @@ import {
   formatWhaleTrades,
   whaleTradesToPicks,
 } from '@/api/client/polymarket-picks';
-import { playbookRoutes, timeframeCalendarDays, timeframeTradingDays } from '@/api/client/playbook';
+import { playbookRoutes, targetBucket, timeframeCalendarDays } from '@/api/client/playbook';
 import { buildRouteGenerationPrompt } from '@/api/client/route-generation-prompt';
 import { getDailyPool, setDailyPool } from '@/api/client/storage';
 import { applySourcedDebtFacts } from '@/lib/factual-route-data';
@@ -30,7 +28,7 @@ import { stakeNeededForReturn } from '@/lib/stake-rescore';
 import type { Route, RouteParams } from '@/types/routes';
 
 const API_KEY = process.env.EXPO_PUBLIC_OPENAI_API_KEY ?? '';
-const DAILY_POOL_VERSION = 'treasury-deadline-v2';
+const DAILY_POOL_VERSION = 'return-bucket-v3';
 const TIMEFRAME_LABELS: Record<RouteParams['timeframe'], string> = {
   today: 'today (next 24 hours)',
   week: 'this week (next 7 days)',
@@ -38,14 +36,6 @@ const TIMEFRAME_LABELS: Record<RouteParams['timeframe'], string> = {
   '3months': 'the next 3 months',
   '1year': 'the next 12 months',
   '5years': 'the next 5 years',
-};
-const TIMEFRAME_MONTHS: Record<RouteParams['timeframe'], number> = {
-  today: 0.033,
-  week: 0.25,
-  month: 1,
-  '3months': 3,
-  '1year': 12,
-  '5years': 60,
 };
 const inflightRoutes = new Map<string, Promise<Route[]>>();
 
@@ -70,9 +60,6 @@ export async function fetchRoutes(params: RouteParams, options: { force?: boolea
 async function generateRoutes(params: RouteParams): Promise<Route[]> {
   const { balance, target, timeframe } = params;
   const returnPct = balance > 0 ? (target / balance) * 100 : 0;
-  const months = TIMEFRAME_MONTHS[timeframe];
-  const annualizedReturn = months >= 12 ? returnPct / (months / 12) : null;
-  const horizonTradingDays = timeframeTradingDays(timeframe);
   const fallbackMaturity = timeframeCalendarDays(timeframe);
   const polymarketSnapshotRequest = fetchPolymarketSnapshot();
   const [marketContext, polymarketSnapshot, polymarketPicks] = await Promise.all([
@@ -89,8 +76,6 @@ async function generateRoutes(params: RouteParams): Promise<Route[]> {
     params,
     timeframeLabel: TIMEFRAME_LABELS[timeframe],
     returnPct,
-    horizonTradingDays,
-    annualizedReturn,
     blocks: {
       picks: formatRawPicks(rawPicks),
       polymarket: formatPolymarketContext(marketContext.polymarket),
@@ -99,8 +84,6 @@ async function generateRoutes(params: RouteParams): Promise<Route[]> {
       taggedPolymarket: formatPolymarketTaggedEvents(polymarketPicks.taggedEvents),
       metaculusEdges: formatMetaculusEdges(polymarketPicks.edges),
       whaleTrades: formatWhaleTrades(polymarketPicks.whaleTrades),
-      stocks: formatStocksContext(marketContext.stocks, { targetPct: returnPct, horizonTradingDays }),
-      treasury: formatTreasuryBillContext(marketContext.treasuryBillYields),
     },
   });
   const aiRoutes = await requestAiRoutes(prompt.system, prompt.user, fallbackMaturity);
@@ -147,7 +130,10 @@ function mergeAndRankRoutes(
   const treasuryRoutes = buildTreasuryRoutes({ yields: market.treasuryBillYields, balance, target, deadlineDays: fallbackMaturity });
   const etfRoutes = buildEtfRoutes({ quotes: market.stocks, balance, target, deadlineDays: fallbackMaturity });
   const baselines = treasuryRoutes.length > 0 ? baselineRoutes.filter((route) => !isDebtRoute(route)) : baselineRoutes;
-  const sourced = applySourcedDebtFacts([...treasuryRoutes, ...etfRoutes, ...baselines, ...aiRoutes], market.stocks, balance, fallbackMaturity, target);
+  // The AI is scoped to Polymarket; hard-guard it so a stray stock/treasury route can't slip in
+  // and collide with the deterministic builders that own those categories.
+  const polymarketAiRoutes = aiRoutes.filter((route) => /polymarket/i.test(route.category));
+  const sourced = applySourcedDebtFacts([...treasuryRoutes, ...etfRoutes, ...baselines, ...polymarketAiRoutes], market.stocks, balance, fallbackMaturity, target);
   const tailored = filterRoutesForQuiz(enforceRouteIntegrity(sourced, target), params);
   const livePolymarket = enforceRouteIntegrity(buildPolymarketRoutes(polymarketUniverse, params), target);
   const unique = [...new Map([...tailored, ...livePolymarket].map((route) => [route.id, route])).values()];
@@ -185,6 +171,17 @@ function routesCacheKey(params: RouteParams): string {
   return JSON.stringify({ ...params, categories: [...params.categories].sort() });
 }
 
+// Key the shared daily pool by the calibrated RETURN BAND, not the raw dollar target.
+// A $300 and a $305 goal (same band) reuse one generation instead of triggering two —
+// collapsing a continuous $ axis into 9 bands is the big cache-hit / token-saving win.
+// The exact target is still honored per-user client-side (rescoreForStake + relevance filter).
 function dailyGoalKey(params: RouteParams): string {
-  return [DAILY_POOL_VERSION, params.timeframe, params.target, params.riskTolerance, [...params.categories].sort().join(',')].join('|');
+  const returnPct = params.balance > 0 ? (params.target / params.balance) * 100 : 0;
+  return [
+    DAILY_POOL_VERSION,
+    params.timeframe,
+    params.riskTolerance,
+    [...params.categories].sort().join(','),
+    `r${targetBucket(returnPct)}`,
+  ].join('|');
 }

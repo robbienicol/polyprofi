@@ -86,7 +86,7 @@ function timeframeToCol(timeframe: string): Col {
 }
 
 // Pick the smallest target bucket >= the needed return, so we never overstate odds.
-function targetBucket(returnPct: number): (typeof TARGETS)[number] {
+export function targetBucket(returnPct: number): (typeof TARGETS)[number] {
   for (const t of TARGETS) if (returnPct <= t) return t;
   return 500;
 }
