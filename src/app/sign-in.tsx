@@ -100,6 +100,14 @@ export default function SignInScreen(): React.ReactElement {
               }}
             />
 
+            <Link href="/forgot-password" asChild>
+              <Pressable className="self-end active:opacity-60">
+                <ThemedText type="small" style={{ color: Brand[500], fontWeight: '700' }}>
+                  Forgot password?
+                </ThemedText>
+              </Pressable>
+            </Link>
+
             {!!error && (
               <ThemedText type="small" className="text-center" style={{ color: '#ef4444' }}>
                 {error}
