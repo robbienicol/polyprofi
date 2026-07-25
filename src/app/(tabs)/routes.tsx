@@ -7,7 +7,6 @@ import { useQuizAnswers } from '@/api/hooks/useQuizAnswers';
 import { useRoutes } from '@/api/hooks/useRoutes';
 import { useSavedRoutes } from '@/api/hooks/useSavedRoutes';
 import { useTrackedBets } from '@/api/hooks/useTrackedBets';
-import { NearMissToast } from '@/components/routes/NearMissToast';
 import { RouteFilters } from '@/components/routes/RouteFilters';
 import { RoutesHeader } from '@/components/routes/RoutesHeader';
 import { TrackRouteForm } from '@/components/routes/TrackRouteForm';
@@ -15,7 +14,6 @@ import { RouteCard } from '@/components/molecules/RouteCard';
 import { ThemedText } from '@/components/themed-text';
 import { AnalyzingLoader } from '@/components/ui/loaders';
 import { Accent, Brand, Radius, Shadow } from '@/constants/theme';
-import { useNearMissToast } from '@/hooks/use-near-miss-toast';
 import { useTheme } from '@/hooks/use-theme';
 import { scheduleWeeklyReminder } from '@/lib/notifications';
 import { parseEntryPrice } from '@/lib/parse-bet-line';
@@ -97,8 +95,6 @@ export default function RoutesScreen(): React.ReactElement {
     : null;
   const ranked = results?.ranked ?? [];
   const filtered = results?.filtered ?? [];
-  const categories = [...new Set(routes.map((route) => route.category))];
-  const nearMiss = useNearMissToast(ranked);
 
   async function handleRefresh(): Promise<void> {
     if (isHistorical || !sessionParams) return;
@@ -173,7 +169,7 @@ export default function RoutesScreen(): React.ReactElement {
             onBackToLatest={() => router.replace('/(tabs)/routes')}
           />
         )}
-        {ranked.length > 0 && <RouteFilters categories={categories} filters={filters} onChange={setFiltersAndReset} />}
+        {ranked.length > 0 && <RouteFilters filters={filters} onChange={setFiltersAndReset} />}
         {error && <RoutesError message={error} onRetry={refresh} />}
         {visibleRoutes.map((route) => {
           const scoreBreakdown = results?.scoreById.get(route.id);
@@ -200,7 +196,6 @@ export default function RoutesScreen(): React.ReactElement {
         {filtered.length === 0 && !isLoading && routes.length > 0 && <EmptyFiltered filters={filters} onClear={() => setFiltersAndReset(DEFAULT_FILTERS)} />}
         {routes.length > 0 && <ThemedText type="small" themeColor="textSecondary" className="text-center" style={{ opacity: 0.4 }}>{isHistorical ? 'Saved search · ' : ''}Pull down to refresh · For entertainment only</ThemedText>}
       </ScrollView>
-      {nearMiss.visible && nearMiss.route && <NearMissToast route={nearMiss.route} opacity={nearMiss.opacity} onDismiss={nearMiss.dismiss} />}
     </Screen>
   );
 }

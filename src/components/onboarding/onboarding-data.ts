@@ -1,112 +1,128 @@
-import { TrackedBet } from '@/types/bets';
-import { Route } from '@/types/routes';
+import { Accent, Brand } from '@/constants/theme';
 
 export interface OnboardingSlide {
   id: string;
   eyebrow: string;
   title: string;
   body: string;
-  kind: 'welcome' | 'goal' | 'safety' | 'routes' | 'tracked';
+  kind: 'scan' | 'rank' | 'breakdown' | 'coach' | 'close';
 }
 
+/**
+ * The pitch, in order: we scan everything → we rank it by value → you can audit the
+ * ranking → a coach explains it → your goal turns into a plan. Every claim here has to
+ * map to something the app actually does (the universes in lib/*-routes.ts, the score in
+ * lib/score.ts, the breakdown on route/[id], RouteCoach) — no invented stats.
+ */
 export const ONBOARDING_SLIDES: OnboardingSlide[] = [
   {
-    id: 'welcome',
-    eyebrow: 'POLYPROFIT',
-    title: 'The safest way\nto hit your goal',
-    body: 'Tell us how much you have, what you want to make, and your deadline. We scan prediction markets and more — ranked safest first.',
-    kind: 'welcome',
+    id: 'scan',
+    eyebrow: 'EVERY OPTION, ONE SCAN',
+    title: 'We scan every way\nto grow your money',
+    body: 'ETFs, mega-cap stocks, treasuries, crypto, prediction markets, sports lines — priced live, in one sweep. You stop hunting across ten apps.',
+    kind: 'scan',
   },
   {
-    id: 'goal',
-    eyebrow: 'YOUR QUIZ',
-    title: 'Your deadline\npicks your routes',
-    body: '$300 → $330 in a year? VOO and treasuries lead. Same goal this week? Prediction-market contracts take over. One quiz, tailored results.',
-    kind: 'goal',
+    id: 'rank',
+    eyebrow: 'RANKED BY VALUE',
+    title: 'Then rank them by\nwhat they\'re worth',
+    body: 'Every option gets one 0–100 value score: chance of hitting your goal, capital safety, cash required, time to payout. Best value on top.',
+    kind: 'rank',
   },
   {
-    id: 'safety',
-    eyebrow: 'WHY WE\'RE DIFFERENT',
-    title: 'Safety you\ncan measure',
-    body: 'VOO averages ~10%/year — history, not hype. A longshot parlay can wipe you out. We rank both on honest odds and capital preserved.',
-    kind: 'safety',
+    id: 'breakdown',
+    eyebrow: 'NOTHING HIDDEN',
+    title: 'See the exact math\nbehind every pick',
+    body: 'Open any route for the full breakdown — how the score was built, the live price it came from, and what happens if it goes against you.',
+    kind: 'breakdown',
   },
   {
-    id: 'routes',
-    eyebrow: 'YOUR ROUTES',
-    title: 'Best-value plays\nshown first',
-    body: 'Every route gets a transparent goal-effectiveness score using chance, capital safety, money required, and maturity.',
-    kind: 'routes',
+    id: 'coach',
+    eyebrow: 'AI COACH · ALWAYS ON',
+    title: 'Ask why. Get a\nstraight answer',
+    body: 'The coach reads every number on the card. Why it ranks first, what would kill it, how much to put in — in plain English, in seconds.',
+    kind: 'coach',
   },
   {
-    id: 'tracked',
-    eyebrow: 'LOCK IT IN',
-    title: 'Track & sell\nwhen you\'re up',
-    body: 'On prediction markets, price moves during the event. We alert you to sell when your profit goal is hit — before the final whistle.',
-    kind: 'tracked',
+    id: 'close',
+    eyebrow: 'YOUR MOVE',
+    title: 'Never guess where\nyour money goes',
+    body: 'Give us your amount, your target and your deadline. You get a ranked plan in under a minute — with the math behind every line of it.',
+    kind: 'close',
   },
 ];
 
-/** Demo routes for onboarding — VOO (safe) vs PM contract (ranked below). */
-export const DEMO_ROUTES: Route[] = [
+/** Slide 1 — the universes we actually price. Keep in sync with lib/*-routes.ts. */
+export interface ScanSource {
+  emoji: string;
+  label: string;
+  detail: string;
+  color: string;
+}
+
+export const SCAN_SOURCES: ScanSource[] = [
+  { emoji: '📈', label: 'Stocks & ETFs', detail: 'Broad funds + mega-caps', color: Brand[500] },
+  { emoji: '🏦', label: 'Treasuries & savings', detail: 'Live yields, every term', color: Accent.blue },
+  { emoji: '🎯', label: 'Prediction markets', detail: 'Polymarket, live contracts', color: Accent.violet },
+  { emoji: '🏀', label: 'Sports lines', detail: 'Today\'s card, de-vigged', color: Accent.gold },
+  { emoji: '₿', label: 'Crypto', detail: 'BTC · ETH · SOL', color: '#F7931A' },
+];
+
+/** Slide 2 — an honest-looking leaderboard: safe stuff wins, longshots are listed last. */
+export interface RankedPreviewRow {
+  emoji: string;
+  name: string;
+  platform: string;
+  score: number;
+  riskLevel: number;
+  note: string;
+}
+
+export const RANKED_PREVIEW: RankedPreviewRow[] = [
+  { emoji: '📈', name: 'VOO · S&P 500', platform: 'Vanguard', score: 82, riskLevel: 3, note: 'Capital preserved' },
+  { emoji: '🏦', name: 'SGOV · T-bills', platform: 'iShares', score: 74, riskLevel: 1, note: 'Contractual yield' },
+  { emoji: '🎯', name: 'Heat win · Yes 58¢', platform: 'Polymarket', score: 61, riskLevel: 3, note: 'All-or-nothing' },
+  { emoji: '₿', name: 'BTC', platform: 'Coinbase', score: 43, riskLevel: 5, note: 'High volatility' },
+  { emoji: '🎲', name: '4-leg parlay', platform: 'Sportsbook', score: 11, riskLevel: 5, note: 'Listed last, not hidden' },
+];
+
+/** Slide 3 — mirrors ScoreMathCard's real weights (35 / 25 / 30 / 10). */
+export interface BreakdownFactor {
+  label: string;
+  weight: string;
+  raw: number;
+  points: number;
+}
+
+export const BREAKDOWN_FACTORS: BreakdownFactor[] = [
+  { label: 'Chance of hitting goal', weight: '35%', raw: 70, points: 24.5 },
+  { label: 'Capital safety', weight: '25%', raw: 88, points: 22.0 },
+  { label: 'Cash required', weight: '30%', raw: 100, points: 30.0 },
+  { label: 'Time to payout', weight: '10%', raw: 55, points: 5.5 },
+];
+
+export const BREAKDOWN_SCORE = 82;
+
+/** Slide 4 — scripted coach exchange. Mirrors what RouteCoach answers about. */
+export interface CoachTurn {
+  role: 'user' | 'coach';
+  text: string;
+}
+
+/** Starter prompts shown in the coach panel — the kinds of question it actually fields. */
+export const COACH_STARTERS: string[] = ['Why #1?', 'What could go wrong?', 'How much should I put in?'];
+
+export const COACH_SCRIPT: CoachTurn[] = [
+  { role: 'user', text: 'Why is VOO first and not the parlay?' },
   {
-    id: 'onboard-voo',
-    category: 'Stocks & ETFs',
-    emoji: '📈',
-    description: 'VOO tracks the S&P 500 — ~10% historical annual return, capital preserved.',
-    riskLevel: 1,
-    probability: 62,
-    expectedReturn: 30,
-    platform: 'Fidelity',
-    strategy: 'Buy VOO · hold through deadline',
-    lossProfile: 'partial',
-    meetsTarget: true,
-  },
-  {
-    id: 'onboard-poly',
-    category: 'Polymarket',
-    emoji: '🏀',
-    description: 'Heat to win — consensus edge after de-vigging books vs contract price.',
-    riskLevel: 3,
-    probability: 68,
-    expectedReturn: 42,
-    platform: 'Polymarket',
-    strategy: 'Buy Yes · sell early if goal hit',
-    line: 'Heat win · Yes 58¢',
-    lossProfile: 'binary',
-    meetsTarget: true,
+    role: 'coach',
+    text: 'The parlay pays more, but all four legs have to land — roughly a 6% shot, and a miss takes the whole stake. VOO clears your $30 target with your capital intact, so 82 vs 11.',
   },
 ];
 
-export const DEMO_TRACKED_BETS: TrackedBet[] = [
-  {
-    id: 'onboard-won',
-    category: 'Polymarket',
-    emoji: '🏀',
-    description: 'Heat Yes — sold at halftime after +$30 unrealized gain.',
-    platform: 'Polymarket',
-    strategy: 'Early exit',
-    riskLevel: 3,
-    probability: 68,
-    expectedReturn: 35,
-    amountWagered: 50,
-    status: 'won',
-    createdAt: '2026-06-28T18:00:00.000Z',
-    profitGoal: 30,
-  },
-  {
-    id: 'onboard-active',
-    category: 'Stocks & ETFs',
-    emoji: '📈',
-    description: 'VOO position — capital preserved, tracking toward year-end goal.',
-    platform: 'Vanguard',
-    strategy: 'Hold',
-    riskLevel: 1,
-    probability: 62,
-    expectedReturn: 30,
-    amountWagered: 300,
-    status: 'active',
-    createdAt: '2026-06-29T10:00:00.000Z',
-    profitGoal: 30,
-  },
+/** Slide 5 — closing proof points. Each maps to a real screen in the app. */
+export const CLOSING_PROOF: { emoji: string; label: string }[] = [
+  { emoji: '🧭', label: 'Every option in one ranked list' },
+  { emoji: '🧾', label: 'Full math and sources on each pick' },
+  { emoji: '💬', label: 'AI coach on call while you decide' },
 ];

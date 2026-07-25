@@ -1,11 +1,13 @@
 import { useUser } from '@clerk/clerk-expo';
 import { useRouter } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { usePortfolioProgress } from '@/api/hooks/usePortfolioProgress';
 import { useSavedRoutes } from '@/api/hooks/useSavedRoutes';
+import { useSavingsGoal } from '@/api/hooks/useSavingsGoal';
+import { SavingsGoalCard } from '@/components/home/SavingsGoalCard';
 import {
   PortfolioLineChart,
   PortfolioRange,
@@ -39,22 +41,13 @@ export default function HomeScreen(): React.ReactElement {
   const latestSearch = history[0] ?? null;
   const fallbackBalance = latestSearch?.quizSnapshot.balance ?? 0;
   const progress = usePortfolioProgress(fallbackBalance);
+  const { goal, achievedCount, markAchieved } = useSavingsGoal();
   const [range, setRange] = useState<PortfolioRange>('1W');
 
-  const goal = useMemo(() => {
-    if (!latestSearch) return null;
-    const { balance, target, timeframe } = latestSearch.quizSnapshot;
-    const labels: Record<string, string> = {
-      today: 'today', week: 'this week', month: 'this month',
-      '3months': 'in 3 months', '1year': 'this year', '5years': 'in 5 years',
-    };
-    return {
-      from: balance,
-      target,
-      to: balance + target,
-      when: labels[timeframe] ?? timeframe,
-    };
-  }, [latestSearch]);
+  // Once tracked value first reaches the goal, mark it reached (flips the card to celebrate).
+  useEffect(() => {
+    if (goal && !goal.achievedAt && progress.value >= goal.targetAmount) markAchieved();
+  }, [goal, progress.value, markAchieved]);
 
   const chartPoints = useMemo(() => {
     const current = {
@@ -98,10 +91,6 @@ export default function HomeScreen(): React.ReactElement {
           ? `${progress.activeCount} position${progress.activeCount === 1 ? '' : 's'} tracked`
           : 'No positions yet';
 
-  const goalProgress = goal && goal.target > 0
-    ? Math.max(0, Math.min(1, (progress.value - goal.from) / goal.target))
-    : 0;
-
   return (
     <View className="flex-1" style={{ backgroundColor: theme.background }}>
       <SafeAreaView className="flex-1">
@@ -142,6 +131,30 @@ export default function HomeScreen(): React.ReactElement {
               <ThemedText style={{ fontSize: 17, color: theme.text }}>↗</ThemedText>
             </Pressable>
           </View>
+
+          {goal ? (
+            <SavingsGoalCard
+              goal={goal}
+              value={progress.value}
+              achievedCount={achievedCount}
+              onSetNew={() => router.push('/goal-setup')}
+            />
+          ) : (
+            <Pressable
+              onPress={() => router.push('/goal-setup')}
+              accessibilityRole="button"
+              className="active:opacity-90"
+              style={{ borderRadius: Radius.xl, backgroundColor: theme.backgroundElevated, borderWidth: 1, borderColor: theme.border, padding: 18, flexDirection: 'row', alignItems: 'center', gap: 14, ...Shadow.card }}>
+              <View style={{ width: 46, height: 46, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center', backgroundColor: Brand[500] + '18' }}>
+                <ThemedText style={{ fontSize: 24 }}>🎯</ThemedText>
+              </View>
+              <View className="flex-1">
+                <ThemedText style={{ fontSize: 15, fontWeight: '800', color: theme.text }}>What are you saving for?</ThemedText>
+                <ThemedText style={{ fontSize: 12, color: theme.textSecondary, marginTop: 2 }}>Set a goal to track your progress</ThemedText>
+              </View>
+              <ThemedText style={{ fontSize: 20, color: Brand[500] }}>→</ThemedText>
+            </Pressable>
+          )}
 
           <View
             style={{
@@ -213,32 +226,6 @@ export default function HomeScreen(): React.ReactElement {
               ) : null}
             </View>
           </View>
-
-          {goal ? (
-            <View style={{
-              borderRadius: Radius.lg,
-              backgroundColor: theme.backgroundElement,
-              borderWidth: 1,
-              borderColor: theme.border,
-              padding: 16,
-              gap: 11,
-            }}>
-              <View className="flex-row justify-between items-end" style={{ gap: 12 }}>
-                <View className="flex-1">
-                  <ThemedText style={{ fontSize: 13, fontWeight: '800', color: theme.text }}>Latest goal</ThemedText>
-                  <ThemedText style={{ fontSize: 12, color: theme.textSecondary, marginTop: 3 }}>
-                    ${goal.from.toLocaleString()} → ${goal.to.toLocaleString()} {goal.when}
-                  </ThemedText>
-                </View>
-                <ThemedText style={{ fontSize: 15, fontWeight: '800', color: Brand[500], ...MONO }}>
-                  {(goalProgress * 100).toFixed(0)}%
-                </ThemedText>
-              </View>
-              <View style={{ height: 5, borderRadius: Radius.pill, backgroundColor: theme.border, overflow: 'hidden' }}>
-                <View style={{ width: `${goalProgress * 100}%`, height: '100%', borderRadius: Radius.pill, backgroundColor: Brand[500] }} />
-              </View>
-            </View>
-          ) : null}
 
           <View className="flex-row" style={{ gap: 10 }}>
             {progress.activeCount > 0 ? (

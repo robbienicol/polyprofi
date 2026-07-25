@@ -1,6 +1,6 @@
 import type { PortfolioProgressPoint } from '@/api/client/storage';
-import type { QuizAnswers, TrackedBet } from '@/types/bets';
-import type { Route, SavedRoutesBatch } from '@/types/routes';
+import type { QuizAnswers, SavingsGoal, SavingsGoalState, TrackedBet } from '@/types/bets';
+import type { MarketQualityFacts, Route, SavedRoutesBatch } from '@/types/routes';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -42,6 +42,22 @@ export function isQuizAnswers(value: unknown): value is QuizAnswers {
     && isFiniteNumber(value.minProbability);
 }
 
+export function isSavingsGoal(value: unknown): value is SavingsGoal {
+  if (!isRecord(value)) return false;
+  return typeof value.id === 'string'
+    && typeof value.label === 'string'
+    && typeof value.emoji === 'string'
+    && isFiniteNumber(value.targetAmount)
+    && typeof value.createdAt === 'string'
+    && isOptional(value.achievedAt, isString);
+}
+
+export function isSavingsGoalState(value: unknown): value is SavingsGoalState {
+  if (!isRecord(value)) return false;
+  return (value.current === null || isSavingsGoal(value.current))
+    && isFiniteNumber(value.achievedCount);
+}
+
 export function isRoute(value: unknown): value is Route {
   if (!isRecord(value)) return false;
   return typeof value.id === 'string'
@@ -56,7 +72,24 @@ export function isRoute(value: unknown): value is Route {
     && isOneOf(value.lossProfile, ['binary', 'partial'])
     && typeof value.meetsTarget === 'boolean'
     && isOptional(value.line, isString)
-    && isOptional(value.maturesInDays, isFiniteNumber);
+    && isOptional(value.maturesInDays, isFiniteNumber)
+    && isOptional(value.marketQuality, isMarketQualityFacts);
+}
+
+function isMarketQualityFacts(value: unknown): value is MarketQualityFacts {
+  if (!isRecord(value)) return false;
+  return isFiniteNumber(value.executionScore)
+    && isOptional(value.stabilityScore, isFiniteNumber)
+    && isFiniteNumber(value.liquidityUsd)
+    && isOptional(value.spreadCents, isFiniteNumber)
+    && isOptional(value.bestBidCents, isFiniteNumber)
+    && isOptional(value.bestAskCents, isFiniteNumber)
+    && isOptional(value.recentRangePts, isFiniteNumber)
+    && isOptional(value.pricePositionPct, isFiniteNumber)
+    && isOneOf(value.pricePosition, ['steady', 'near_recent_low', 'middle', 'near_recent_high', 'unavailable'])
+    && isOptional(value.oneDayMovePts, isFiniteNumber)
+    && isOptional(value.oneWeekMovePts, isFiniteNumber)
+    && isOptional(value.oneMonthMovePts, isFiniteNumber);
 }
 
 export function isTrackedBet(value: unknown): value is TrackedBet {

@@ -6,11 +6,11 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AuthTextInput } from '@/components/auth/AuthTextInput';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -65,39 +65,23 @@ export default function SignInScreen(): React.ReactElement {
             <ThemedText type="small" themeColor="textSecondary">Sign in to your account</ThemedText>
           </View>
 
-          <View className="gap-3">
-            <TextInput
+          <View className="gap-4">
+            <AuthTextInput
+              label="Email"
               value={email}
               onChangeText={setEmail}
-              placeholder="Email"
-              placeholderTextColor={theme.textSecondary}
+              placeholder="you@example.com"
               keyboardType="email-address"
               autoCapitalize="none"
               autoComplete="email"
-              className="px-4 text-base border"
-              style={{
-                borderRadius: Radius.lg,
-                color: theme.text,
-                borderColor: theme.border,
-                backgroundColor: theme.backgroundElement,
-                paddingVertical: 16,
-              }}
             />
-            <TextInput
+            <AuthTextInput
+              label="Password"
               value={password}
               onChangeText={setPassword}
-              placeholder="Password"
-              placeholderTextColor={theme.textSecondary}
+              placeholder="Your password"
               secureTextEntry
               autoComplete="current-password"
-              className="px-4 text-base border"
-              style={{
-                borderRadius: Radius.lg,
-                color: theme.text,
-                borderColor: theme.border,
-                backgroundColor: theme.backgroundElement,
-                paddingVertical: 16,
-              }}
             />
 
             <Link href="/forgot-password" asChild>

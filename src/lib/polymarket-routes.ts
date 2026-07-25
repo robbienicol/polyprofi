@@ -1,10 +1,12 @@
 import { PolymarketEntry } from '@/api/client/market-data';
+import { polymarketMarketQuality } from '@/lib/polymarket-market-quality';
 import { Route, RouteParams } from '@/types/routes';
 
 type RiskBand = 2 | 3 | 4 | 5;
 
 interface Candidate {
   market: PolymarketEntry;
+  outcomeIndex: number;
   outcome: string;
   price: number;
   probability: number;
@@ -36,7 +38,7 @@ function stableId(market: PolymarketEntry, outcome: string): string {
 }
 
 function toRoute(candidate: Candidate, params: RouteParams): Route {
-  const { market, outcome, price, probability, riskLevel } = candidate;
+  const { market, outcomeIndex, outcome, price, probability, riskLevel } = candidate;
   const expectedReturn = Math.round(params.balance * (1 / price - 1));
   const cents = Math.round(price * 100);
   const volume = market.volumeM >= 1
@@ -57,6 +59,7 @@ function toRoute(candidate: Candidate, params: RouteParams): Route {
     lossProfile: 'binary',
     meetsTarget: expectedReturn >= params.target,
     strategy: `Buy ${outcome} near ${cents}¢. Maximum loss is the full $${Math.round(params.balance).toLocaleString()} stake. No independent edge is assumed; this score uses the live market price and loss profile.`,
+    marketQuality: polymarketMarketQuality(market, outcomeIndex),
   };
 }
 
@@ -75,6 +78,7 @@ export function buildPolymarketRoutes(
       const probability = Math.round(price * 100);
       return {
         market,
+        outcomeIndex: index,
         outcome: market.outcomes[index] ?? (index === 0 ? 'Yes' : 'No'),
         price,
         probability,

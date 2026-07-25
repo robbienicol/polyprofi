@@ -7,6 +7,12 @@ interface RawMarket {
   outcomePrices: string | string[];
   volumeNum: number | null;
   liquidityNum?: number | null;
+  spread?: number | null;
+  bestBid?: number | null;
+  bestAsk?: number | null;
+  oneDayPriceChange?: number | null;
+  oneWeekPriceChange?: number | null;
+  oneMonthPriceChange?: number | null;
   slug?: string;
   endDate?: string;
 }
@@ -91,9 +97,19 @@ function toPolymarketEntry(market: RawMarket): PolymarketEntry {
     prices: parseStringArray(market.outcomePrices).map(Number),
     volumeM: (market.volumeNum ?? 0) / 1e6,
     liquidityM: (market.liquidityNum ?? 0) / 1e6,
+    spread: finiteOptional(market.spread),
+    bestBid: finiteOptional(market.bestBid),
+    bestAsk: finiteOptional(market.bestAsk),
+    oneDayPriceChange: finiteOptional(market.oneDayPriceChange),
+    oneWeekPriceChange: finiteOptional(market.oneWeekPriceChange),
+    oneMonthPriceChange: finiteOptional(market.oneMonthPriceChange),
     slug: market.slug,
     endDate: market.endDate,
   };
+}
+
+function finiteOptional(value: number | null | undefined): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
 function parseStringArray(value: string | string[]): string[] {

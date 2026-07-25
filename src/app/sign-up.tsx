@@ -6,11 +6,11 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AuthTextInput } from '@/components/auth/AuthTextInput';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -59,14 +59,6 @@ export default function SignUpScreen(): React.ReactElement {
     }
   }, [isLoaded, signUp, code, setActive, router]);
 
-  const inputStyle = {
-    borderRadius: Radius.lg,
-    color: theme.text,
-    borderColor: theme.border,
-    backgroundColor: theme.backgroundElement,
-    paddingVertical: 16,
-  };
-
   return (
     <View className="flex-1" style={{ backgroundColor: theme.background }}>
       <SafeAreaView className="flex-1">
@@ -85,27 +77,23 @@ export default function SignUpScreen(): React.ReactElement {
           </View>
 
           {step === 'form' ? (
-            <View className="gap-3">
-              <TextInput
+            <View className="gap-4">
+              <AuthTextInput
+                label="Email"
                 value={email}
                 onChangeText={setEmail}
-                placeholder="Email"
-                placeholderTextColor={theme.textSecondary}
+                placeholder="you@example.com"
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoComplete="email"
-                className="px-4 text-base border"
-                style={inputStyle}
               />
-              <TextInput
+              <AuthTextInput
+                label="Password"
                 value={password}
                 onChangeText={setPassword}
-                placeholder="Password"
-                placeholderTextColor={theme.textSecondary}
+                placeholder="At least 8 characters"
                 secureTextEntry
                 autoComplete="new-password"
-                className="px-4 text-base border"
-                style={inputStyle}
               />
               {!!error && (
                 <ThemedText type="small" className="text-center" style={{ color: '#ef4444' }}>{error}</ThemedText>
@@ -121,19 +109,17 @@ export default function SignUpScreen(): React.ReactElement {
               </Pressable>
             </View>
           ) : (
-            <View className="gap-3">
+            <View className="gap-4">
               <ThemedText type="small" themeColor="textSecondary" className="text-center">
                 We sent a 6-digit code to {email}
               </ThemedText>
-              <TextInput
+              <AuthTextInput
                 value={code}
                 onChangeText={setCode}
                 placeholder="000000"
-                placeholderTextColor={theme.textSecondary}
                 keyboardType="number-pad"
                 maxLength={6}
-                className="px-4 border text-center"
-                style={[inputStyle, { fontSize: 28, letterSpacing: 10, fontWeight: '700', fontVariant: ['tabular-nums'] }]}
+                style={{ fontSize: 30, letterSpacing: 12, fontWeight: '800', textAlign: 'center', fontVariant: ['tabular-nums'] }}
               />
               {!!error && (
                 <ThemedText type="small" className="text-center" style={{ color: '#ef4444' }}>{error}</ThemedText>

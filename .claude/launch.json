@@ -28,6 +28,13 @@
       "runtimeArgs": ["run", "web"],
       "port": 8081,
       "autoPort": false
+    },
+    {
+      "name": "Expo (Web 8082)",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["expo", "start", "--web", "--port", "8082"],
+      "port": 8082,
+      "autoPort": false
     }
   ]
 }

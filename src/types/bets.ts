@@ -1,3 +1,19 @@
+/** A named savings goal — a real thing the user is saving toward (persists across quizzes). */
+export interface SavingsGoal {
+  id: string;
+  label: string; // "New surfboard"
+  emoji: string; // "🏄"
+  targetAmount: number; // price of the thing, in dollars
+  createdAt: string; // ISO
+  achievedAt?: string; // ISO, set once tracked value first reaches the target
+}
+
+/** Persisted savings-goal state: the current goal plus a lifetime count of goals reached. */
+export interface SavingsGoalState {
+  current: SavingsGoal | null;
+  achievedCount: number;
+}
+
 export interface QuizAnswers {
   balance: number;
   target: number;

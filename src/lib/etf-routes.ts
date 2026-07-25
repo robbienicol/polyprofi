@@ -17,15 +17,45 @@ export interface EtfDefinition {
   name: string;
   bucket: string;
   riskLevel: number; // 1–5, position on the risk map
-  expenseRatioPct: number;
+  expenseRatioPct: number; // 0 for individual stocks (no fund fee)
+  kind?: 'etf' | 'stock'; // defaults to 'etf'; drives "fund" vs "stock" copy
 }
 
+/**
+ * Curated set spanning the safe→risky axis: broad funds first (cash, bonds, S&P 500,
+ * total-market, international, gold), then growth/small-cap funds, then the largest,
+ * most-liquid individual mega-caps. Risk levels drive where each lands on the map and
+ * whether the quiz's risk cap surfaces it (defensive goals see the low-risk funds; only
+ * aggressive goals reach the high-beta single names). No leveraged/inverse products.
+ */
 export const ETF_UNIVERSE: EtfDefinition[] = [
+  // Broad funds (safe → growth)
+  { symbol: 'SGOV', name: 'iShares 0–3 Month Treasury ETF', bucket: 'Cash / ultra-short T-bills', riskLevel: 1, expenseRatioPct: 0.09 },
   { symbol: 'BND', name: 'Vanguard Total Bond Market ETF', bucket: 'US bonds', riskLevel: 2, expenseRatioPct: 0.03 },
-  { symbol: 'VOO', name: 'Vanguard S&P 500 ETF', bucket: 'US large-cap equity', riskLevel: 3, expenseRatioPct: 0.03 },
-  { symbol: 'VXUS', name: 'Vanguard Total International Stock ETF', bucket: 'International equity', riskLevel: 3, expenseRatioPct: 0.05 },
+  { symbol: 'SCHD', name: 'Schwab US Dividend Equity ETF', bucket: 'US dividend equity', riskLevel: 2, expenseRatioPct: 0.06 },
+  { symbol: 'TLT', name: 'iShares 20+ Year Treasury Bond ETF', bucket: 'Long-term US treasuries', riskLevel: 3, expenseRatioPct: 0.15 },
   { symbol: 'GLD', name: 'SPDR Gold Shares', bucket: 'Gold / diversifier', riskLevel: 3, expenseRatioPct: 0.4 },
+  { symbol: 'VOO', name: 'Vanguard S&P 500 ETF', bucket: 'US large-cap equity (S&P 500)', riskLevel: 3, expenseRatioPct: 0.03 },
+  { symbol: 'VTI', name: 'Vanguard Total Stock Market ETF', bucket: 'US total market', riskLevel: 3, expenseRatioPct: 0.03 },
+  { symbol: 'VXUS', name: 'Vanguard Total International Stock ETF', bucket: 'International equity', riskLevel: 3, expenseRatioPct: 0.05 },
+  { symbol: 'DIA', name: 'SPDR Dow Jones Industrial Average ETF', bucket: 'US blue-chip (Dow 30)', riskLevel: 3, expenseRatioPct: 0.16 },
   { symbol: 'QQQ', name: 'Invesco QQQ (Nasdaq-100)', bucket: 'US growth / tech', riskLevel: 4, expenseRatioPct: 0.2 },
+  { symbol: 'IWM', name: 'iShares Russell 2000 ETF', bucket: 'US small-cap', riskLevel: 4, expenseRatioPct: 0.19 },
+  // Individual mega-caps (largest, most liquid names)
+  { symbol: 'BRK-B', name: 'Berkshire Hathaway', bucket: 'Diversified holding company', riskLevel: 3, expenseRatioPct: 0, kind: 'stock' },
+  { symbol: 'AAPL', name: 'Apple', bucket: 'US mega-cap tech', riskLevel: 4, expenseRatioPct: 0, kind: 'stock' },
+  { symbol: 'MSFT', name: 'Microsoft', bucket: 'US mega-cap tech', riskLevel: 4, expenseRatioPct: 0, kind: 'stock' },
+  { symbol: 'GOOGL', name: 'Alphabet', bucket: 'US mega-cap tech', riskLevel: 4, expenseRatioPct: 0, kind: 'stock' },
+  { symbol: 'AMZN', name: 'Amazon', bucket: 'US mega-cap consumer/tech', riskLevel: 4, expenseRatioPct: 0, kind: 'stock' },
+  { symbol: 'V', name: 'Visa', bucket: 'US payments', riskLevel: 4, expenseRatioPct: 0, kind: 'stock' },
+  { symbol: 'JPM', name: 'JPMorgan Chase', bucket: 'US banking', riskLevel: 4, expenseRatioPct: 0, kind: 'stock' },
+  { symbol: 'WMT', name: 'Walmart', bucket: 'US consumer staples', riskLevel: 3, expenseRatioPct: 0, kind: 'stock' },
+  { symbol: 'JNJ', name: 'Johnson & Johnson', bucket: 'US healthcare', riskLevel: 3, expenseRatioPct: 0, kind: 'stock' },
+  { symbol: 'COST', name: 'Costco Wholesale', bucket: 'US consumer', riskLevel: 4, expenseRatioPct: 0, kind: 'stock' },
+  { symbol: 'XOM', name: 'Exxon Mobil', bucket: 'US energy', riskLevel: 4, expenseRatioPct: 0, kind: 'stock' },
+  { symbol: 'META', name: 'Meta Platforms', bucket: 'US mega-cap tech', riskLevel: 5, expenseRatioPct: 0, kind: 'stock' },
+  { symbol: 'NVDA', name: 'Nvidia', bucket: 'US semiconductors', riskLevel: 5, expenseRatioPct: 0, kind: 'stock' },
+  { symbol: 'TSLA', name: 'Tesla', bucket: 'US autos / growth', riskLevel: 5, expenseRatioPct: 0, kind: 'stock' },
 ];
 
 export const ETF_SYMBOLS: string[] = ETF_UNIVERSE.map((etf) => etf.symbol);
@@ -79,19 +109,22 @@ export function buildEtfRoutes({
 
     const realistic = probability >= REALISTIC_HIT_THRESHOLD;
     const price = quote.price.toFixed(2);
+    const isStock = etf.kind === 'stock';
+    const instrument = isStock ? 'stock' : 'fund';
+    const expenseClause = isStock ? '' : ` Expense ratio ${etf.expenseRatioPct}%.`;
     return [
       {
         id: `etf-${etf.symbol.toLowerCase()}`,
         category: 'Stocks & ETFs',
-        emoji: '📈',
+        emoji: isStock ? '🏢' : '📈',
         description: `Put your $${balance.toLocaleString()} in ${etf.symbol} (${etf.name}, currently $${price}) — clears +${targetPct.toFixed(1)}% about ${probability.toFixed(0)}% of the time over ${deadlineDays}d, from its recent volatility plus a ${driftPct.toFixed(1)}%/yr assumed return.`,
         riskLevel: etf.riskLevel,
         probability,
         expectedReturn: target, // profit if it hits the target move; capital preserved minus any decline otherwise
         platform: 'Brokerage',
         strategy: realistic
-          ? `A ${etf.bucket} fund — the largest, most liquid name in its class. Odds use its own long-run trend as a modest assumed return (${driftPct.toFixed(1)}%/yr, capped at ${MAX_ASSUMED_ANNUAL_DRIFT_PCT}%), not a promise it repeats. Expense ratio ${etf.expenseRatioPct}%.`
-          : `A ${etf.bucket} fund — the largest, most liquid name in its class. Even crediting a ${driftPct.toFixed(1)}%/yr long-run trend, hitting +${targetPct.toFixed(1)}% this fast is a reach; a longer timeframe raises the odds. Expense ratio ${etf.expenseRatioPct}%.`,
+          ? `A ${etf.bucket} ${instrument} — one of the largest, most liquid names in its class. Odds use its own long-run trend as a modest assumed return (${driftPct.toFixed(1)}%/yr, capped at ${MAX_ASSUMED_ANNUAL_DRIFT_PCT}%), not a promise it repeats.${expenseClause}`
+          : `A ${etf.bucket} ${instrument} — one of the largest, most liquid names in its class. Even crediting a ${driftPct.toFixed(1)}%/yr long-run trend, hitting +${targetPct.toFixed(1)}% this fast is a reach; a longer timeframe raises the odds.${expenseClause}`,
         maturesInDays: deadlineDays,
         lossProfile: 'partial',
         meetsTarget: realistic,

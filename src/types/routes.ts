@@ -6,6 +6,21 @@ interface ExpertSentiment {
   summary: string;
 }
 
+export interface MarketQualityFacts {
+  executionScore: number;
+  stabilityScore?: number;
+  liquidityUsd: number;
+  spreadCents?: number;
+  bestBidCents?: number;
+  bestAskCents?: number;
+  recentRangePts?: number;
+  pricePositionPct?: number;
+  pricePosition: 'steady' | 'near_recent_low' | 'middle' | 'near_recent_high' | 'unavailable';
+  oneDayMovePts?: number;
+  oneWeekMovePts?: number;
+  oneMonthMovePts?: number;
+}
+
 export interface Route {
   id: string;
   category: string;
@@ -28,6 +43,7 @@ export interface Route {
   meetsTarget: boolean;
   expertSentiment?: ExpertSentiment;
   investmentFacts?: RouteInvestmentFacts;
+  marketQuality?: MarketQualityFacts;
 }
 
 interface RouteInvestmentFacts {

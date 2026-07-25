@@ -29,6 +29,19 @@ export interface GoalScoreBreakdown {
     capitalEfficiency: number;
     timeEfficiency: number;
   };
+  /**
+   * All-or-nothing drag: for binary routes the whole score is scaled by the success
+   * probability, because when a binary bet misses you don't merely miss the goal — you
+   * lose the entire stake. null for capital-preserving (partial) routes, where a miss
+   * still leaves you holding the asset.
+  */
+  allOrNothingFactor: number | null;
+  marketQualityAdjustment: {
+    executionScore: number | null;
+    stabilityScore: number | null;
+    factor: number;
+    deduction: number;
+  } | null;
   cap: number | null;
   capReason: GoalScoreCapReason | null;
 }
@@ -44,6 +57,19 @@ export interface GoalScoreBreakdown {
  *
  * Affordability and deadline misses are gates. They cap the final number instead
  * of becoming more weights that a high probability could average away.
+ *
+ * All-or-nothing routes get one extra correction: the score is scaled by the success
+ * probability. The four components measure how good the route is *when it works*, but a
+ * binary bet that misses loses the whole stake — so a 60%-likely lottery ticket shouldn't
+ * out-rank a capital-safe stock just because it needs little money and resolves fast.
+ * Probability deliberately matters twice for binary routes (once as reliability, once as
+ * this survival scale) precisely because the downside is catastrophic; capital-preserving
+ * routes are untouched, since a miss there still leaves you holding the asset.
+ *
+ * Live Polymarket routes can receive two bounded market-quality deductions. Execution
+ * quality contributes up to 10%, and price stability contributes up to 5%. These inputs
+ * never manufacture an informational edge: a perfect market keeps the theoretical score,
+ * while a wide, thin, or violently repricing market loses confidence.
  */
 export function goalEffectivenessScore(route: Route, context: GoalScoreContext): GoalScoreBreakdown {
   const reliability = clamp(route.probability, 0, 100);
@@ -86,6 +112,14 @@ export function goalEffectivenessScore(route: Route, context: GoalScoreContext):
     + contributions.timeEfficiency
   );
 
+  // All-or-nothing drag: scale the whole score by survival probability for binary routes.
+  const allOrNothingFactor = route.lossProfile === 'binary' ? clamp(reliability / 100, 0, 1) : null;
+  const draggedScore = allOrNothingFactor == null ? rawScore : round1(rawScore * allOrNothingFactor);
+  const marketQualityAdjustment = polymarketMarketQualityAdjustment(route, draggedScore);
+  const qualityAdjustedScore = marketQualityAdjustment == null
+    ? draggedScore
+    : round1(draggedScore * marketQualityAdjustment.factor);
+
   let cap: number | null = null;
   let capReason: GoalScoreCapReason | null = null;
   if (maturityDays > deadlineDays) {
@@ -104,16 +138,45 @@ export function goalEffectivenessScore(route: Route, context: GoalScoreContext):
   }
 
   return {
-    score: Math.round(clamp(cap == null ? rawScore : Math.min(rawScore, cap), 0, 100)),
+    score: Math.round(clamp(cap == null ? qualityAdjustedScore : Math.min(qualityAdjustedScore, cap), 0, 100)),
     rawScore,
     reliability: round1(reliability),
     principalProtection: round1(principalProtection),
     capitalEfficiency: round1(capitalEfficiency),
     timeEfficiency: round1(timeEfficiency),
     contributions,
+    allOrNothingFactor,
+    marketQualityAdjustment,
     cap,
     capReason,
   };
+}
+
+function polymarketMarketQualityAdjustment(
+  route: Route,
+  scoreBeforeQuality: number
+): GoalScoreBreakdown['marketQualityAdjustment'] {
+  const executionScore = finiteScore(route.marketQuality?.executionScore);
+  const stabilityScore = finiteScore(route.marketQuality?.stabilityScore);
+  if (executionScore == null && stabilityScore == null) return null;
+
+  let factor = 1;
+  if (executionScore != null) factor -= 0.10 * (1 - executionScore / 100);
+  if (stabilityScore != null) factor -= 0.05 * (1 - stabilityScore / 100);
+  factor = Math.round(clamp(factor, 0.85, 1) * 1000) / 1000;
+
+  return {
+    executionScore,
+    stabilityScore,
+    factor,
+    deduction: round1(scoreBeforeQuality - scoreBeforeQuality * factor),
+  };
+}
+
+function finiteScore(value: number | undefined): number | null {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? clamp(value, 0, 100)
+    : null;
 }
 
 export function sortByPolyProfitScore(
@@ -129,6 +192,11 @@ export function sortByPolyProfitScore(
     const bBreakdown = breakdowns.get(b)!;
     const scoreDelta = bBreakdown.score - aBreakdown.score;
     if (scoreDelta !== 0) return scoreDelta;
+
+    const marketQualityDelta =
+      (bBreakdown.marketQualityAdjustment?.factor ?? 1)
+      - (aBreakdown.marketQualityAdjustment?.factor ?? 1);
+    if (marketQualityDelta !== 0) return marketQualityDelta;
 
     const capitalDelta = bBreakdown.capitalEfficiency - aBreakdown.capitalEfficiency;
     if (capitalDelta !== 0) return capitalDelta;
@@ -198,6 +266,41 @@ export function __selfCheck(): void {
 
   const binary = goalEffectivenessScore(mk({ lossProfile: 'binary' }), context(1000));
   invariant(binary.principalProtection === 0, 'binary route must get no principal-protection credit');
+  invariant(binary.allOrNothingFactor === 1, 'a certain (100%) binary route is not dragged');
+
+  // All-or-nothing drag: a coin-flip binary bet must score below a capital-safe route with
+  // the same probability — losing the whole stake half the time is not "goal effectiveness".
+  const binaryCoinflip = goalEffectivenessScore(mk({ lossProfile: 'binary', probability: 50 }), context(1000));
+  const safeCoinflip = goalEffectivenessScore(mk({ lossProfile: 'partial', probability: 50, riskLevel: 3 }), context(1000));
+  invariant(binaryCoinflip.allOrNothingFactor === 0.5, 'binary drag equals success probability');
+  invariant(binaryCoinflip.score < safeCoinflip.score, 'all-or-nothing coin flip must score below a capital-safe equivalent');
+  // A near-certain binary bet keeps most of its score — the drag is proportional, not a flat cap.
+  const binaryLikely = goalEffectivenessScore(mk({ lossProfile: 'binary', probability: 95 }), context(1000));
+  invariant(binaryLikely.score > binaryCoinflip.score, 'higher-probability binary routes are dragged less');
+
+  const liquidBinary = goalEffectivenessScore(mk({
+    lossProfile: 'binary',
+    probability: 70,
+    marketQuality: {
+      executionScore: 100,
+      stabilityScore: 100,
+      liquidityUsd: 100_000,
+      pricePosition: 'middle',
+    },
+  }), context(1000));
+  const thinVolatileBinary = goalEffectivenessScore(mk({
+    lossProfile: 'binary',
+    probability: 70,
+    marketQuality: {
+      executionScore: 20,
+      stabilityScore: 20,
+      liquidityUsd: 500,
+      pricePosition: 'near_recent_high',
+    },
+  }), context(1000));
+  invariant(liquidBinary.marketQualityAdjustment?.factor === 1, 'perfect market quality should not change the score');
+  invariant(thinVolatileBinary.marketQualityAdjustment?.factor === 0.88, 'poor execution and stability should apply the bounded deduction');
+  invariant(thinVolatileBinary.score < liquidBinary.score, 'thin, volatile market should rank below an otherwise identical liquid market');
 
   const sorted = sortByPolyProfitScore(
     [mk({ id: 'expensive' }), mk({ id: 'efficient' })],

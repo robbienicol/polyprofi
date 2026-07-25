@@ -1,3 +1,5 @@
+import type { Route } from '@/types/routes';
+
 export function routeDisplayTitle(route: { line?: string; description: string; category: string }): string {
   if (route.line) return route.line;
   return route.description
@@ -7,14 +9,42 @@ export function routeDisplayTitle(route: { line?: string; description: string; c
     .trim() || route.category;
 }
 
-export function volatilityLabel(riskLevel: number): 'Low' | 'Medium' | 'High' {
-  if (riskLevel <= 2) return 'Low';
-  if (riskLevel === 3) return 'Medium';
+export function volatilityLabel(route: Route): 'Low' | 'Medium' | 'High' {
+  const range = route.marketQuality?.recentRangePts;
+  if (range != null) {
+    if (range < 5) return 'Low';
+    if (range < 15) return 'Medium';
+    return 'High';
+  }
+  if (route.riskLevel <= 2) return 'Low';
+  if (route.riskLevel === 3) return 'Medium';
   return 'High';
 }
 
-export function liquidityLabel(probability: number): 'Low' | 'Medium' | 'High' {
-  if (probability >= 65) return 'High';
-  if (probability >= 40) return 'Medium';
+export function liquidityLabel(route: Route): 'Low' | 'Medium' | 'High' {
+  const executionScore = route.marketQuality?.executionScore;
+  if (executionScore != null) {
+    if (executionScore >= 75) return 'High';
+    if (executionScore >= 45) return 'Medium';
+    return 'Low';
+  }
+  if (route.probability >= 65) return 'High';
+  if (route.probability >= 40) return 'Medium';
   return 'Low';
+}
+
+export function pricePositionLabel(route: Route): string {
+  switch (route.marketQuality?.pricePosition) {
+    case 'near_recent_low': return 'Near recent low';
+    case 'middle': return 'Middle of range';
+    case 'near_recent_high': return 'Near recent high';
+    case 'steady': return 'Little movement';
+    default: return 'Unavailable';
+  }
+}
+
+export function formatMarketLiquidity(liquidityUsd: number): string {
+  if (liquidityUsd >= 1_000_000) return `$${(liquidityUsd / 1_000_000).toFixed(1)}M`;
+  if (liquidityUsd >= 1_000) return `$${Math.round(liquidityUsd / 1_000)}K`;
+  return `$${Math.round(liquidityUsd)}`;
 }

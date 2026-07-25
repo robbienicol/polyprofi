@@ -5,7 +5,13 @@ import { ThemedText } from '@/components/themed-text';
 import { Accent, Brand, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { debtLiquidityLabel, debtYieldLabel, isDebtRoute } from '@/lib/route-investment-metrics';
-import { liquidityLabel, routeDisplayTitle, volatilityLabel } from '@/lib/route-detail';
+import {
+  formatMarketLiquidity,
+  liquidityLabel,
+  pricePositionLabel,
+  routeDisplayTitle,
+  volatilityLabel,
+} from '@/lib/route-detail';
 import type { Route } from '@/types/routes';
 
 const MONO = { fontVariant: ['tabular-nums' as const] };
@@ -24,8 +30,14 @@ export function RouteOpportunityCard({ route, stake, neededToHitGoal, added, add
   const color = riskColor(route.riskLevel);
   const binary = route.lossProfile === 'binary';
   const returnPct = stake > 0 ? (route.expectedReturn / stake) * 100 : 0;
-  const volatility = volatilityLabel(route.riskLevel);
-  const liquidity = liquidityLabel(route.probability);
+  const volatility = volatilityLabel(route);
+  const liquidity = liquidityLabel(route);
+  const marketQuality = route.marketQuality;
+  const volatilityPercent = marketQuality?.recentRangePts != null
+    ? Math.min(100, (marketQuality.recentRangePts / 30) * 100)
+    : route.riskLevel * 20;
+  const liquidityPercent = marketQuality?.executionScore
+    ?? (liquidity === 'High' ? 95 : liquidity === 'Medium' ? 62 : 32);
   const correlation = route.category.match(/treasur|savings|cash/i) ? 'High' : 'Low';
   const debt = isDebtRoute(route);
 
@@ -57,10 +69,28 @@ export function RouteOpportunityCard({ route, stake, neededToHitGoal, added, add
 
       <Section title="Risk Breakdown">
         <RiskRow label="Probability" value={`${route.probability}%`} percent={route.probability} color={Brand[500]} />
-        <RiskRow label="Volatility" value={volatility} percent={route.riskLevel * 20} color={volatility === 'High' ? Accent.red : volatility === 'Medium' ? Accent.gold : Brand[500]} />
-        <RiskRow label="Liquidity" value={liquidity} percent={liquidity === 'High' ? 95 : liquidity === 'Medium' ? 62 : 32} color={Brand[500]} />
+        <RiskRow label="Volatility" value={volatility} percent={volatilityPercent} color={volatility === 'High' ? Accent.red : volatility === 'Medium' ? Accent.gold : Brand[500]} />
+        <RiskRow label="Liquidity" value={liquidity} percent={liquidityPercent} color={liquidity === 'Low' ? Accent.red : liquidity === 'Medium' ? Accent.gold : Brand[500]} />
         <RiskRow label="Correlation" value={correlation} percent={correlation === 'High' ? 80 : 34} color={correlation === 'High' ? Accent.gold : Brand[500]} />
       </Section>
+
+      {marketQuality && <Section title="Market Quality">
+        <View className="flex-row gap-2">
+          <Fact label="Resolution" value={route.maturesInDays ? formatMaturity(route.maturesInDays) : 'Unavailable'} />
+          <Fact label="Liquidity proxy" value={formatMarketLiquidity(marketQuality.liquidityUsd)} />
+        </View>
+        <View className="flex-row gap-2">
+          <Fact label="Bid / ask" value={marketQuality.bestBidCents != null && marketQuality.bestAskCents != null ? `${marketQuality.bestBidCents}¢ / ${marketQuality.bestAskCents}¢` : 'Unavailable'} />
+          <Fact label="Spread" value={marketQuality.spreadCents != null ? `${marketQuality.spreadCents}¢` : 'Unavailable'} />
+        </View>
+        <View className="flex-row gap-2">
+          <Fact label="Price position" value={pricePositionLabel(route)} />
+          <Fact label="Recent range" value={marketQuality.recentRangePts != null ? `${marketQuality.recentRangePts} pts` : 'Unavailable'} />
+        </View>
+        <ThemedText style={{ fontSize: 11.5, lineHeight: 17, color: theme.textSecondary }}>
+          Liquidity is total market liquidity, not guaranteed exit depth. Price position compares today with available 1-day, 1-week, and 1-month checkpoints; it is context, not a value signal.
+        </ThemedText>
+      </Section>}
 
       {debt && <Section title="Investment Facts"><View className="flex-row gap-2"><Fact label="Yield" value={debtYieldLabel(route, stake) ?? 'Check quote'} /><Fact label="Maturity" value={route.maturesInDays ? formatMaturity(route.maturesInDays) : 'Flexible'} /></View><View className="flex-row gap-2"><Fact label="Capital risk" value={route.lossProfile === 'partial' ? 'Lower downside' : 'Stake at risk'} /><Fact label="Liquidity" value={debtLiquidityLabel(route) ?? 'Check exit terms'} /></View><View className="flex-row gap-2"><Fact label="Source" value={route.investmentFacts?.yieldSource ?? 'Unavailable'} /><Fact label="As of" value={route.investmentFacts?.yieldAsOf ?? 'Unavailable'} /></View>{route.investmentFacts?.projectionBasis && <ThemedText style={{ fontSize: 12, lineHeight: 17, color: theme.textSecondary }}>Projection: {route.investmentFacts.projectionBasis}.</ThemedText>}<ThemedText style={{ fontSize: 12, lineHeight: 17, color: theme.textSecondary }}>Also compare after-tax yield, fees, lockup/early-exit terms, issuer/backing, and whether the maturity matches your goal date.</ThemedText></Section>}
 
@@ -75,7 +105,7 @@ export function RouteOpportunityCard({ route, stake, neededToHitGoal, added, add
 
 function Section({ title, children }: React.PropsWithChildren<{ title: string }>): React.ReactElement { const theme = useTheme(); return <View style={{ borderRadius: Radius.lg, backgroundColor: theme.backgroundElement, borderWidth: 1, borderColor: theme.border, padding: 13, gap: 12 }}><ThemedText style={{ fontSize: 15, fontWeight: '800', color: theme.text }}>{title}</ThemedText>{children}</View>; }
 function Divider(): React.ReactElement { const theme = useTheme(); return <View style={{ width: 1, height: 58, backgroundColor: theme.border }} />; }
-function Metric({ value, label, subLabel }: { value: string; label: string; subLabel?: string }): React.ReactElement { const theme = useTheme(); return <View className="flex-1 items-center gap-1"><ThemedText style={{ fontSize: 34, fontWeight: '900', color: Brand[500], ...MONO }}>{value}</ThemedText><ThemedText style={{ fontSize: 13, color: theme.textSecondary, fontWeight: '600' }}>{label}</ThemedText>{subLabel && <ThemedText style={{ fontSize: 11, color: Brand[500], fontWeight: '700' }}>{subLabel}</ThemedText>}</View>; }
-function RiskRow({ label, value, percent, color }: { label: string; value: string; percent: number; color: string }): React.ReactElement { const theme = useTheme(); return <View className="flex-row items-center gap-3"><ThemedText style={{ width: 92, fontSize: 13, color: theme.textSecondary, fontWeight: '600' }}>{label}</ThemedText><View className="flex-1" style={{ height: 6, borderRadius: Radius.pill, backgroundColor: theme.backgroundSelected, overflow: 'hidden' }}><View style={{ width: `${Math.max(0, Math.min(100, percent))}%`, height: '100%', borderRadius: Radius.pill, backgroundColor: color }} /></View><ThemedText style={{ width: 46, textAlign: 'right', fontSize: 13, color: theme.text, fontWeight: '800', ...MONO }}>{value}</ThemedText></View>; }
+function Metric({ value, label, subLabel }: { value: string; label: string; subLabel?: string }): React.ReactElement { const theme = useTheme(); return <View className="flex-1 items-center" style={{ gap: 3, paddingHorizontal: 2 }}><ThemedText numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5} style={{ fontSize: 22, lineHeight: 27, fontWeight: '900', color: Brand[500], ...MONO }}>{value}</ThemedText><ThemedText numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontSize: 12, color: theme.textSecondary, fontWeight: '600', textAlign: 'center' }}>{label}</ThemedText>{subLabel && <ThemedText numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontSize: 11, color: Brand[500], fontWeight: '700', textAlign: 'center' }}>{subLabel}</ThemedText>}</View>; }
+function RiskRow({ label, value, percent, color }: { label: string; value: string; percent: number; color: string }): React.ReactElement { const theme = useTheme(); return <View className="flex-row items-center gap-3"><ThemedText style={{ width: 92, fontSize: 13, color: theme.textSecondary, fontWeight: '600' }}>{label}</ThemedText><View className="flex-1" style={{ height: 6, borderRadius: Radius.pill, backgroundColor: theme.backgroundSelected, overflow: 'hidden' }}><View style={{ width: `${Math.max(0, Math.min(100, percent))}%`, height: '100%', borderRadius: Radius.pill, backgroundColor: color }} /></View><ThemedText numberOfLines={1} style={{ width: 62, textAlign: 'right', fontSize: 13, color: theme.text, fontWeight: '800', ...MONO }}>{value}</ThemedText></View>; }
 function Fact({ label, value }: { label: string; value: string }): React.ReactElement { const theme = useTheme(); return <View className="flex-1" style={{ borderRadius: Radius.md, backgroundColor: theme.backgroundSelected, paddingHorizontal: 12, paddingVertical: 10 }}><ThemedText style={{ fontSize: 10, color: theme.textTertiary, fontWeight: '800' }}>{label.toUpperCase()}</ThemedText><ThemedText style={{ fontSize: 13, color: theme.text, fontWeight: '800', marginTop: 4 }} numberOfLines={2}>{value}</ThemedText></View>; }
 function Outcome({ color, label, chance, value }: { color: string; label: string; chance: string; value: string }): React.ReactElement { const theme = useTheme(); return <View className="flex-row items-center gap-3"><View style={{ width: 9, height: 9, borderRadius: 999, backgroundColor: color }} /><View className="flex-1"><ThemedText style={{ fontSize: 13, fontWeight: '700', color: theme.text }}>{label}</ThemedText><ThemedText style={{ fontSize: 11, color: theme.textTertiary }}>{chance}</ThemedText></View><ThemedText style={{ fontSize: 15, fontWeight: '900', color, ...MONO }}>{value}</ThemedText></View>; }

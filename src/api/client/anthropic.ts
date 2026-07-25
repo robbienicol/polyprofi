@@ -17,6 +17,7 @@ import { playbookRoutes, targetBucket, timeframeCalendarDays } from '@/api/clien
 import { buildRouteGenerationPrompt } from '@/api/client/route-generation-prompt';
 import { getDailyPool, setDailyPool } from '@/api/client/storage';
 import { applySourcedDebtFacts } from '@/lib/factual-route-data';
+import { buildCryptoRoutes } from '@/lib/crypto-routes';
 import { buildPolymarketRoutes } from '@/lib/polymarket-routes';
 import { enforceRouteIntegrity, filterRoutesForQuiz } from '@/lib/quiz-profile';
 import { buildEtfRoutes } from '@/lib/etf-routes';
@@ -144,11 +145,12 @@ function mergeAndRankRoutes(
   const baselineRoutes = playbookRoutes(returnPct, timeframe, target, { stocks: market.stocks });
   const treasuryRoutes = buildTreasuryRoutes({ yields: market.treasuryBillYields, balance, target, deadlineDays: fallbackMaturity });
   const etfRoutes = buildEtfRoutes({ quotes: market.stocks, balance, target, deadlineDays: fallbackMaturity });
+  const cryptoRoutes = buildCryptoRoutes({ quotes: market.stocks, balance, target, deadlineDays: fallbackMaturity });
   const baselines = treasuryRoutes.length > 0 ? baselineRoutes.filter((route) => !isDebtRoute(route)) : baselineRoutes;
   // The AI is scoped to Polymarket; hard-guard it so a stray stock/treasury route can't slip in
   // and collide with the deterministic builders that own those categories.
   const polymarketAiRoutes = aiRoutes.filter((route) => /polymarket/i.test(route.category));
-  const sourced = applySourcedDebtFacts([...treasuryRoutes, ...etfRoutes, ...baselines, ...polymarketAiRoutes], market.stocks, balance, fallbackMaturity, target);
+  const sourced = applySourcedDebtFacts([...treasuryRoutes, ...etfRoutes, ...cryptoRoutes, ...baselines, ...polymarketAiRoutes], market.stocks, balance, fallbackMaturity, target);
   const tailored = filterRoutesForQuiz(enforceRouteIntegrity(sourced, target), params);
   const livePolymarket = enforceRouteIntegrity(buildPolymarketRoutes(polymarketUniverse, params), target);
   const unique = [...new Map([...tailored, ...livePolymarket].map((route) => [route.id, route])).values()];

@@ -17,17 +17,14 @@ const SORT_OPTIONS: { label: string; value: RouteSort }[] = [
   { label: 'Safest', value: 'safest' },
   { label: 'Best chance', value: 'chance' },
   { label: 'Biggest payout', value: 'payout' },
-  { label: 'Soonest', value: 'soonest' },
-  { label: 'Type', value: 'type' },
 ];
 
 interface RouteFiltersProps {
-  categories: string[];
   filters: Filters;
   onChange: (filters: Filters) => void;
 }
 
-export function RouteFilters({ categories, filters, onChange }: RouteFiltersProps): React.ReactElement {
+export function RouteFilters({ filters, onChange }: RouteFiltersProps): React.ReactElement {
   const theme = useTheme();
   const update = (patch: Partial<Filters>) => onChange({ ...filters, ...patch });
 
@@ -43,21 +40,11 @@ export function RouteFilters({ categories, filters, onChange }: RouteFiltersProp
         <Slider style={{ width: '100%', height: 32 }} minimumValue={0} maximumValue={90} step={5} value={filters.minimumProbability} onValueChange={(value) => update({ minimumProbability: Math.round(value) })} minimumTrackTintColor={Brand[500]} maximumTrackTintColor={theme.backgroundSelected} thumbTintColor={filters.minimumProbability === 0 ? theme.textTertiary : Brand[500]} />
       </View>
 
-      {categories.length > 1 && (
-        <FilterRow>
-          {[{ label: 'All', value: null }, ...categories.map((category) => ({ label: category, value: category }))].map(({ label, value }) => (
-            <FilterChip key={label} label={label} active={filters.category === value} onPress={() => update({ category: filters.category === value ? null : value })} />
-          ))}
-        </FilterRow>
-      )}
-
       <FilterRow>
         {LOSS_PROFILE_FILTERS.map(({ label, value, color }) => (
           <FilterChip key={value} label={label} active={filters.lossProfile === value} activeColor={color} onPress={() => update({ lossProfile: filters.lossProfile === value ? null : value })} />
         ))}
-      </FilterRow>
-
-      <FilterRow label="Sort">
+        <View style={{ width: 1, alignSelf: 'stretch', marginVertical: 4, marginHorizontal: 2, backgroundColor: theme.border }} />
         {SORT_OPTIONS.map(({ label, value }) => (
           <FilterChip key={value} label={label} active={filters.sort === value} onPress={() => update({ sort: value })} />
         ))}

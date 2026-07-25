@@ -3,8 +3,10 @@ import { isRecord, responseJson } from '@/lib/runtime-validation';
 import { dailyVolatility } from '@/lib/volatility-probability';
 
 const STOCK_SYMBOLS = [
-  'SPY', 'VOO', 'VTI', 'VXUS', 'QQQ', 'DIA', 'IWM', 'BND', 'SGOV', 'SHY', 'TLT', 'GLD', 'BRK-B',
-  'AAPL', 'TSLA', 'NVDA', 'MSFT', 'AMZN', 'META', '^IRX', '^FVX', '^TNX',
+  'SPY', 'VOO', 'VTI', 'VXUS', 'QQQ', 'DIA', 'IWM', 'BND', 'SGOV', 'SHY', 'TLT', 'GLD', 'SCHD', 'BRK-B',
+  'AAPL', 'TSLA', 'NVDA', 'MSFT', 'AMZN', 'META', 'GOOGL', 'V', 'JPM', 'WMT', 'JNJ', 'COST', 'XOM',
+  'BTC-USD', 'ETH-USD', 'SOL-USD',
+  '^IRX', '^FVX', '^TNX',
 ];
 const TREASURY_YEAR = new Date().getFullYear();
 const TREASURY_URL = `https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/${TREASURY_YEAR}/all?type=daily_treasury_bill_rates&field_tdr_date_value=${TREASURY_YEAR}&page&_format=csv`;

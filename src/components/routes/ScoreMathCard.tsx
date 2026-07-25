@@ -52,6 +52,25 @@ export function ScoreMathCard({ scoreBreakdown, requiredInvestment, availableInv
       <ThemedText style={{ fontSize: 12, color: theme.text, fontWeight: '800', ...MONO }}>
         {formatScoreNumber(scoreBreakdown.contributions.reliability)} + {formatScoreNumber(scoreBreakdown.contributions.principalProtection)} + {formatScoreNumber(scoreBreakdown.contributions.capitalEfficiency)} + {formatScoreNumber(scoreBreakdown.contributions.timeEfficiency)} = {formatScoreNumber(scoreBreakdown.rawScore)}{scoreBreakdown.rawScore !== score ? ` → ${score}` : ''}
       </ThemedText>
+      {scoreBreakdown.allOrNothingFactor != null && scoreBreakdown.allOrNothingFactor < 1 ? (
+        <ThemedText style={{ fontSize: 11, color: Accent.gold, fontWeight: '700', ...MONO }}>
+          All-or-nothing: ×{scoreBreakdown.allOrNothingFactor.toFixed(2)} — a miss loses your full stake ({Math.round((1 - scoreBreakdown.allOrNothingFactor) * 100)}% chance)
+        </ThemedText>
+      ) : null}
+      {scoreBreakdown.marketQualityAdjustment ? (
+        <ThemedText style={{ fontSize: 11, color: Accent.gold, fontWeight: '700', ...MONO }}>
+          Market quality: ×{scoreBreakdown.marketQualityAdjustment.factor.toFixed(3)}
+          {scoreBreakdown.marketQualityAdjustment.executionScore != null
+            ? ` · execution ${formatScoreNumber(scoreBreakdown.marketQualityAdjustment.executionScore)}/100`
+            : ''}
+          {scoreBreakdown.marketQualityAdjustment.stabilityScore != null
+            ? ` · stability ${formatScoreNumber(scoreBreakdown.marketQualityAdjustment.stabilityScore)}/100`
+            : ''}
+          {scoreBreakdown.marketQualityAdjustment.deduction > 0
+            ? ` · −${formatScoreNumber(scoreBreakdown.marketQualityAdjustment.deduction)} pts`
+            : ''}
+        </ThemedText>
+      ) : null}
       {scoreBreakdown.capReason ? (
         <ThemedText style={{ fontSize: 11, color: Accent.red, fontWeight: '700' }}>
           {scoreBreakdown.capReason === 'over_budget'

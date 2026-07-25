@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { QuizAnswers, TrackedBet } from '@/types/bets';
+import { QuizAnswers, SavingsGoalState, TrackedBet } from '@/types/bets';
 import { Route, SavedRoutesBatch } from '@/types/routes';
 import {
   isArrayOf,
@@ -9,6 +9,7 @@ import {
   isRecordOf,
   isRoute,
   isSavedRoutesBatch,
+  isSavingsGoalState,
   isTrackedBet,
   parseJsonAs,
 } from '@/lib/runtime-validation';
@@ -21,6 +22,7 @@ const KEYS = {
   SAVED_ROUTES: 'polyprofit:savedRoutes',
   DAILY_POOL: 'polyprofit:dailyPool',
   PORTFOLIO_PROGRESS: 'polyprofit:portfolioProgress',
+  SAVINGS_GOAL: 'polyprofit:savingsGoal',
 } as const;
 
 const MAX_SAVED_BATCHES = 10;
@@ -82,6 +84,16 @@ export async function setQuizAnswers(answers: QuizAnswers): Promise<void> {
 
 export async function clearQuizAnswers(): Promise<void> {
   await AsyncStorage.removeItem(KEYS.QUIZ);
+}
+
+export async function getSavingsGoalState(): Promise<SavingsGoalState | null> {
+  const val = await AsyncStorage.getItem(KEYS.SAVINGS_GOAL);
+  if (!val) return null;
+  return parseJsonAs(val, isSavingsGoalState);
+}
+
+export async function setSavingsGoalState(state: SavingsGoalState): Promise<void> {
+  await AsyncStorage.setItem(KEYS.SAVINGS_GOAL, JSON.stringify(state));
 }
 
 export async function getTrackedBets(): Promise<TrackedBet[]> {

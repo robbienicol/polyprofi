@@ -4,6 +4,12 @@ export interface PolymarketEntry {
   prices: number[];
   volumeM: number;
   liquidityM?: number;
+  spread?: number;
+  bestBid?: number;
+  bestAsk?: number;
+  oneDayPriceChange?: number;
+  oneWeekPriceChange?: number;
+  oneMonthPriceChange?: number;
   slug?: string;
   endDate?: string;
 }
