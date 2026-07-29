@@ -44,6 +44,11 @@ export interface Route {
   expertSentiment?: ExpertSentiment;
   investmentFacts?: RouteInvestmentFacts;
   marketQuality?: MarketQualityFacts;
+  // Present only for live Polymarket routes (id starts "pm-live-"); traces
+  // back to the source market so it can be matched against other platforms.
+  // Absent for AI-generated and non-Polymarket routes.
+  sourceSlug?: string;
+  sourceEndDate?: string;
 }
 
 interface RouteInvestmentFacts {

@@ -4,8 +4,10 @@ import { Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { timeframeCalendarDays } from "@/api/client/playbook";
+import { useMarketComparison } from "@/api/hooks/useMarketComparison";
 import { useSavedRoutes } from "@/api/hooks/useSavedRoutes";
 import { useTrackedBets } from "@/api/hooks/useTrackedBets";
+import { MarketComparisonCard } from "@/components/routes/MarketComparisonCard";
 import { RelatedRoutes } from "@/components/routes/RelatedRoutes";
 import { RouteCoach } from "@/components/routes/RouteCoach";
 import { RouteOpportunityCard } from "@/components/routes/RouteOpportunityCard";
@@ -39,6 +41,7 @@ export default function RouteDetailScreen(): React.ReactElement {
     item.routes.some((route) => route.id === id),
   );
   const savedRoute = batch?.routes.find((route) => route.id === id);
+  const { comparison } = useMarketComparison(savedRoute);
   if (!savedRoute) {
     return (
       <View
@@ -61,17 +64,22 @@ export default function RouteDetailScreen(): React.ReactElement {
   }
 
   const baseStake = batch?.quizSnapshot.balance ?? 0;
+  const targetProfit = batch?.quizSnapshot.target ?? savedRoute.expectedReturn;
+  const defaultStake = Math.min(
+    baseStake || 1,
+    stakeNeededForReturn(savedRoute, baseStake || 1, targetProfit) ??
+      (baseStake || 1),
+  );
   const requestedStake = Number(stakeParam);
   const stake =
     Number.isFinite(requestedStake) && requestedStake > 0
       ? Math.round(requestedStake)
-      : baseStake;
+      : defaultStake;
   const requestedAvailable = Number(availableParam);
   const availableInvestment =
     Number.isFinite(requestedAvailable) && requestedAvailable > 0
       ? Math.round(requestedAvailable)
-      : stake || baseStake;
-  const targetProfit = batch?.quizSnapshot.target ?? savedRoute.expectedReturn;
+      : baseStake || stake;
   const route = rescoreForStake(
     [savedRoute],
     baseStake || stake || 1,
@@ -193,11 +201,7 @@ export default function RouteDetailScreen(): React.ReactElement {
             onAdd={addToPortfolio}
           />
 
-          <ScoreMathCard
-            scoreBreakdown={scoreBreakdown}
-            requiredInvestment={neededToHitGoal}
-            availableInvestment={availableInvestment}
-          />
+          {comparison ? <MarketComparisonCard comparison={comparison} /> : null}
 
           <View
             style={{
@@ -238,9 +242,27 @@ export default function RouteDetailScreen(): React.ReactElement {
           </View>
 
           <RouteCoach route={route} />
+
           <RelatedRoutes
             routes={relatedRoutes}
-            onSelect={(selected) => router.push(`/route/${selected.id}`)}
+            onSelect={(selected) => {
+              const selectedStake = Math.min(
+                availableInvestment,
+                stakeNeededForReturn(
+                  selected,
+                  baseStake || 1,
+                  targetProfit,
+                ) ?? availableInvestment,
+              );
+              router.push(
+                `/route/${selected.id}?stake=${selectedStake}&available=${availableInvestment}`,
+              );
+            }}
+          />
+          <ScoreMathCard
+            scoreBreakdown={scoreBreakdown}
+            requiredInvestment={neededToHitGoal}
+            availableInvestment={availableInvestment}
           />
           <ThemedText
             className="text-center"

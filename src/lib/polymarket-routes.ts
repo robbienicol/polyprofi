@@ -60,6 +60,8 @@ function toRoute(candidate: Candidate, params: RouteParams): Route {
     meetsTarget: expectedReturn >= params.target,
     strategy: `Buy ${outcome} near ${cents}¢. Maximum loss is the full $${Math.round(params.balance).toLocaleString()} stake. No independent edge is assumed; this score uses the live market price and loss profile.`,
     marketQuality: polymarketMarketQuality(market, outcomeIndex),
+    sourceSlug: market.slug,
+    sourceEndDate: market.endDate,
   };
 }
 
@@ -124,4 +126,28 @@ export function __selfCheck(): void {
   console.assert(polymarketRiskLevel(70) === 3, '70% contract belongs in the balanced-high band');
   console.assert(polymarketRiskLevel(50) === 4, '50% contract is aggressive because the full stake is at risk');
   console.assert(polymarketRiskLevel(20) === 5, '20% contract is a long shot');
+
+  const market: PolymarketEntry = {
+    question: 'Will the Lakers beat the Celtics?',
+    outcomes: ['Yes', 'No'],
+    prices: [0.6, 0.4],
+    volumeM: 1,
+    slug: 'lakers-beat-celtics',
+    endDate: '2026-07-30T00:00:00Z',
+  };
+  const params: RouteParams = {
+    balance: 100,
+    target: 50,
+    timeframe: 'week',
+    categories: [],
+    riskTolerance: 'balanced',
+    maxRiskLevel: 5,
+    minProbability: 0,
+  };
+  const route = toRoute(
+    { market, outcomeIndex: 0, outcome: 'Yes', price: 0.6, probability: 60, riskLevel: 3 },
+    params,
+  );
+  console.assert(route.sourceSlug === market.slug, 'toRoute must preserve the source market slug');
+  console.assert(route.sourceEndDate === market.endDate, 'toRoute must preserve the source market end date');
 }

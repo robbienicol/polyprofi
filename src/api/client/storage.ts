@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import type { SportsMatch } from '@/lib/sports-market-match';
 import { QuizAnswers, SavingsGoalState, TrackedBet } from '@/types/bets';
 import { Route, SavedRoutesBatch } from '@/types/routes';
 import {
@@ -10,6 +11,7 @@ import {
   isRoute,
   isSavedRoutesBatch,
   isSavingsGoalState,
+  isSportsMatch,
   isTrackedBet,
   parseJsonAs,
 } from '@/lib/runtime-validation';
@@ -23,6 +25,7 @@ const KEYS = {
   DAILY_POOL: 'polyprofit:dailyPool',
   PORTFOLIO_PROGRESS: 'polyprofit:portfolioProgress',
   SAVINGS_GOAL: 'polyprofit:savingsGoal',
+  SPORTS_MATCHES: 'polyprofit:sportsMatches',
 } as const;
 
 const MAX_SAVED_BATCHES = 10;
@@ -61,6 +64,20 @@ export async function setDailyPool(goalKey: string, routes: Route[]): Promise<vo
   }
   map[`${today}|${goalKey}`] = routes;
   await AsyncStorage.setItem(KEYS.DAILY_POOL, JSON.stringify(map));
+}
+
+// ── Daily Kalshi↔Polymarket sports match cache ───────────────────────────────
+// The pairing (not the price) is what's expensive to compute, and it's stable
+// for the whole trading day — so it's cached once per day, not per user/goal.
+export async function getSportsMatches(): Promise<SportsMatch[] | null> {
+  const raw = await AsyncStorage.getItem(KEYS.SPORTS_MATCHES);
+  if (!raw) return null;
+  const cached = parseJsonAs(raw, isRecordOf(isArrayOf(isSportsMatch)));
+  return cached?.[todayKey()] ?? null;
+}
+
+export async function setSportsMatches(matches: SportsMatch[]): Promise<void> {
+  await AsyncStorage.setItem(KEYS.SPORTS_MATCHES, JSON.stringify({ [todayKey()]: matches }));
 }
 
 export async function getSubscribed(): Promise<boolean> {

@@ -1,4 +1,5 @@
 import type { PortfolioProgressPoint } from '@/api/client/storage';
+import type { SportsMatch } from '@/lib/sports-market-match';
 import type { QuizAnswers, SavingsGoal, SavingsGoalState, TrackedBet } from '@/types/bets';
 import type { MarketQualityFacts, Route, SavedRoutesBatch } from '@/types/routes';
 
@@ -73,7 +74,9 @@ export function isRoute(value: unknown): value is Route {
     && typeof value.meetsTarget === 'boolean'
     && isOptional(value.line, isString)
     && isOptional(value.maturesInDays, isFiniteNumber)
-    && isOptional(value.marketQuality, isMarketQualityFacts);
+    && isOptional(value.marketQuality, isMarketQualityFacts)
+    && isOptional(value.sourceSlug, isString)
+    && isOptional(value.sourceEndDate, isString);
 }
 
 function isMarketQualityFacts(value: unknown): value is MarketQualityFacts {
@@ -123,6 +126,14 @@ export function isSavedRoutesBatch(value: unknown): value is SavedRoutesBatch {
     && isQuizAnswers(value.quizSnapshot)
     && Array.isArray(value.routes)
     && value.routes.every(isRoute);
+}
+
+export function isSportsMatch(value: unknown): value is SportsMatch {
+  if (!isRecord(value)) return false;
+  return typeof value.polymarketSlug === 'string'
+    && isOneOf(value.league, ['NBA', 'WNBA', 'NFL', 'MLB', 'NHL'])
+    && typeof value.kalshiYesTicker === 'string'
+    && typeof value.kalshiNoTicker === 'string';
 }
 
 export function isArrayOf<T>(validator: Validator<T>): Validator<T[]> {

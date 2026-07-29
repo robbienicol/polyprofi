@@ -14,6 +14,26 @@ export interface PolymarketEntry {
   endDate?: string;
 }
 
+export interface KalshiEntry {
+  ticker: string;
+  eventTicker: string;
+  seriesTicker: string;
+  title: string;
+  yesSubTitle?: string;
+  noSubTitle?: string;
+  yesBid?: number;
+  yesAsk?: number;
+  noBid?: number;
+  noAsk?: number;
+  volume?: number;
+  volume24h?: number;
+  liquidity?: number;
+  closeTime?: string;
+  openTime?: string;
+  expectedExpirationTime?: string;
+  status: string;
+}
+
 export interface SportsGame {
   sport: string;
   home: string;
