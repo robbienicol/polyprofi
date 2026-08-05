@@ -35,7 +35,7 @@ export function InvestmentAmountControl({
   return (
     <View className="gap-3">
       <ThemedText style={{ fontSize: 12, fontWeight: '600', color: theme.textSecondary }}>
-        {autoSize ? 'Amount per route' : 'Amount to invest'}
+        {autoSize ? 'Maximum available per route' : 'Exact amount to invest'}
       </ThemedText>
 
       <View className="flex-row items-center" style={{ gap: 10 }}>
@@ -43,7 +43,9 @@ export function InvestmentAmountControl({
           className="flex-1 flex-row items-center"
           style={{ minHeight: 54, borderRadius: Radius.md, borderWidth: 1.5, borderColor: autoSize ? theme.border : Brand[500], backgroundColor: theme.background, paddingHorizontal: 16, opacity: autoSize ? 0.55 : 1 }}>
           {autoSize ? (
-            <ThemedText style={{ color: theme.textTertiary, fontSize: 17, fontWeight: '700' }}>Sized per route</ThemedText>
+            <ThemedText style={{ color: theme.text, fontSize: 20, fontWeight: '800', fontVariant: ['tabular-nums'] }}>
+              Up to ${amount.toLocaleString()}
+            </ThemedText>
           ) : (
             <>
               <ThemedText style={{ color: Brand[500], fontSize: 22, fontWeight: '800', marginRight: 4 }}>$</ThemedText>
@@ -69,14 +71,14 @@ export function InvestmentAmountControl({
           className="active:opacity-75"
           style={{ minHeight: 54, justifyContent: 'center', alignItems: 'center', borderRadius: Radius.md, borderWidth: 1.5, borderColor: autoSize ? Brand[500] : theme.borderStrong, backgroundColor: autoSize ? Brand[500] + '1A' : theme.background, paddingHorizontal: 16 }}>
           <ThemedText style={{ fontSize: 13, fontWeight: '800', color: autoSize ? Brand[500] : theme.textSecondary }}>
-            {autoSize ? 'Use exact' : 'Auto-size'}
+            {autoSize ? 'Use full amount' : 'Auto-size'}
           </ThemedText>
         </Pressable>
       </View>
 
       {autoSize ? (
         <ThemedText style={{ fontSize: 12, lineHeight: 17, color: theme.textSecondary }}>
-          Each route shows the amount needed to reach your +${target.toLocaleString()} goal.
+          Uses only what each route needs to reach +${target.toLocaleString()}, never more than ${amount.toLocaleString()}.
         </ThemedText>
       ) : (
         <View className="flex-row" style={{ gap: 8 }}>

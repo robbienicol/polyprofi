@@ -4,6 +4,7 @@ import { dailyVolatility } from '@/lib/volatility-probability';
 
 const STOCK_SYMBOLS = [
   'SPY', 'VOO', 'VTI', 'VXUS', 'QQQ', 'DIA', 'IWM', 'BND', 'SGOV', 'SHY', 'TLT', 'GLD', 'SCHD', 'BRK-B',
+  'LQD', 'MUB', 'SCHP', 'BNDX',
   'AAPL', 'TSLA', 'NVDA', 'MSFT', 'AMZN', 'META', 'GOOGL', 'V', 'JPM', 'WMT', 'JNJ', 'COST', 'XOM',
   'BTC-USD', 'ETH-USD', 'SOL-USD',
   '^IRX', '^FVX', '^TNX',

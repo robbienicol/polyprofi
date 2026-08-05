@@ -7,6 +7,7 @@ import { __selfCheck as checkPolymarketRoutes } from '@/lib/polymarket-routes';
 import { __selfCheck as checkPlatformFees } from '@/lib/platform-fees';
 import { __selfCheck as checkPortfolio } from '@/lib/portfolio';
 import { __selfCheck as checkQuizProfile } from '@/lib/quiz-profile';
+import { __selfCheck as checkSavingsTreasuryRoutes } from '@/lib/savings-treasury-routes';
 import { __selfCheck as checkScore } from '@/lib/score';
 import { __selfCheck as checkSportsMarketMatch } from '@/lib/sports-market-match';
 import { __selfCheck as checkStakeRescore } from '@/lib/stake-rescore';
@@ -22,6 +23,7 @@ const checks = [
   ['platform fees', checkPlatformFees],
   ['portfolio math', checkPortfolio],
   ['quiz profile', checkQuizProfile],
+  ['savings & treasury routes', checkSavingsTreasuryRoutes],
   ['goal score', checkScore],
   ['sports market match', checkSportsMarketMatch],
   ['stake rescore', checkStakeRescore],

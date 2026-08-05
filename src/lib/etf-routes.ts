@@ -22,9 +22,10 @@ export interface EtfDefinition {
 }
 
 /**
- * Curated set spanning the safe→risky axis: broad funds first (cash, bonds, S&P 500,
- * total-market, international, gold), then growth/small-cap funds, then the largest,
- * most-liquid individual mega-caps. Risk levels drive where each lands on the map and
+ * Curated set spanning the safe→risky axis: broad funds first (cash, several distinct bond
+ * sub-classes — aggregate, TIPS, municipal, international, investment-grade corporate —
+ * S&P 500, total-market, international equity, gold), then growth/small-cap funds, then the
+ * largest, most-liquid individual mega-caps. Risk levels drive where each lands on the map and
  * whether the quiz's risk cap surfaces it (defensive goals see the low-risk funds; only
  * aggressive goals reach the high-beta single names). No leveraged/inverse products.
  */
@@ -32,6 +33,10 @@ export const ETF_UNIVERSE: EtfDefinition[] = [
   // Broad funds (safe → growth)
   { symbol: 'SGOV', name: 'iShares 0–3 Month Treasury ETF', bucket: 'Cash / ultra-short T-bills', riskLevel: 1, expenseRatioPct: 0.09 },
   { symbol: 'BND', name: 'Vanguard Total Bond Market ETF', bucket: 'US bonds', riskLevel: 2, expenseRatioPct: 0.03 },
+  { symbol: 'SCHP', name: 'Schwab US TIPS ETF', bucket: 'Inflation-protected treasuries (TIPS)', riskLevel: 2, expenseRatioPct: 0.03 },
+  { symbol: 'MUB', name: 'iShares National Muni Bond ETF', bucket: 'Municipal bonds', riskLevel: 2, expenseRatioPct: 0.05 },
+  { symbol: 'BNDX', name: 'Vanguard Total International Bond ETF', bucket: 'International bonds', riskLevel: 2, expenseRatioPct: 0.07 },
+  { symbol: 'LQD', name: 'iShares iBoxx $ Investment Grade Corporate Bond ETF', bucket: 'Investment-grade corporate bonds', riskLevel: 2, expenseRatioPct: 0.14 },
   { symbol: 'SCHD', name: 'Schwab US Dividend Equity ETF', bucket: 'US dividend equity', riskLevel: 2, expenseRatioPct: 0.06 },
   { symbol: 'TLT', name: 'iShares 20+ Year Treasury Bond ETF', bucket: 'Long-term US treasuries', riskLevel: 3, expenseRatioPct: 0.15 },
   { symbol: 'GLD', name: 'SPDR Gold Shares', bucket: 'Gold / diversifier', riskLevel: 3, expenseRatioPct: 0.4 },

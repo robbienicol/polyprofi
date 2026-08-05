@@ -3,11 +3,13 @@ import { Href, Redirect } from 'expo-router';
 
 import { useOnboarding } from '@/api/hooks/useOnboarding';
 import { useSavingsGoal } from '@/api/hooks/useSavingsGoal';
+import { useUserProfile } from '@/api/hooks/useUserProfile';
 import { BrandLoader } from '@/components/ui/loaders';
 
 export default function Index(): React.ReactElement {
   const { isLoaded, isSignedIn } = useAuth();
   const { hasCompletedOnboarding, isLoading: onboardingLoading } = useOnboarding();
+  const { hasCompletedProfile, isLoading: profileLoading } = useUserProfile();
   const { hasGoal, isLoading: goalLoading } = useSavingsGoal();
 
   if (onboardingLoading) {
@@ -29,6 +31,13 @@ export default function Index(): React.ReactElement {
   // DEV: set EXPO_PUBLIC_DEV_BYPASS_AUTH=1 in .env to skip sign-in while testing.
   const bypassAuth = process.env.EXPO_PUBLIC_DEV_BYPASS_AUTH === '1';
   if (!isSignedIn && !bypassAuth) return <Redirect href="/sign-in" />;
+
+  // Once, right after sign-in: a short profile survey (age/experience/goals) for the team's
+  // own analytics — before goal-setup, since that's the next one-time step in the funnel.
+  if (!bypassAuth) {
+    if (profileLoading) return <BrandLoader subtitle="Loading your profile…" />;
+    if (!hasCompletedProfile) return <Redirect href={'/profile-survey' as Href} />;
+  }
 
   // First real step after sign-in: what are you saving for? (one-time until a goal exists)
   if (goalLoading) return <BrandLoader subtitle="Loading your goal…" />;

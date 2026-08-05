@@ -59,10 +59,11 @@ export default function ForgotPasswordScreen(): React.ReactElement {
         code,
         password,
       });
-      const status = result.status as string;
-      if (status === 'complete' || status === 'needs_client_trust') {
+      if (result.status === 'complete') {
         await setActive({ session: result.createdSessionId });
         router.replace('/');
+      } else {
+        setError('Invalid or expired code. Please try again.');
       }
     } catch (e: unknown) {
       setError(parseError(e));

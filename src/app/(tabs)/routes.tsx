@@ -55,7 +55,7 @@ export default function RoutesScreen(): React.ReactElement {
   const [trackingAmount, setTrackingAmount] = useState('');
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [investment, setInvestment] = useState(0);
-  const [autoSize, setAutoSize] = useState(false);
+  const [autoSize, setAutoSize] = useState(true);
   const [visibleCount, setVisibleCount] = useState(30);
   const savedGeneration = useRef<string | null>(null);
 
@@ -181,7 +181,10 @@ export default function RoutesScreen(): React.ReactElement {
                 requiredInvestment={results?.requiredInvestmentById.get(route.id)}
                 currentInvestment={results?.selectedStake(route)}
                 scoreBreakdown={scoreBreakdown}
-                onTrack={trackingId === null ? () => { setTrackingId(route.id); setTrackingAmount(''); } : undefined}
+                onTrack={trackingId === null ? () => {
+                  setTrackingId(route.id);
+                  setTrackingAmount(String(results?.selectedStake(route) ?? referenceStake));
+                } : undefined}
                 onPress={() => router.push(`/route/${route.id}?stake=${results?.selectedStake(route) ?? referenceStake}&available=${autoSize ? referenceStake : displayedInvestment}`)}
               />
               {trackingId === route.id && <TrackRouteForm amount={trackingAmount} onAmountChange={setTrackingAmount} onConfirm={() => confirmTrack(route)} onCancel={() => setTrackingId(null)} />}

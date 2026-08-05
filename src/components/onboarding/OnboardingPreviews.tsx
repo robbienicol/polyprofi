@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Animated, Easing, useWindowDimensions, View } from 'react-native';
+import Svg, { Circle, Path } from 'react-native-svg';
 
 import {
   BREAKDOWN_FACTORS,
@@ -9,7 +10,6 @@ import {
   COACH_STARTERS,
   OnboardingSlide,
   RANKED_PREVIEW,
-  SCAN_SOURCES,
 } from '@/components/onboarding/onboarding-data';
 import { ThemedText } from '@/components/themed-text';
 import { Accent, Brand, Radius, RiskScale, Shadow } from '@/constants/theme';
@@ -172,85 +172,135 @@ function Bar({
 
 /* ------------------------------------------------------------------ slide 1: scan */
 
-function ScanPreview({ active }: PreviewProps): React.ReactElement {
-  const theme = useTheme();
-  const compact = useCompact();
-  const [cursor, setCursor] = useState(0);
-  const [pulse] = useState(() => new Animated.Value(0));
+/** A four-point sparkle that twinkles — scale, opacity and a slight tilt on a loop. */
+function Sparkle({
+  style,
+  size = 20,
+  color,
+  delay = 0,
+  duration = 1400,
+}: {
+  style: object;
+  size?: number;
+  color: string;
+  delay?: number;
+  duration?: number;
+}): React.ReactElement {
+  const [progress] = useState(() => new Animated.Value(0));
 
-  // The cursor walks down the list once, then rests on "ready". renderOnboardingPreview
-  // remounts the preview when the slide becomes active, so this replays per visit.
   useEffect(() => {
-    if (!active || cursor >= SCAN_SOURCES.length) return;
-    const timer = setTimeout(() => setCursor(cursor + 1), 620);
-    return () => clearTimeout(timer);
-  }, [active, cursor]);
-
-  useEffect(() => {
-    if (!active) return;
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(pulse, { toValue: 1, duration: 520, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 0, duration: 520, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(progress, { toValue: 1, duration, delay, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(progress, { toValue: 0, duration, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
       ])
     );
     loop.start();
     return () => loop.stop();
-  }, [active, pulse]);
+  }, [progress, delay, duration]);
 
-  const done = cursor >= SCAN_SOURCES.length;
+  const scale = progress.interpolate({ inputRange: [0, 1], outputRange: [0.65, 1.15] });
+  const opacity = progress.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] });
+  const rotate = progress.interpolate({ inputRange: [0, 1], outputRange: ['-10deg', '10deg'] });
 
   return (
-    <View className="flex-1 justify-center">
-      <Panel title="SCANNING MARKETS" chip={done ? 'READY' : 'LIVE'}>
-        {SCAN_SOURCES.map((source, index) => {
-          const scanned = index < cursor;
-          const scanning = index === cursor;
-          return (
-            <View
-              key={source.label}
-              className="flex-row items-center"
-              style={{
-                gap: 10,
-                paddingHorizontal: 10,
-                paddingVertical: compact ? 7 : 9,
-                borderRadius: Radius.md,
-                backgroundColor: scanning ? source.color + '14' : 'transparent',
-                borderWidth: 1,
-                borderColor: scanning ? source.color + '3D' : 'transparent',
-              }}>
-              <View
-                className="items-center justify-center"
-                style={{ width: 28, height: 28, borderRadius: Radius.sm, backgroundColor: source.color + '1F' }}>
-                <ThemedText style={{ fontSize: 14 }}>{source.emoji}</ThemedText>
-              </View>
-              <View className="flex-1">
-                <ThemedText style={{ fontSize: 13, fontWeight: '700', color: theme.text }}>{source.label}</ThemedText>
-                <ThemedText style={{ fontSize: 10.5, color: theme.textTertiary }}>{source.detail}</ThemedText>
-              </View>
-              {scanned ? (
-                <ThemedText style={{ fontSize: 12, fontWeight: '900', color: Brand[500] }}>✓</ThemedText>
-              ) : scanning ? (
-                <Animated.View style={{ opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.35, 1] }) }}>
-                  <View style={{ width: 7, height: 7, borderRadius: 999, backgroundColor: source.color }} />
-                </Animated.View>
-              ) : (
-                <View style={{ width: 7, height: 7, borderRadius: 999, backgroundColor: theme.backgroundSelected }} />
-              )}
-            </View>
-          );
-        })}
+    <Animated.View style={[style, { opacity, transform: [{ scale }, { rotate }] }]}>
+      <Svg width={size} height={size} viewBox="0 0 24 24">
+        <Path d="M12 0 L14.5 9.5 L24 12 L14.5 14.5 L12 24 L9.5 14.5 L0 12 L9.5 9.5 Z" fill={color} />
+      </Svg>
+    </Animated.View>
+  );
+}
 
-        <View style={{ height: 1, backgroundColor: theme.border, marginHorizontal: 2, marginTop: 2 }} />
-        <View className="flex-row items-center justify-between" style={{ paddingHorizontal: 10, paddingTop: 2 }}>
-          <ThemedText style={{ fontSize: 11, color: theme.textSecondary }}>
-            {done ? 'Every option priced' : 'Pulling live prices…'}
-          </ThemedText>
-          <ThemedText style={{ fontSize: 11, fontWeight: '800', color: done ? Brand[500] : theme.textTertiary, ...MONO }}>
-            {Math.min(cursor, SCAN_SOURCES.length)}/{SCAN_SOURCES.length} markets
-          </ThemedText>
-        </View>
-      </Panel>
+/**
+ * The tagline slide: a hero mark that breathes and bobs, ringed by twinkling sparkles,
+ * rather than a product panel — this is the pitch, not a screenshot of the app yet.
+ */
+function ScanHero({ active }: PreviewProps): React.ReactElement {
+  const [bob] = useState(() => new Animated.Value(0));
+  const [glow] = useState(() => new Animated.Value(0));
+
+  useEffect(() => {
+    if (!active) return;
+    const bobLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(bob, { toValue: 1, duration: 1700, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(bob, { toValue: 0, duration: 1700, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ])
+    );
+    const glowLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(glow, { toValue: 1, duration: 1900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(glow, { toValue: 0, duration: 1900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ])
+    );
+    bobLoop.start();
+    glowLoop.start();
+    return () => {
+      bobLoop.stop();
+      glowLoop.stop();
+    };
+  }, [active, bob, glow]);
+
+  const translateY = bob.interpolate({ inputRange: [0, 1], outputRange: [0, -12] });
+  const glowScale = glow.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1.08] });
+  const glowOpacity = glow.interpolate({ inputRange: [0, 1], outputRange: [0.5, 0.95] });
+
+  return (
+    <View className="flex-1 items-center justify-center">
+      <View style={{ width: 240, height: 240, alignItems: 'center', justifyContent: 'center' }}>
+        <Animated.View
+          style={{
+            position: 'absolute',
+            width: 220,
+            height: 220,
+            borderRadius: 110,
+            backgroundColor: Brand[500] + '26',
+            opacity: glowOpacity,
+            transform: [{ scale: glowScale }],
+          }}
+        />
+
+        <Sparkle style={{ position: 'absolute', top: 14, left: 4 }} color={Brand[300]} size={22} delay={0} duration={1300} />
+        <Sparkle
+          style={{ position: 'absolute', top: 34, right: 0 }}
+          color={Accent.gold}
+          size={15}
+          delay={260}
+          duration={1250}
+        />
+        <Sparkle
+          style={{ position: 'absolute', bottom: 28, left: 20 }}
+          color={Brand[600]}
+          size={17}
+          delay={480}
+          duration={1500}
+        />
+
+        <Animated.View
+          style={{
+            transform: [{ translateY }],
+            width: 112,
+            height: 112,
+            borderRadius: Radius.xl,
+            backgroundColor: Brand[500],
+            alignItems: 'center',
+            justifyContent: 'center',
+            ...Shadow.card,
+          }}>
+          <Svg width={62} height={62} viewBox="0 0 62 62">
+            <Circle cx={22} cy={26} r={5} fill="#06140C" />
+            <Circle cx={40} cy={26} r={5} fill="#06140C" />
+            <Path
+              d="M17 36 Q31 50 45 36"
+              stroke="#06140C"
+              strokeWidth={5.5}
+              strokeLinecap="round"
+              fill="none"
+            />
+          </Svg>
+        </Animated.View>
+      </View>
     </View>
   );
 }
@@ -675,7 +725,7 @@ export function renderOnboardingPreview(kind: OnboardingSlide['kind'], active: b
   const key = active ? 'active' : 'idle';
   switch (kind) {
     case 'scan':
-      return <ScanPreview key={key} active={active} />;
+      return <ScanHero key={key} active={active} />;
     case 'rank':
       return <RankPreview key={key} active={active} />;
     case 'breakdown':

@@ -26,6 +26,7 @@ const KEYS = {
   PORTFOLIO_PROGRESS: 'polyprofit:portfolioProgress',
   SAVINGS_GOAL: 'polyprofit:savingsGoal',
   SPORTS_MATCHES: 'polyprofit:sportsMatches',
+  BIOMETRIC_LOCK: 'polyprofit:biometricLockEnabled',
 } as const;
 
 const MAX_SAVED_BATCHES = 10;
@@ -164,4 +165,12 @@ export async function appendSavedRoutesBatch(batch: SavedRoutesBatch): Promise<v
   const history = await getSavedRoutesHistory();
   const next = [batch, ...history].slice(0, MAX_SAVED_BATCHES);
   await AsyncStorage.setItem(KEYS.SAVED_ROUTES, JSON.stringify(next));
+}
+
+export async function getBiometricLockEnabled(): Promise<boolean> {
+  return (await AsyncStorage.getItem(KEYS.BIOMETRIC_LOCK)) === 'true';
+}
+
+export async function setBiometricLockEnabled(enabled: boolean): Promise<void> {
+  await AsyncStorage.setItem(KEYS.BIOMETRIC_LOCK, String(enabled));
 }

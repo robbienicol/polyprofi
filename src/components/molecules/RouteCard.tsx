@@ -5,7 +5,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Accent, Radius, RiskScale, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { debtLiquidityLabel, debtYieldLabel, isDebtRoute } from '@/lib/route-investment-metrics';
-import { scoreColor, scoreLabel } from '@/lib/score';
+import { scoreColor } from '@/lib/score';
 import type { GoalScoreBreakdown } from '@/lib/score';
 import { Route } from '@/types/routes';
 
@@ -104,7 +104,6 @@ function RouteCardInner({ route, requiredInvestment, currentInvestment, scoreBre
                 borderWidth: 1, borderColor: sc + '35',
               }}>
               <ThemedText style={{ fontSize: 16, color: sc, fontWeight: '900', ...MONO }}>{score}</ThemedText>
-              <ThemedText style={{ fontSize: 9, color: sc, fontWeight: '700' }}>{scoreLabel(score)}</ThemedText>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
               <View style={{ width: 6, height: 6, borderRadius: 999, backgroundColor: rc }} />
