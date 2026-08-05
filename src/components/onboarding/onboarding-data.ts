@@ -1,5 +1,3 @@
-import { Accent, Brand } from '@/constants/theme';
-
 export interface OnboardingSlide {
   id: string;
   eyebrow: string;
@@ -17,55 +15,39 @@ export interface OnboardingSlide {
 export const ONBOARDING_SLIDES: OnboardingSlide[] = [
   {
     id: 'scan',
-    eyebrow: 'EVERY OPTION, ONE SCAN',
+    eyebrow: 'STOP GUESSING',
     title: 'We scan every way\nto grow your money',
-    body: 'ETFs, mega-cap stocks, treasuries, crypto, prediction markets, sports lines — priced live, in one sweep. You stop hunting across ten apps.',
+    body: 'Stocks, treasuries, crypto, prediction markets, sports lines — priced live, in one sweep. What used to take ten apps and an hour now takes one glance.',
     kind: 'scan',
   },
   {
     id: 'rank',
-    eyebrow: 'RANKED BY VALUE',
-    title: 'Then rank them by\nwhat they\'re worth',
-    body: 'Every option gets one 0–100 value score: chance of hitting your goal, capital safety, cash required, time to payout. Best value on top.',
+    eyebrow: 'RANKED, NOT RANDOM',
+    title: 'Then we rank them.\nBest one on top.',
+    body: 'Every option gets one 0–100 value score: chance of hitting your goal, capital safety, cash required, time to payout. No more guessing which tab had the good idea.',
     kind: 'rank',
   },
   {
     id: 'breakdown',
-    eyebrow: 'NOTHING HIDDEN',
+    eyebrow: 'RECEIPTS, NOT VIBES',
     title: 'See the exact math\nbehind every pick',
-    body: 'Open any route for the full breakdown — how the score was built, the live price it came from, and what happens if it goes against you.',
+    body: 'Open any route for the full breakdown — the live price it came from, how the score was built, what happens if it goes against you. If we can\'t show our work, it doesn\'t rank.',
     kind: 'breakdown',
   },
   {
     id: 'coach',
-    eyebrow: 'AI COACH · ALWAYS ON',
-    title: 'Ask why. Get a\nstraight answer',
-    body: 'The coach reads every number on the card. Why it ranks first, what would kill it, how much to put in — in plain English, in seconds.',
+    eyebrow: 'AN ANALYST THAT NEVER SLEEPS',
+    title: 'Ask why. Get a\nstraight answer.',
+    body: 'The coach reads every number on the card. Why it ranks first, what would kill it, how much to put in — plain English, in seconds, any hour of the day.',
     kind: 'coach',
   },
   {
     id: 'close',
     eyebrow: 'YOUR MOVE',
-    title: 'Never guess where\nyour money goes',
-    body: 'Give us your amount, your target and your deadline. You get a ranked plan in under a minute — with the math behind every line of it.',
+    title: 'Stop watching.\nStart winning.',
+    body: 'Give us your amount, your target, your deadline. Get a ranked plan built from live markets in under a minute — the edge people used to pay analysts for.',
     kind: 'close',
   },
-];
-
-/** Slide 1 — the universes we actually price. Keep in sync with lib/*-routes.ts. */
-export interface ScanSource {
-  emoji: string;
-  label: string;
-  detail: string;
-  color: string;
-}
-
-export const SCAN_SOURCES: ScanSource[] = [
-  { emoji: '📈', label: 'Stocks & ETFs', detail: 'Broad funds + mega-caps', color: Brand[500] },
-  { emoji: '🏦', label: 'Treasuries & savings', detail: 'Live yields, every term', color: Accent.blue },
-  { emoji: '🎯', label: 'Prediction markets', detail: 'Polymarket, live contracts', color: Accent.violet },
-  { emoji: '🏀', label: 'Sports lines', detail: 'Today\'s card, de-vigged', color: Accent.gold },
-  { emoji: '₿', label: 'Crypto', detail: 'BTC · ETH · SOL', color: '#F7931A' },
 ];
 
 /** Slide 2 — an honest-looking leaderboard: safe stuff wins, longshots are listed last. */

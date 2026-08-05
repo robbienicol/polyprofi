@@ -1,9 +1,10 @@
 import { useAuth, useUser } from '@clerk/clerk-expo';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useMemo } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { Pressable, ScrollView, Switch, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useBiometricLock } from '@/api/hooks/useBiometricLock';
 import { useSavedRoutes } from '@/api/hooks/useSavedRoutes';
 import { ThemedText } from '@/components/themed-text';
 import { Accent, Brand, Radius, Shadow } from '@/constants/theme';
@@ -18,6 +19,7 @@ export default function ProfileScreen(): React.ReactElement {
   const { signOut } = useAuth();
   const { history } = useSavedRoutes();
   const latestSearch = history[0] ?? null;
+  const { isAvailable: biometricAvailable, isEnabled: biometricEnabled, setEnabled: setBiometricEnabled } = useBiometricLock();
   const initials = useMemo(() => {
     const first = user?.firstName?.[0] ?? '';
     const last = user?.lastName?.[0] ?? '';
@@ -119,6 +121,31 @@ export default function ProfileScreen(): React.ReactElement {
               </>
             )}
           </View>
+
+          {biometricAvailable && (
+            <View
+              className="flex-row items-center justify-between"
+              style={{
+                borderRadius: Radius.xl,
+                backgroundColor: theme.backgroundElevated,
+                borderWidth: 1,
+                borderColor: theme.border,
+                padding: 18,
+                ...Shadow.card,
+              }}>
+              <View className="flex-1 gap-1 pr-3">
+                <ThemedText style={{ fontSize: 15, fontWeight: '800', color: theme.text }}>Require Face ID</ThemedText>
+                <ThemedText type="small" themeColor="textSecondary">
+                  Lock the app when it&apos;s reopened, no password needed
+                </ThemedText>
+              </View>
+              <Switch
+                value={biometricEnabled}
+                onValueChange={setBiometricEnabled}
+                trackColor={{ true: Brand[500] }}
+              />
+            </View>
+          )}
 
           <Pressable
             onPress={handleSignOut}

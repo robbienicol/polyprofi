@@ -83,9 +83,11 @@ export function buildRouteResults(
       intendedInvestment,
     })
   );
-  const selectedStake = (route: Route): number => autoSize
-    ? requiredInvestmentById.get(route.id) ?? referenceStake
-    : investment || target || referenceStake;
+  const selectedStake = (route: Route): number => {
+    if (!autoSize) return intendedInvestment;
+    const requiredInvestment = requiredInvestmentById.get(route.id);
+    return Math.min(requiredInvestment ?? intendedInvestment, intendedInvestment);
+  };
   const rescored = relevantRoutes.map((route) => (
     rescoreForStake([route], referenceStake, selectedStake(route), target)[0]
   ));
@@ -145,6 +147,58 @@ export function __selfCheck(): void {
   console.assert(
     isRelevantRoute({ target: 0, projectedReturn: 0, requiredInvestment: null, intendedInvestment: 4901 }),
     'no goal → nothing is filtered out',
+  );
+
+  const params: RouteParams = {
+    balance: 1000,
+    target: 100,
+    timeframe: 'week',
+    categories: [],
+    riskTolerance: 'balanced',
+    maxRiskLevel: 5,
+    minProbability: 0,
+  };
+  const filters: RouteFilters = {
+    category: null,
+    lossProfile: null,
+    minimumProbability: 0,
+    sort: 'score',
+  };
+  const reportedRoute: Route = {
+    id: 'reported-87c',
+    category: 'Polymarket',
+    emoji: '🔮',
+    description: 'Reported 87¢ contract',
+    riskLevel: 2,
+    probability: 87,
+    expectedReturn: 149,
+    platform: 'Polymarket',
+    strategy: '',
+    line: 'No 87¢',
+    maturesInDays: 7,
+    lossProfile: 'binary',
+    meetsTarget: true,
+  };
+  const autoSized = buildRouteResults([reportedRoute], params, 1000, true, filters);
+  const sizedRoute = autoSized.ranked[0];
+  console.assert(
+    autoSized.selectedStake(sizedRoute) === 670 && sizedRoute.expectedReturn === 100,
+    '87¢ route uses $670 to make the $100 goal instead of risking the full $1,000',
+  );
+
+  const overBudgetRoute: Route = {
+    ...reportedRoute,
+    id: 'over-budget',
+    category: 'Stocks & ETFs',
+    probability: 90,
+    expectedReturn: 80,
+    line: undefined,
+    lossProfile: 'partial',
+  };
+  const capped = buildRouteResults([overBudgetRoute], params, 1000, true, filters);
+  console.assert(
+    capped.selectedStake(capped.ranked[0]) === 1000 && capped.ranked[0].expectedReturn === 80,
+    'auto-size never exceeds the amount the user has available',
   );
 }
 

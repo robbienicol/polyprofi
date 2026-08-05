@@ -23,7 +23,7 @@ import { enforceRouteIntegrity, filterRoutesForQuiz } from '@/lib/quiz-profile';
 import { buildEtfRoutes } from '@/lib/etf-routes';
 import { isDebtRoute } from '@/lib/route-investment-metrics';
 import { isRecord, isRoute, parseJson, responseJson } from '@/lib/runtime-validation';
-import { buildTreasuryRoutes } from '@/lib/savings-treasury-routes';
+import { buildSavingsAccountRoute, buildTreasuryRoutes } from '@/lib/savings-treasury-routes';
 import { sortByPolyProfitScore } from '@/lib/score';
 import { stakeNeededForReturn } from '@/lib/stake-rescore';
 import type { Route, RouteParams } from '@/types/routes';
@@ -144,16 +144,22 @@ function mergeAndRankRoutes(
   const { balance, target, timeframe } = params;
   const baselineRoutes = playbookRoutes(returnPct, timeframe, target, { stocks: market.stocks });
   const treasuryRoutes = buildTreasuryRoutes({ yields: market.treasuryBillYields, balance, target, deadlineDays: fallbackMaturity });
+  const savingsAccountRoutes = buildSavingsAccountRoute({ yields: market.treasuryBillYields, balance, target, deadlineDays: fallbackMaturity });
   const etfRoutes = buildEtfRoutes({ quotes: market.stocks, balance, target, deadlineDays: fallbackMaturity });
   const cryptoRoutes = buildCryptoRoutes({ quotes: market.stocks, balance, target, deadlineDays: fallbackMaturity });
   const baselines = treasuryRoutes.length > 0 ? baselineRoutes.filter((route) => !isDebtRoute(route)) : baselineRoutes;
   // The AI is scoped to Polymarket; hard-guard it so a stray stock/treasury route can't slip in
   // and collide with the deterministic builders that own those categories.
   const polymarketAiRoutes = aiRoutes.filter((route) => /polymarket/i.test(route.category));
-  const sourced = applySourcedDebtFacts([...treasuryRoutes, ...etfRoutes, ...cryptoRoutes, ...baselines, ...polymarketAiRoutes], market.stocks, balance, fallbackMaturity, target);
-  const tailored = filterRoutesForQuiz(enforceRouteIntegrity(sourced, target), params);
+  const sourced = applySourcedDebtFacts([...treasuryRoutes, ...savingsAccountRoutes, ...etfRoutes, ...cryptoRoutes, ...baselines, ...polymarketAiRoutes], market.stocks, balance, fallbackMaturity, target);
+  const tailored = enforceRouteIntegrity(sourced, target);
   const livePolymarket = enforceRouteIntegrity(buildPolymarketRoutes(polymarketUniverse, params), target);
-  const unique = [...new Map([...tailored, ...livePolymarket].map((route) => [route.id, route])).values()];
+  // filterRoutesForQuiz (including the timeframe cutoff) has to run on the LIVE Polymarket
+  // routes too — otherwise a market that missed the horizon quota's grace window still
+  // slips into the pool unfiltered, which is how two-year contracts showed up on a
+  // one-week search.
+  const merged = [...new Map([...tailored, ...livePolymarket].map((route) => [route.id, route])).values()];
+  const unique = filterRoutesForQuiz(merged, params);
   return sortByPolyProfitScore(unique, (route) => ({
     target,
     requiredInvestment: stakeNeededForReturn(route, balance, target),

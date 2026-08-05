@@ -45,6 +45,33 @@ const MID_TIMEFRAMES = new Set<QuizAnswers['timeframe']>(['3months']);
 const SHORT_TIMEFRAMES = new Set<QuizAnswers['timeframe']>(['today', 'week']);
 
 /**
+ * Routes may resolve slightly after the selected deadline, but not in a different
+ * investing horizon. The grace window grows conservatively with the timeframe.
+ */
+export const TIMEFRAME_MATURITY_LIMITS: Record<QuizAnswers['timeframe'], number> = {
+  today: 2,
+  week: 10,
+  month: 37,
+  '3months': 104,
+  '1year': 395,
+  '5years': 1915,
+};
+
+export function timeframeMaturityLimit(timeframe: QuizAnswers['timeframe']): number {
+  return TIMEFRAME_MATURITY_LIMITS[timeframe];
+}
+
+function routeFitsTimeframe(route: Route, timeframe: QuizAnswers['timeframe']): boolean {
+  // A liquid (capital-preserved) route with no fixed maturity can be exited any time, so an
+  // unknown maturesInDays is fine. A binary route (Polymarket) is locked until resolution —
+  // an unresolved/unknown end date must not be waved through as "matches the deadline."
+  if (route.maturesInDays == null) return route.lossProfile !== 'binary';
+  return Number.isFinite(route.maturesInDays)
+    && route.maturesInDays > 0
+    && route.maturesInDays <= timeframeMaturityLimit(timeframe);
+}
+
+/**
  * Timeframe + return target set how strict routes are.
  * Long + modest goal → safer cap (VOO/T-bill territory dominates).
  * Short + aggressive → wider net but still ranked safest-first.
@@ -153,7 +180,10 @@ function sortSafestFirst(routes: Route[]): Route[] {
 /** Client-side filter so quiz categories & risk bounds actually shape the feed. */
 export function filterRoutesForQuiz(routes: Route[], params: RouteParams): Route[] {
   let result = routes.filter(
-    (r) => r.riskLevel <= params.maxRiskLevel && r.probability >= params.minProbability
+    (r) =>
+      r.riskLevel <= params.maxRiskLevel
+      && r.probability >= params.minProbability
+      && routeFitsTimeframe(r, params.timeframe)
   );
 
   if (params.categories.length > 0) {
@@ -221,4 +251,32 @@ export function __selfCheck(): void {
   const [partialResult] = enforceRouteIntegrity([partialCoinflip], 300);
   console.assert(partialResult.riskLevel === 2, 'binary floor does not apply to capital-preserved (partial) routes');
   console.assert(partialResult.meetsTarget === true, 'expectedReturn $400 >= $300 target → meetsTarget true');
+
+  const weekParams: RouteParams = {
+    balance: 1000,
+    target: 100,
+    timeframe: 'week',
+    categories: [],
+    riskTolerance: 'balanced',
+    maxRiskLevel: 5,
+    minProbability: 0,
+  };
+  const nearWeek: Route = { ...voo, id: 'near-week', maturesInDays: 10 };
+  const afterWeek: Route = { ...voo, id: 'after-week', maturesInDays: 11 };
+  const twoYears: Route = { ...voo, id: 'two-years', maturesInDays: 730 };
+  const weekRoutes = filterRoutesForQuiz([twoYears, afterWeek, nearWeek], weekParams);
+  console.assert(
+    weekRoutes.length === 1 && weekRoutes[0].id === 'near-week',
+    'one-week quiz keeps the 10d near miss but hides 11d and two-year routes',
+  );
+
+  // an unresolved Polymarket contract (no end date) must not get waved through as a match —
+  // only a liquid/capital-preserved route can skip the maturity check.
+  const unknownBinary: Route = { ...voo, id: 'unknown-binary', lossProfile: 'binary', maturesInDays: undefined };
+  const unknownPartial: Route = { ...voo, id: 'unknown-partial', lossProfile: 'partial', maturesInDays: undefined };
+  const unknownRoutes = filterRoutesForQuiz([unknownBinary, unknownPartial], weekParams);
+  console.assert(
+    unknownRoutes.length === 1 && unknownRoutes[0].id === 'unknown-partial',
+    'unknown maturity hides binary (locked) routes but still passes liquid (partial) ones',
+  );
 }

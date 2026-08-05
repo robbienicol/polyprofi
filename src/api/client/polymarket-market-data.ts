@@ -1,5 +1,10 @@
 import type { PolymarketEntry } from '@/api/client/market-data-types';
+import {
+  TIMEFRAME_MATURITY_LIMITS,
+  timeframeMaturityLimit,
+} from '@/lib/quiz-profile';
 import { parseJson, responseJson } from '@/lib/runtime-validation';
+import type { RouteParams } from '@/types/routes';
 
 interface RawMarket {
   question: string;
@@ -14,7 +19,7 @@ interface RawMarket {
   oneWeekPriceChange?: number | null;
   oneMonthPriceChange?: number | null;
   slug?: string;
-  endDate?: string;
+  endDate?: string | null;
 }
 
 export interface PolymarketSnapshot {
@@ -23,6 +28,9 @@ export interface PolymarketSnapshot {
 }
 
 let rawSnapshotRequest: Promise<RawMarket[]> | null = null;
+let rawSnapshotCache: { day: string; markets: RawMarket[] } | null = null;
+const DAY_MS = 86_400_000;
+const HORIZON_LIMITS = Object.values(TIMEFRAME_MATURITY_LIMITS);
 
 export async function fetchPolymarket(): Promise<PolymarketEntry[]> {
   return (await fetchPolymarketSnapshot()).context;
@@ -41,10 +49,17 @@ export async function fetchPolymarketSnapshot(universeLimit = 240): Promise<Poly
 }
 
 async function fetchSharedPolymarketRaw(): Promise<RawMarket[]> {
+  const day = new Date().toISOString().slice(0, 10);
+  if (rawSnapshotCache?.day === day) return rawSnapshotCache.markets;
   if (rawSnapshotRequest) return rawSnapshotRequest;
-  rawSnapshotRequest = fetchPolymarketRaw(500).finally(() => {
-    rawSnapshotRequest = null;
-  });
+  rawSnapshotRequest = fetchPolymarketRaw()
+    .then((markets) => {
+      rawSnapshotCache = { day, markets };
+      return markets;
+    })
+    .finally(() => {
+      rawSnapshotRequest = null;
+    });
   return rawSnapshotRequest;
 }
 
@@ -63,30 +78,98 @@ function selectPolymarketContext(raw: RawMarket[]): PolymarketEntry[] {
 }
 
 function selectPolymarketUniverse(raw: RawMarket[], limit: number): PolymarketEntry[] {
-  return raw
+  const valid = raw
     .map(toPolymarketEntry)
     .filter((market) => market.prices.length === 2
       && market.outcomes.length === 2
       && market.volumeM >= 0.001
-      && market.prices.every((price) => Number.isFinite(price) && price >= 0.02 && price <= 0.98))
-    .sort((a, b) => b.volumeM - a.volumeM)
-    .slice(0, limit);
+      && polymarketMaturityDays(market.endDate) != null
+      && market.prices.every((price) => Number.isFinite(price) && price >= 0.02 && price <= 0.98));
+  return balancePolymarketUniverse(valid, limit);
 }
 
-async function fetchPolymarketRaw(limit: number): Promise<RawMarket[]> {
-  const pageSize = 100;
-  const offsets = Array.from({ length: Math.ceil(limit / pageSize) }, (_, index) => index * pageSize);
-  const pages = await Promise.all(offsets.map(async (offset) => {
-    const pageLimit = Math.min(pageSize, limit - offset);
-    const response = await fetch(`https://gamma-api.polymarket.com/markets?active=true&closed=false&limit=${pageLimit}&offset=${offset}`, { headers: { Accept: 'application/json' } });
+async function fetchPolymarketRaw(): Promise<RawMarket[]> {
+  const now = Date.now();
+  const pages = await Promise.all(HORIZON_LIMITS.map(async (maxDays, index) => {
+    const minDays = index === 0 ? 0 : HORIZON_LIMITS[index - 1];
+    const query = new URLSearchParams({
+      active: 'true',
+      closed: 'false',
+      limit: '100',
+      offset: '0',
+      order: 'volumeNum',
+      ascending: 'false',
+      end_date_min: new Date(now + minDays * DAY_MS).toISOString(),
+      end_date_max: new Date(now + maxDays * DAY_MS).toISOString(),
+    });
+    const response = await fetch(`https://gamma-api.polymarket.com/markets?${query}`, { headers: { Accept: 'application/json' } });
     if (!response.ok) {
-      console.warn(`[market-data:polymarket] markets offset=${offset}: ${response.status}`);
+      console.warn(`[market-data:polymarket] ${minDays}-${maxDays}d: ${response.status}`);
       return [];
     }
     const value = await responseJson(response);
     return Array.isArray(value) ? value.filter(isRawMarket) : [];
   }));
-  return pages.flat().slice(0, limit);
+  return [...new Map(
+    pages.flat().map((market) => [
+      market.slug ?? `${market.question}|${market.endDate ?? ''}`,
+      market,
+    ]),
+  ).values()];
+}
+
+export function polymarketMaturityDays(
+  endDate: string | undefined,
+  now = Date.now(),
+): number | null {
+  if (!endDate) return null;
+  const end = new Date(endDate).getTime();
+  if (!Number.isFinite(end) || end <= now) return null;
+  return Math.ceil((end - now) / DAY_MS);
+}
+
+export function filterPolymarketMarketsForTimeframe(
+  markets: PolymarketEntry[],
+  timeframe: RouteParams['timeframe'],
+  now = Date.now(),
+): PolymarketEntry[] {
+  const maxDays = timeframeMaturityLimit(timeframe);
+  return markets.filter((market) => {
+    const days = polymarketMaturityDays(market.endDate, now);
+    return days != null && days <= maxDays;
+  });
+}
+
+export function balancePolymarketUniverse(
+  markets: PolymarketEntry[],
+  limit: number,
+  now = Date.now(),
+): PolymarketEntry[] {
+  if (limit <= 0) return [];
+  const buckets = HORIZON_LIMITS.map(() => [] as PolymarketEntry[]);
+  for (const market of markets) {
+    const days = polymarketMaturityDays(market.endDate, now);
+    if (days == null) continue;
+    const bucketIndex = HORIZON_LIMITS.findIndex((maxDays) => days <= maxDays);
+    if (bucketIndex >= 0) buckets[bucketIndex].push(market);
+  }
+  for (const bucket of buckets) bucket.sort((a, b) => b.volumeM - a.volumeM);
+
+  const selected: PolymarketEntry[] = [];
+  const used = new Set<string>();
+  const quota = Math.floor(limit / buckets.length);
+  for (const bucket of buckets) {
+    for (const market of bucket.slice(0, quota)) {
+      selected.push(market);
+      used.add(market.slug ?? market.question);
+    }
+  }
+
+  const remaining = buckets
+    .flat()
+    .filter((market) => !used.has(market.slug ?? market.question))
+    .sort((a, b) => b.volumeM - a.volumeM);
+  return [...selected, ...remaining].slice(0, limit);
 }
 
 function toPolymarketEntry(market: RawMarket): PolymarketEntry {
@@ -104,7 +187,7 @@ function toPolymarketEntry(market: RawMarket): PolymarketEntry {
     oneWeekPriceChange: finiteOptional(market.oneWeekPriceChange),
     oneMonthPriceChange: finiteOptional(market.oneMonthPriceChange),
     slug: market.slug,
-    endDate: market.endDate,
+    endDate: typeof market.endDate === 'string' ? market.endDate : undefined,
   };
 }
 

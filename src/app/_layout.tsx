@@ -7,6 +7,7 @@ import { Stack, router, type Href } from 'expo-router';
 import { useEffect } from 'react';
 import { useColorScheme } from 'react-native';
 
+import { AppLockGate } from '@/components/auth/AppLockGate';
 import { clerkTokenCache } from '@/lib/clerk-cache';
 
 const queryClient = new QueryClient();
@@ -39,7 +40,9 @@ export default function RootLayout(): React.ReactElement {
   return (
     <ClerkProvider publishableKey={publishableKey} tokenCache={clerkTokenCache}>
       <QueryClientProvider client={queryClient}>
-        <Stack screenOptions={{ headerShown: false }} />
+        <AppLockGate>
+          <Stack screenOptions={{ headerShown: false }} />
+        </AppLockGate>
       </QueryClientProvider>
     </ClerkProvider>
   );
