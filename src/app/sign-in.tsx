@@ -31,10 +31,14 @@ export default function SignInScreen(): React.ReactElement {
     setError('');
     try {
       const result = await signIn.create({ identifier: email, password });
-      const status = result.status as string;
-      if (status === 'complete' || status === 'needs_client_trust') {
+      if (result.status === 'complete') {
         await setActive({ session: result.createdSessionId });
         router.replace('/');
+      } else {
+        // Clerk resolves (rather than throws) for statuses like
+        // 'needs_first_factor' when bot/enumeration protection masks
+        // invalid credentials as an incomplete sign-in.
+        setError('Invalid email or password.');
       }
     } catch (e: unknown) {
       const clerkError = e as { errors?: { longMessage?: string; message?: string }[] };
