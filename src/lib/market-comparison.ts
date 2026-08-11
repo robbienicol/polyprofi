@@ -6,6 +6,8 @@ import type { Route } from '@/types/routes';
 
 export interface MarketComparison {
   kalshiTicker: string;
+  kalshiEventTicker: string;
+  kalshiSeriesTicker: string;
   polymarketPrice: number; // net of fees
   kalshiPrice: number; // net of fees
   betterPlatform: 'polymarket' | 'kalshi' | 'tie';
@@ -52,5 +54,13 @@ export async function resolveMarketComparison(route: Route): Promise<MarketCompa
     ? 'tie'
     : polymarketPrice < kalshiPrice ? 'polymarket' : 'kalshi';
 
-  return { kalshiTicker, polymarketPrice, kalshiPrice, betterPlatform, edgeCents };
+  return {
+    kalshiTicker,
+    kalshiEventTicker: kalshiMarket.eventTicker,
+    kalshiSeriesTicker: kalshiMarket.seriesTicker,
+    polymarketPrice,
+    kalshiPrice,
+    betterPlatform,
+    edgeCents,
+  };
 }

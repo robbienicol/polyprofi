@@ -8,7 +8,7 @@ import { useTheme } from '@/hooks/use-theme';
 const CATEGORIES = [
   { emoji: '📈', name: 'Stocks & Options', desc: 'ETFs, covered calls, and low-risk options on blue-chip stocks.', color: '#22c55e' },
   { emoji: '₿', name: 'Crypto', desc: 'Spot trades and momentum plays on BTC, ETH, and top altcoins.', color: '#f59e0b' },
-  { emoji: '⚽', name: 'Sports Betting', desc: 'Moneyline favorites, spread bets, and same-game parlays.', color: '#22c55e' },
+  { emoji: '⚽', name: 'Sports Predictions', desc: 'Moneyline, spread, and prop markets on major sports.', color: '#22c55e' },
   { emoji: '🔮', name: 'Polymarket', desc: 'Prediction markets on politics, sports outcomes, and world events.', color: '#a855f7' },
   { emoji: '💱', name: 'Forex', desc: 'Major currency pairs with tight spreads and high liquidity.', color: '#f97316' },
 ] as const;

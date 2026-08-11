@@ -9,9 +9,17 @@ import { Brand, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 /**
+ * How long the app can sit in the background before it relocks. Short trips out —
+ * copying a code from Mail, an OS permission sheet, glancing at a notification —
+ * shouldn't cost a Face ID prompt on the way back.
+ */
+const LOCK_GRACE_MS = 5 * 60 * 1000;
+
+/**
  * Gates the app behind Face ID / Touch ID when the user has opted in (Profile settings).
- * Relocks whenever the app returns from the background so a signed-in session can't be
- * picked up by someone else who has the unlocked phone.
+ * Relocks on a cold start, and after the app has been backgrounded for longer than
+ * LOCK_GRACE_MS, so a signed-in session can't be picked up by someone else who has
+ * the unlocked phone.
  */
 export function AppLockGate({ children }: { children: React.ReactNode }): React.ReactElement {
   const theme = useTheme();
@@ -22,6 +30,7 @@ export function AppLockGate({ children }: { children: React.ReactNode }): React.
   const [unlocked, setUnlocked] = useState(false);
   const [authenticating, setAuthenticating] = useState(false);
   const promptedRef = useRef(false);
+  const backgroundedAt = useRef<number | null>(null);
 
   const attemptUnlock = useCallback(async () => {
     setAuthenticating(true);
@@ -32,7 +41,17 @@ export function AppLockGate({ children }: { children: React.ReactNode }): React.
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
-      if (state === 'background' || state === 'inactive') {
+      // 'inactive' also fires for the notification shade and system sheets, so only
+      // a real trip to the background starts the clock.
+      if (state === 'background') {
+        backgroundedAt.current = Date.now();
+        return;
+      }
+      if (state !== 'active') return;
+
+      const since = backgroundedAt.current;
+      backgroundedAt.current = null;
+      if (since !== null && Date.now() - since > LOCK_GRACE_MS) {
         promptedRef.current = false;
         setUnlocked(false);
       }

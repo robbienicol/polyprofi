@@ -1,13 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { getSavingsGoalState, setSavingsGoalState } from '@/api/client/storage';
+import { GOAL_ACCOUNTING_VERSION } from '@/lib/savings-goal';
 import type { SavingsGoalState } from '@/types/bets';
 
 function savingsGoalQueryKey() {
   return ['SAVINGS_GOAL'] as const;
 }
 
-const EMPTY_STATE: SavingsGoalState = { current: null, achievedCount: 0 };
+const EMPTY_STATE: SavingsGoalState = {
+  current: null,
+  achievedCount: 0,
+  accountingVersion: GOAL_ACCOUNTING_VERSION,
+};
 
 export interface SavingsGoalInput {
   label: string;
@@ -39,6 +44,7 @@ export function useSavingsGoal() {
           createdAt: new Date().toISOString(),
         },
         achievedCount: prev?.achievedCount ?? 0,
+        accountingVersion: GOAL_ACCOUNTING_VERSION,
       });
     },
     onSettled: invalidate,
@@ -52,6 +58,7 @@ export function useSavingsGoal() {
       await setSavingsGoalState({
         current: { ...prev.current, achievedAt: new Date().toISOString() },
         achievedCount: prev.achievedCount + 1,
+        accountingVersion: GOAL_ACCOUNTING_VERSION,
       });
     },
     onSettled: invalidate,

@@ -1,10 +1,12 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth, useUser } from '@clerk/clerk-expo';
-import { useRouter } from 'expo-router';
-import React, { useCallback, useMemo } from 'react';
-import { Pressable, ScrollView, Switch, View } from 'react-native';
+import { useRouter, type Href } from 'expo-router';
+import React, { useCallback, useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, Pressable, ScrollView, Switch, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useBiometricLock } from '@/api/hooks/useBiometricLock';
+import { useDeleteAccount } from '@/api/hooks/useDeleteAccount';
 import { useSavedRoutes } from '@/api/hooks/useSavedRoutes';
 import { ThemedText } from '@/components/themed-text';
 import { Accent, Brand, Radius, Shadow } from '@/constants/theme';
@@ -20,6 +22,8 @@ export default function ProfileScreen(): React.ReactElement {
   const { history } = useSavedRoutes();
   const latestSearch = history[0] ?? null;
   const { isAvailable: biometricAvailable, isEnabled: biometricEnabled, setEnabled: setBiometricEnabled } = useBiometricLock();
+  const { deleteAccount, isDeleting } = useDeleteAccount();
+  const [deleteError, setDeleteError] = useState('');
   const initials = useMemo(() => {
     const first = user?.firstName?.[0] ?? '';
     const last = user?.lastName?.[0] ?? '';
@@ -30,6 +34,29 @@ export default function ProfileScreen(): React.ReactElement {
     await signOut();
     router.replace('/sign-in');
   }, [signOut, router]);
+
+  const performDelete = useCallback(async () => {
+    setDeleteError('');
+    try {
+      await deleteAccount();
+      await AsyncStorage.clear();
+      await signOut();
+      router.replace('/sign-in');
+    } catch {
+      setDeleteError('Could not delete your account. Please try again.');
+    }
+  }, [deleteAccount, signOut, router]);
+
+  const handleDeleteAccount = useCallback(() => {
+    Alert.alert(
+      'Delete account',
+      'This permanently deletes your account, profile, and everything saved on this device. This can’t be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: performDelete },
+      ],
+    );
+  }, [performDelete]);
 
   return (
     <View className="flex-1" style={{ backgroundColor: theme.background }}>
@@ -147,12 +174,34 @@ export default function ProfileScreen(): React.ReactElement {
             </View>
           )}
 
+          <View className="flex-row justify-center gap-4">
+            <Pressable onPress={() => router.push('/privacy' as Href)} className="active:opacity-60">
+              <ThemedText type="small" themeColor="textTertiary" style={{ textDecorationLine: 'underline' }}>Privacy Policy</ThemedText>
+            </Pressable>
+            <Pressable onPress={() => router.push('/terms' as Href)} className="active:opacity-60">
+              <ThemedText type="small" themeColor="textTertiary" style={{ textDecorationLine: 'underline' }}>Terms of Service</ThemedText>
+            </Pressable>
+          </View>
+
           <Pressable
             onPress={handleSignOut}
             className="py-3 items-center active:opacity-75"
             style={{ borderRadius: Radius.lg, borderWidth: 1, borderColor: Accent.red + '44', backgroundColor: Accent.red + '10' }}>
             <ThemedText style={{ fontSize: 14, fontWeight: '800', color: Accent.red }}>Sign out</ThemedText>
           </Pressable>
+
+          <Pressable
+            onPress={handleDeleteAccount}
+            disabled={isDeleting}
+            className="py-3 items-center active:opacity-60"
+            style={{ opacity: isDeleting ? 0.6 : 1 }}>
+            {isDeleting
+              ? <ActivityIndicator color={Accent.red} />
+              : <ThemedText style={{ fontSize: 13, fontWeight: '700', color: theme.textTertiary }}>Delete account</ThemedText>}
+          </Pressable>
+          {!!deleteError && (
+            <ThemedText type="small" className="text-center" style={{ color: Accent.red }}>{deleteError}</ThemedText>
+          )}
         </ScrollView>
       </SafeAreaView>
     </View>

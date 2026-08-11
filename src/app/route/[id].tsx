@@ -12,11 +12,16 @@ import { RelatedRoutes } from "@/components/routes/RelatedRoutes";
 import { RouteCoach } from "@/components/routes/RouteCoach";
 import { RouteOpportunityCard } from "@/components/routes/RouteOpportunityCard";
 import { ScoreMathCard } from "@/components/routes/ScoreMathCard";
+import { TrackRouteForm } from "@/components/routes/TrackRouteForm";
 import { ThemedText } from "@/components/themed-text";
 import { Brand, Radius } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 import { parseEntryPrice } from "@/lib/parse-bet-line";
-import { openTradeDestination } from "@/lib/route-actions";
+import {
+  openTradeDestination,
+  preferredTradeDestination,
+  tradeDestinationLabel,
+} from "@/lib/route-actions";
 import { goalEffectivenessScore } from "@/lib/score";
 import { rescoreForStake, stakeNeededForReturn } from "@/lib/stake-rescore";
 import { trackedAssetFields } from "@/lib/tracked-assets";
@@ -36,6 +41,8 @@ export default function RouteDetailScreen(): React.ReactElement {
   const { history } = useSavedRoutes();
   const { trackBet, isTracking } = useTrackedBets();
   const [added, setAdded] = useState(false);
+  const [showAcquireForm, setShowAcquireForm] = useState(false);
+  const [acquireAmount, setAcquireAmount] = useState("");
 
   const batch = history.find((item) =>
     item.routes.some((route) => route.id === id),
@@ -108,8 +115,25 @@ export default function RouteDetailScreen(): React.ReactElement {
     )
     .slice(0, 3);
 
-  function addToPortfolio(): void {
+  const destination = preferredTradeDestination(
+    route,
+    batch?.quizSnapshot.preferredPlatforms,
+  );
+  const destinationOptions = {
+    kalshiEventTicker: comparison?.kalshiEventTicker,
+    kalshiSeriesTicker: comparison?.kalshiSeriesTicker,
+  };
+
+  function beginAcquire(): void {
     if (added || isTracking) return;
+    setAcquireAmount(String(stake));
+    setShowAcquireForm(true);
+  }
+
+  function confirmAcquire(): void {
+    if (added || isTracking) return;
+    const amount = Number(acquireAmount);
+    if (!Number.isFinite(amount) || amount <= 0) return;
     const predictionMarket = /polymarket|prediction/i.test(
       `${route.category} ${route.platform}`,
     );
@@ -129,8 +153,7 @@ export default function RouteDetailScreen(): React.ReactElement {
         riskLevel: route.riskLevel,
         probability: route.probability,
         expectedReturn: route.expectedReturn,
-        amountWagered:
-          stake || Math.max(1, Math.round(route.expectedReturn / 2)),
+        amountWagered: amount,
         status: "active",
         createdAt: new Date().toISOString(),
         profitGoal: targetProfit,
@@ -139,7 +162,13 @@ export default function RouteDetailScreen(): React.ReactElement {
         monitorQuery: `${route.description} ${route.line ?? ""}`,
         ...trackedAssetFields(route),
       },
-      { onSuccess: () => setAdded(true) },
+      {
+        onSuccess: () => {
+          setAdded(true);
+          setShowAcquireForm(false);
+          void openTradeDestination(route, destination, destinationOptions);
+        },
+      },
     );
   }
 
@@ -176,12 +205,7 @@ export default function RouteDetailScreen(): React.ReactElement {
             </ThemedText>
             <Pressable
               onPress={() =>
-                openTradeDestination(
-                  route,
-                  route.platform.toLowerCase().includes("polymarket")
-                    ? "polymarket"
-                    : "robinhood",
-                )
+                openTradeDestination(route, destination, destinationOptions)
               }
               className="active:opacity-60"
               hitSlop={12}
@@ -198,8 +222,18 @@ export default function RouteDetailScreen(): React.ReactElement {
             neededToHitGoal={neededToHitGoal}
             added={added}
             adding={isTracking}
-            onAdd={addToPortfolio}
+            onAdd={beginAcquire}
           />
+
+          {showAcquireForm ? (
+            <TrackRouteForm
+              amount={acquireAmount}
+              destinationLabel={tradeDestinationLabel(destination)}
+              onAmountChange={setAcquireAmount}
+              onConfirm={confirmAcquire}
+              onCancel={() => setShowAcquireForm(false)}
+            />
+          ) : null}
 
           {comparison ? <MarketComparisonCard comparison={comparison} /> : null}
 
@@ -232,12 +266,8 @@ export default function RouteDetailScreen(): React.ReactElement {
 
           <View className="flex-row gap-2">
             <TradeLink
-              label="Open in Polymarket ↗"
-              onPress={() => openTradeDestination(route, "polymarket")}
-            />
-            <TradeLink
-              label="Open in Robinhood ↗"
-              onPress={() => openTradeDestination(route, "robinhood")}
+              label={`Open in ${tradeDestinationLabel(destination)} ↗`}
+              onPress={() => openTradeDestination(route, destination, destinationOptions)}
             />
           </View>
 
@@ -273,7 +303,7 @@ export default function RouteDetailScreen(): React.ReactElement {
               marginTop: 4,
             }}
           >
-            For entertainment only · Not financial advice
+            AI-generated · Not financial advice · For entertainment only
           </ThemedText>
         </ScrollView>
       </SafeAreaView>

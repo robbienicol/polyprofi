@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import type { SportsMatch } from '@/lib/sports-market-match';
+import { migrateSavingsGoalState } from '@/lib/savings-goal';
 import { QuizAnswers, SavingsGoalState, TrackedBet } from '@/types/bets';
 import { Route, SavedRoutesBatch } from '@/types/routes';
 import {
@@ -107,7 +108,14 @@ export async function clearQuizAnswers(): Promise<void> {
 export async function getSavingsGoalState(): Promise<SavingsGoalState | null> {
   const val = await AsyncStorage.getItem(KEYS.SAVINGS_GOAL);
   if (!val) return null;
-  return parseJsonAs(val, isSavingsGoalState);
+  const parsed = parseJsonAs(val, isSavingsGoalState);
+  if (!parsed) return null;
+
+  const migration = migrateSavingsGoalState(parsed);
+  if (migration.migrated) {
+    await AsyncStorage.setItem(KEYS.SAVINGS_GOAL, JSON.stringify(migration.state));
+  }
+  return migration.state;
 }
 
 export async function setSavingsGoalState(state: SavingsGoalState): Promise<void> {

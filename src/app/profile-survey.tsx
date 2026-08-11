@@ -33,7 +33,7 @@ const GOALS = [
   SKIP,
 ] as const;
 const AMOUNTS = ['Under $1,000', '$1,000 - $5,000', '$5,000 - $25,000', '$25,000 - $100,000', '$100,000+', SKIP] as const;
-const MARKETS = ['Stocks & ETFs', 'Crypto', 'Sports betting / prediction markets', 'Forex', 'Bonds & savings'] as const;
+const MARKETS = ['Stocks & ETFs', 'Crypto', 'Sports & prediction markets', 'Forex', 'Bonds & savings'] as const;
 
 const STEPS = ['age', 'country', 'experience', 'reason', 'goal', 'amount', 'markets'] as const;
 type Step = (typeof STEPS)[number];

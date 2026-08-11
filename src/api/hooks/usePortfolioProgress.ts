@@ -9,43 +9,10 @@ import {
 } from '@/api/client/storage';
 import { useBetMonitoring } from '@/api/hooks/useBetMonitoring';
 import { useTrackedBets } from '@/api/hooks/useTrackedBets';
-import { isPredictionMarketBet } from '@/lib/parse-bet-line';
-import {
-  inferAssetEntryPrice,
-  inferAssetSymbol,
-  inferAnnualYieldPct,
-  inferMaturityDays,
-  isSavingsOrTreasuryCategory,
-  isStockOrEtfCategory,
-} from '@/lib/tracked-assets';
-import { TrackedBet } from '@/types/bets';
+import { calculatePortfolioProgress, stockIdentity } from '@/lib/portfolio-progress';
+import { isStockOrEtfCategory } from '@/lib/tracked-assets';
 
 const PROGRESS_QUERY_KEY = ['PORTFOLIO_PROGRESS'] as const;
-const YEAR_MS = 365 * 24 * 60 * 60 * 1_000;
-
-function projectedAccrual(bet: TrackedBet, now: number): number {
-  const elapsedMs = Math.max(0, now - new Date(bet.createdAt).getTime());
-  const maturityDays = bet.maturesInDays ?? inferMaturityDays(bet.description, bet.strategy);
-  const annualYieldPct = bet.annualYieldPct ?? inferAnnualYieldPct(bet.description, bet.strategy);
-  const cappedMs = maturityDays
-    ? Math.min(elapsedMs, maturityDays * 24 * 60 * 60 * 1_000)
-    : elapsedMs;
-
-  if (annualYieldPct != null) {
-    return bet.amountWagered * (annualYieldPct / 100) * (cappedMs / YEAR_MS);
-  }
-  if (maturityDays && maturityDays > 0) {
-    return bet.expectedReturn * Math.min(1, cappedMs / (maturityDays * 24 * 60 * 60 * 1_000));
-  }
-  return 0;
-}
-
-function stockIdentity(bet: TrackedBet): { symbol?: string; entryPrice?: number } {
-  return {
-    symbol: bet.assetSymbol ?? inferAssetSymbol(bet.description, bet.strategy, bet.line),
-    entryPrice: bet.assetEntryPrice ?? inferAssetEntryPrice(bet.description, bet.strategy),
-  };
-}
 
 export function usePortfolioProgress(fallbackBalance: number) {
   const queryClient = useQueryClient();
@@ -81,52 +48,13 @@ export function usePortfolioProgress(fallbackBalance: number) {
   });
 
   const snapshot = useMemo(() => {
-    const quoteBySymbol = new Map((quotesQuery.data ?? []).map((quote) => [quote.symbol, quote]));
-    const activeStake = active.reduce((sum, bet) => sum + bet.amountWagered, 0);
-    const basisValue = Math.max(fallbackBalance, activeStake);
-    const cash = Math.max(0, basisValue - activeStake);
-    let investedValue = 0;
-    let livePnl = 0;
-    let projectedPnl = 0;
-    let livePositions = 0;
-    let projectedPositions = 0;
-
-    for (const bet of active) {
-      let pnl = 0;
-
-      if (isPredictionMarketBet(bet)) {
-        const status = monitoring.statusById[bet.id];
-        if (status?.currentPrice != null) {
-          pnl = status.unrealizedPnl;
-          livePnl += pnl;
-          livePositions += 1;
-        }
-      } else if (isStockOrEtfCategory(bet.category)) {
-        const { symbol, entryPrice } = stockIdentity(bet);
-        const quote = symbol ? quoteBySymbol.get(symbol) : undefined;
-        if (quote && entryPrice && entryPrice > 0) {
-          pnl = (bet.amountWagered / entryPrice) * (quote.price - entryPrice);
-          livePnl += pnl;
-          livePositions += 1;
-        }
-      } else if (isSavingsOrTreasuryCategory(bet.category)) {
-        pnl = projectedAccrual(bet, now);
-        projectedPnl += pnl;
-        projectedPositions += 1;
-      }
-
-      investedValue += bet.amountWagered + pnl;
-    }
-
-    return {
-      value: cash + investedValue,
-      basisValue,
-      activeStake,
-      livePnl,
-      projectedPnl,
-      livePositions,
-      projectedPositions,
-    };
+    return calculatePortfolioProgress({
+      active,
+      fallbackBalance,
+      statusesById: monitoring.statusById,
+      quotes: quotesQuery.data ?? [],
+      now,
+    });
   }, [active, fallbackBalance, monitoring.statusById, now, quotesQuery.data]);
 
   useEffect(() => {

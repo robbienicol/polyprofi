@@ -292,7 +292,7 @@ export default function OnboardingScreen(): React.ReactElement {
             </ThemedText>
           </Pressable>
           <ThemedText style={{ fontSize: 10.5, color: theme.textTertiary, textAlign: 'center' }}>
-            {isLast ? 'About a minute to set up · not financial advice' : 'Swipe to keep going'}
+            {isLast ? 'About a minute to set up · AI-generated · not financial advice' : 'Swipe to keep going'}
           </ThemedText>
         </View>
       </SafeAreaView>

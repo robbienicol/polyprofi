@@ -104,7 +104,7 @@ export default function PositionsScreen(): React.ReactElement {
                 <View className="flex-row gap-4 mt-2">
                   <View className="flex-row items-center gap-1.5">
                     <ThemedText style={{ fontSize: 13, color: theme.textSecondary, ...MONO }}>${stats.wagered.toFixed(0)}</ThemedText>
-                    <ThemedText style={{ fontSize: 12, color: theme.textTertiary }}>wagered</ThemedText>
+                    <ThemedText style={{ fontSize: 12, color: theme.textTertiary }}>staked</ThemedText>
                   </View>
                   <View className="flex-row items-center gap-1.5">
                     <ThemedText style={{ fontSize: 13, color: theme.textSecondary, ...MONO }}>{stats.active}</ThemedText>
@@ -137,9 +137,9 @@ export default function PositionsScreen(): React.ReactElement {
               <View style={{ width: 64, height: 64, borderRadius: Radius.xl, backgroundColor: theme.backgroundElement, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: theme.border }}>
                 <ThemedText style={{ fontSize: 30 }}>📋</ThemedText>
               </View>
-              <ThemedText style={{ fontSize: 16, fontWeight: '700', color: theme.text }}>No tracked bets yet</ThemedText>
+              <ThemedText style={{ fontSize: 16, fontWeight: '700', color: theme.text }}>No acquired positions yet</ThemedText>
               <ThemedText className="text-center" style={{ fontSize: 13, color: theme.textSecondary, maxWidth: 240 }}>
-                Tap “Track” on any route in your feed to start logging your P&L
+                Tap “Acquire” on any route to choose an amount and open your preferred marketplace
               </ThemedText>
             </View>
           )}

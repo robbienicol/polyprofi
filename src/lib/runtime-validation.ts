@@ -1,6 +1,6 @@
 import type { PortfolioProgressPoint } from '@/api/client/storage';
 import type { SportsMatch } from '@/lib/sports-market-match';
-import type { QuizAnswers, SavingsGoal, SavingsGoalState, TrackedBet } from '@/types/bets';
+import type { AcquisitionPlatform, QuizAnswers, SavingsGoal, SavingsGoalState, TrackedBet } from '@/types/bets';
 import type { MarketQualityFacts, Route, SavedRoutesBatch } from '@/types/routes';
 
 type JsonRecord = Record<string, unknown>;
@@ -32,6 +32,11 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === 'string');
 }
 
+function isAcquisitionPlatformArray(value: unknown): value is AcquisitionPlatform[] {
+  return Array.isArray(value)
+    && value.every((item) => isOneOf(item, ['robinhood', 'polymarket', 'kalshi']));
+}
+
 export function isQuizAnswers(value: unknown): value is QuizAnswers {
   if (!isRecord(value)) return false;
   return isFiniteNumber(value.balance)
@@ -39,6 +44,7 @@ export function isQuizAnswers(value: unknown): value is QuizAnswers {
     && isOneOf(value.timeframe, ['today', 'week', 'month', '3months', '1year', '5years'])
     && isStringArray(value.categories)
     && isOneOf(value.riskTolerance, ['conservative', 'balanced', 'aggressive'])
+    && isOptional(value.preferredPlatforms, isAcquisitionPlatformArray)
     && isFiniteNumber(value.maxRiskLevel)
     && isFiniteNumber(value.minProbability);
 }
@@ -56,7 +62,8 @@ export function isSavingsGoal(value: unknown): value is SavingsGoal {
 export function isSavingsGoalState(value: unknown): value is SavingsGoalState {
   if (!isRecord(value)) return false;
   return (value.current === null || isSavingsGoal(value.current))
-    && isFiniteNumber(value.achievedCount);
+    && isFiniteNumber(value.achievedCount)
+    && isOptional(value.accountingVersion, isFiniteNumber);
 }
 
 export function isRoute(value: unknown): value is Route {

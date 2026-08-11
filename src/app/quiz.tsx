@@ -10,7 +10,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Brand, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { buildRouteParams } from '@/lib/quiz-profile';
-import { QuizAnswers } from '@/types/bets';
+import { AcquisitionPlatform, QuizAnswers } from '@/types/bets';
 
 const TIMEFRAMES = [
   { value: 'today', label: 'Today', sub: '24 hours' },
@@ -23,9 +23,15 @@ const TIMEFRAMES = [
 
 const CATEGORIES = ['Sports Predictions', 'Crypto', 'Stocks', 'Polymarket', 'Forex'] as const;
 
+const PLATFORMS: { value: AcquisitionPlatform; label: string; sub: string }[] = [
+  { value: 'robinhood', label: 'Robinhood', sub: 'Stocks, ETFs, crypto & prediction markets' },
+  { value: 'polymarket', label: 'Polymarket', sub: 'Prediction markets' },
+  { value: 'kalshi', label: 'Kalshi', sub: 'Prediction markets' },
+];
+
 const DEFAULT_RISK_TOLERANCE: QuizAnswers['riskTolerance'] = 'balanced';
 
-const STEPS = ['target', 'timeframe', 'categories'] as const;
+const STEPS = ['target', 'timeframe', 'categories', 'platforms'] as const;
 type Step = (typeof STEPS)[number];
 
 // Invest amount is no longer asked up front — it's a live slider on the results
@@ -38,7 +44,9 @@ export default function QuizScreen(): React.ReactElement {
   const { history, isLoading: historyLoading } = useSavedRoutes();
   const prefill = quizAnswers ?? history[0]?.quizSnapshot;
   if (quizLoading || historyLoading) return <View className="flex-1" />;
-  const formKey = prefill ? `${prefill.target}-${prefill.timeframe}-${prefill.categories.join('|')}` : 'new';
+  const formKey = prefill
+    ? `${prefill.target}-${prefill.timeframe}-${prefill.categories.join('|')}-${prefill.preferredPlatforms?.join('|') ?? ''}`
+    : 'new';
   return <QuizForm key={formKey} prefill={prefill} saveAnswers={saveAnswers} />;
 }
 
@@ -50,6 +58,7 @@ function QuizForm({ prefill, saveAnswers }: { prefill?: QuizAnswers; saveAnswers
   const [target, setTarget] = useState(String(prefill?.target ?? 100));
   const [timeframe, setTimeframe] = useState<QuizAnswers['timeframe']>(prefill?.timeframe ?? 'week');
   const [categories, setCategories] = useState<string[]>(prefill?.categories ?? []);
+  const [preferredPlatforms, setPreferredPlatforms] = useState<AcquisitionPlatform[]>(prefill?.preferredPlatforms ?? []);
 
   const stepIndex = STEPS.indexOf(step);
   const progress = (stepIndex + 1) / STEPS.length;
@@ -57,6 +66,12 @@ function QuizForm({ prefill, saveAnswers }: { prefill?: QuizAnswers; saveAnswers
   const toggleCategory = useCallback((cat: string) => {
     setCategories((prev) =>
       prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]
+    );
+  }, []);
+
+  const togglePlatform = useCallback((platform: AcquisitionPlatform) => {
+    setPreferredPlatforms((prev) =>
+      prev.includes(platform) ? prev.filter((item) => item !== platform) : [...prev, platform]
     );
   }, []);
 
@@ -73,29 +88,33 @@ function QuizForm({ prefill, saveAnswers }: { prefill?: QuizAnswers; saveAnswers
           timeframe,
           riskTolerance: prefill?.riskTolerance ?? DEFAULT_RISK_TOLERANCE,
           categories,
+          preferredPlatforms,
         }),
         {
           onSuccess: () => router.replace('/(tabs)/routes?generate=1'),
         }
       );
     }
-  }, [stepIndex, target, timeframe, prefill?.riskTolerance, categories, saveAnswers, router]);
+  }, [stepIndex, target, timeframe, prefill?.riskTolerance, categories, preferredPlatforms, saveAnswers, router]);
 
   const canAdvance = useMemo(() => {
     if (step === 'target') return Number(target) > 0;
+    if (step === 'platforms') return preferredPlatforms.length > 0;
     return true;
-  }, [step, target]);
+  }, [step, target, preferredPlatforms]);
 
   const stepTitles: Record<Step, string> = {
     target: 'How much do you\nwant to make?',
     timeframe: "What's your\ntimeframe?",
     categories: 'Any prediction\nmarket preference?',
+    platforms: 'Which investing apps\ndo you use?',
   };
 
   const stepDescriptions: Record<Step, string> = {
     target: "Set your goal. On the results you'll slide how much to invest and see every way to hit it.",
     timeframe: 'Your deadline decides which routes we show: VOO and treasuries for long goals, prediction markets for short ones.',
     categories: "Leave blank for all markets, or narrow the search to your favorite areas.",
+    platforms: 'Choose every app you use. After you set an amount, we\'ll open the best available match.',
   };
 
   return (
@@ -205,6 +224,51 @@ function QuizForm({ prefill, saveAnswers }: { prefill?: QuizAnswers; saveAnswers
                   );
                 })}
               </View>
+            </View>
+          )}
+
+          {/* Preferred acquisition platforms */}
+          {step === 'platforms' && (
+            <View className="gap-3">
+              {PLATFORMS.map((platform) => {
+                const selected = preferredPlatforms.includes(platform.value);
+                return (
+                  <Pressable
+                    key={platform.value}
+                    onPress={() => togglePlatform(platform.value)}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: selected }}
+                    className="flex-row items-center px-5 py-4 border active:opacity-70"
+                    style={{
+                      borderRadius: Radius.lg,
+                      borderColor: selected ? Brand[500] : theme.border,
+                      backgroundColor: selected ? Brand[500] + '12' : theme.backgroundElement,
+                    }}>
+                    <View className="flex-1">
+                      <ThemedText style={{ fontWeight: '700', fontSize: 16, color: selected ? Brand[500] : theme.text }}>
+                        {platform.label}
+                      </ThemedText>
+                      <ThemedText style={{ fontSize: 13, color: theme.textTertiary, marginTop: 2 }}>
+                        {platform.sub}
+                      </ThemedText>
+                    </View>
+                    <View
+                      className="w-6 h-6 rounded-full items-center justify-center"
+                      style={{
+                        borderWidth: 1.5,
+                        borderColor: selected ? Brand[500] : theme.borderStrong,
+                        backgroundColor: selected ? Brand[500] : 'transparent',
+                      }}>
+                      {selected ? (
+                        <ThemedText style={{ fontSize: 12, color: '#06140C', fontWeight: '800' }}>✓</ThemedText>
+                      ) : null}
+                    </View>
+                  </Pressable>
+                );
+              })}
+              <ThemedText style={{ fontSize: 12, color: theme.textTertiary, lineHeight: 18 }}>
+                If a route isn&apos;t available on your picks, we&apos;ll open the closest supported marketplace.
+              </ThemedText>
             </View>
           )}
         </ScrollView>

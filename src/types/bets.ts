@@ -12,7 +12,11 @@ export interface SavingsGoal {
 export interface SavingsGoalState {
   current: SavingsGoal | null;
   achievedCount: number;
+  /** Version of the math used to decide whether goals are achieved. */
+  accountingVersion?: number;
 }
+
+export type AcquisitionPlatform = 'robinhood' | 'polymarket' | 'kalshi';
 
 export interface QuizAnswers {
   balance: number;
@@ -20,6 +24,8 @@ export interface QuizAnswers {
   timeframe: 'today' | 'week' | 'month' | '3months' | '1year' | '5years';
   categories: string[]; // empty means no preference (all markets)
   riskTolerance: 'conservative' | 'balanced' | 'aggressive';
+  /** Apps the user already uses. Optional so quizzes saved before this field still load. */
+  preferredPlatforms?: AcquisitionPlatform[];
   maxRiskLevel: number; // 1–5: max riskLevel the user is willing to see
   minProbability: number; // 0–100: minimum win probability the user wants
 }

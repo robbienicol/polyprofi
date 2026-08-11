@@ -78,7 +78,7 @@ export default function PortfolioScreen(): React.ReactElement {
           </View>
 
           {activeBets.length === 0 ? (
-            <Pressable onPress={() => router.push('/(tabs)/routes')} className="py-3 items-center active:opacity-80" style={{ borderRadius: Radius.lg, backgroundColor: Brand[500], ...Shadow.card }}><ThemedText style={{ fontSize: 14, fontWeight: '800', color: '#06140C' }}>Track a route to build portfolio</ThemedText></Pressable>
+            <Pressable onPress={() => router.push('/(tabs)/routes')} className="py-3 items-center active:opacity-80" style={{ borderRadius: Radius.lg, backgroundColor: Brand[500], ...Shadow.card }}><ThemedText style={{ fontSize: 14, fontWeight: '800', color: '#06140C' }}>Acquire a route to build your portfolio</ThemedText></Pressable>
           ) : (
             <View className="gap-3">
               <View className="flex-row justify-between items-center" style={{ paddingHorizontal: 4 }}><ThemedText style={{ fontSize: 15, fontWeight: '800', color: theme.text }}>Active Positions</ThemedText><Pressable onPress={() => router.push('/positions')} className="active:opacity-60"><ThemedText style={{ fontSize: 13, fontWeight: '700', color: Brand[500] }}>Manage →</ThemedText></Pressable></View>

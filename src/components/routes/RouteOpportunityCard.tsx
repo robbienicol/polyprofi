@@ -358,13 +358,13 @@ export function RouteOpportunityCard({
           <>
             <Outcome
               color={Brand[500]}
-              label="Bet hits"
+              label="Target hit"
               chance={`${route.probability}% chance`}
               value={`+$${route.expectedReturn}`}
             />
             <Outcome
               color={Accent.red}
-              label="Bet misses — stake gone"
+              label="Target missed — stake gone"
               chance={`${100 - route.probability}% chance`}
               value={`−$${stake}`}
             />
@@ -408,10 +408,10 @@ export function RouteOpportunityCard({
           style={{ fontSize: 16, fontWeight: "900", color: "#06140C" }}
         >
           {added
-            ? "Added to portfolio"
+            ? "Acquisition saved"
             : adding
-              ? "Adding..."
-              : "Add to portfolio →"}
+              ? "Saving..."
+              : "Acquire →"}
         </ThemedText>
       </Pressable>
     </View>

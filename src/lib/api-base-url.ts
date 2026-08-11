@@ -1,4 +1,5 @@
 import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 
 /**
  * Native builds can't fetch a relative "/api/..." path — there's no page origin to resolve
@@ -8,6 +9,9 @@ import Constants from 'expo-constants';
  */
 export function apiBaseUrl(): string {
   const hostUri = Constants.expoConfig?.hostUri;
-  if (__DEV__ && hostUri) return `http://${hostUri}`;
+  if (__DEV__) {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') return window.location.origin;
+    if (hostUri) return `http://${hostUri}`;
+  }
   return process.env.EXPO_PUBLIC_API_BASE_URL ?? '';
 }

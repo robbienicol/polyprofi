@@ -15,6 +15,7 @@ import {
 import { ThemedText } from '@/components/themed-text';
 import { Accent, Brand, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { hasReachedProfitGoal } from '@/lib/portfolio-progress';
 
 const MONO = { fontVariant: ['tabular-nums' as const] };
 
@@ -44,10 +45,10 @@ export default function HomeScreen(): React.ReactElement {
   const { goal, achievedCount, markAchieved } = useSavingsGoal();
   const [range, setRange] = useState<PortfolioRange>('1W');
 
-  // Once tracked value first reaches the goal, mark it reached (flips the card to celebrate).
+  // Principal never counts toward the target. Only tracked gains can complete a goal.
   useEffect(() => {
-    if (goal && !goal.achievedAt && progress.value >= goal.targetAmount) markAchieved();
-  }, [goal, progress.value, markAchieved]);
+    if (goal && !goal.achievedAt && hasReachedProfitGoal(progress.goalProgress, goal.targetAmount)) markAchieved();
+  }, [goal, progress.goalProgress, markAchieved]);
 
   const chartPoints = useMemo(() => {
     const current = {
@@ -135,7 +136,7 @@ export default function HomeScreen(): React.ReactElement {
           {goal ? (
             <SavingsGoalCard
               goal={goal}
-              value={progress.value}
+              value={progress.goalProgress}
               achievedCount={achievedCount}
               onSetNew={() => router.push('/goal-setup')}
             />
@@ -252,7 +253,7 @@ export default function HomeScreen(): React.ReactElement {
             Polymarket and supported stocks use refreshed market prices. Savings and Treasury movement is estimated from tracked yield and time to maturity.
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary" className="text-center" style={{ opacity: 0.38 }}>
-            For entertainment only · Not financial advice
+            AI-generated · Not financial advice · For entertainment only
           </ThemedText>
         </ScrollView>
       </SafeAreaView>

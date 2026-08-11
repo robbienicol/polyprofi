@@ -17,6 +17,7 @@ import { Accent, Brand, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { scheduleWeeklyReminder } from '@/lib/notifications';
 import { parseEntryPrice } from '@/lib/parse-bet-line';
+import { openTradeDestination, preferredTradeDestination, tradeDestinationLabel } from '@/lib/route-actions';
 import { buildRouteResults } from '@/lib/route-results';
 import type { RouteFilters as Filters } from '@/lib/route-results';
 import { trackedAssetFields } from '@/lib/tracked-assets';
@@ -110,9 +111,12 @@ export default function RoutesScreen(): React.ReactElement {
     }
   }
 
-  function confirmTrack(route: Route): void {
+  function confirmAcquire(route: Route): void {
+    const amount = Number(trackingAmount);
+    if (!Number.isFinite(amount) || amount <= 0) return;
     const predictionMarket = /polymarket|prediction/i.test(`${route.category} ${route.platform}`);
     const entryPrice = parseEntryPrice(route.line) ?? (predictionMarket && route.probability > 0 ? route.probability / 100 : undefined);
+    const destination = preferredTradeDestination(route, sessionParams?.preferredPlatforms);
     trackBet({
       id: `${route.id}-${Date.now()}`,
       category: route.category,
@@ -123,7 +127,7 @@ export default function RoutesScreen(): React.ReactElement {
       riskLevel: route.riskLevel,
       probability: route.probability,
       expectedReturn: route.expectedReturn,
-      amountWagered: Number(trackingAmount) || 0,
+      amountWagered: amount,
       status: 'active',
       createdAt: new Date().toISOString(),
       profitGoal: sessionParams?.target || route.expectedReturn,
@@ -131,8 +135,12 @@ export default function RoutesScreen(): React.ReactElement {
       entryPrice,
       monitorQuery: `${route.description} ${route.line ?? ''}`,
       ...trackedAssetFields(route),
+    }, {
+      onSuccess: () => {
+        setTrackingId(null);
+        void openTradeDestination(route, destination);
+      },
     });
-    setTrackingId(null);
   }
 
   if (shouldFetch && isLoading && !error) {
@@ -174,6 +182,7 @@ export default function RoutesScreen(): React.ReactElement {
         {visibleRoutes.map((route) => {
           const scoreBreakdown = results?.scoreById.get(route.id);
           if (!scoreBreakdown) return null;
+          const destination = preferredTradeDestination(route, sessionParams?.preferredPlatforms);
           return (
             <View key={route.id} className="gap-0.5">
               <RouteCard
@@ -187,7 +196,15 @@ export default function RoutesScreen(): React.ReactElement {
                 } : undefined}
                 onPress={() => router.push(`/route/${route.id}?stake=${results?.selectedStake(route) ?? referenceStake}&available=${autoSize ? referenceStake : displayedInvestment}`)}
               />
-              {trackingId === route.id && <TrackRouteForm amount={trackingAmount} onAmountChange={setTrackingAmount} onConfirm={() => confirmTrack(route)} onCancel={() => setTrackingId(null)} />}
+              {trackingId === route.id && (
+                <TrackRouteForm
+                  amount={trackingAmount}
+                  destinationLabel={tradeDestinationLabel(destination)}
+                  onAmountChange={setTrackingAmount}
+                  onConfirm={() => confirmAcquire(route)}
+                  onCancel={() => setTrackingId(null)}
+                />
+              )}
             </View>
           );
         })}
@@ -197,7 +214,7 @@ export default function RoutesScreen(): React.ReactElement {
           </Pressable>
         )}
         {filtered.length === 0 && !isLoading && routes.length > 0 && <EmptyFiltered filters={filters} onClear={() => setFiltersAndReset(DEFAULT_FILTERS)} />}
-        {routes.length > 0 && <ThemedText type="small" themeColor="textSecondary" className="text-center" style={{ opacity: 0.4 }}>{isHistorical ? 'Saved search · ' : ''}Pull down to refresh · For entertainment only</ThemedText>}
+        {routes.length > 0 && <ThemedText type="small" themeColor="textSecondary" className="text-center" style={{ opacity: 0.4 }}>{isHistorical ? 'Saved search · ' : ''}Pull down to refresh · AI-generated · For entertainment only</ThemedText>}
       </ScrollView>
     </Screen>
   );

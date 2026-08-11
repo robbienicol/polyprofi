@@ -6,8 +6,11 @@ import * as Notifications from 'expo-notifications';
 import { Stack, router, type Href } from 'expo-router';
 import { useEffect } from 'react';
 import { useColorScheme } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AppLockGate } from '@/components/auth/AppLockGate';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { OfflineBanner } from '@/components/OfflineBanner';
 import { clerkTokenCache } from '@/lib/clerk-cache';
 
 const queryClient = new QueryClient();
@@ -38,12 +41,17 @@ export default function RootLayout(): React.ReactElement {
   useColorScheme(); // subscribe to color scheme changes
   useNotificationObserver();
   return (
-    <ClerkProvider publishableKey={publishableKey} tokenCache={clerkTokenCache}>
-      <QueryClientProvider client={queryClient}>
-        <AppLockGate>
-          <Stack screenOptions={{ headerShown: false }} />
-        </AppLockGate>
-      </QueryClientProvider>
-    </ClerkProvider>
+    <ErrorBoundary>
+      <SafeAreaProvider>
+        <ClerkProvider publishableKey={publishableKey} tokenCache={clerkTokenCache}>
+          <QueryClientProvider client={queryClient}>
+            <AppLockGate>
+              <Stack screenOptions={{ headerShown: false }} />
+              <OfflineBanner />
+            </AppLockGate>
+          </QueryClientProvider>
+        </ClerkProvider>
+      </SafeAreaProvider>
+    </ErrorBoundary>
   );
 }

@@ -184,7 +184,7 @@ function RouteCardInner({ route, requiredInvestment, currentInvestment, scoreBre
           </View>
         ) : null}
 
-        {/* Footer: return + loss profile + track */}
+        {/* Footer: return + loss profile + acquire */}
         <View className="flex-row justify-between items-end">
           <View>
             <View className="flex-row items-center gap-1.5">
@@ -213,7 +213,7 @@ function RouteCardInner({ route, requiredInvestment, currentInvestment, scoreBre
                 backgroundColor: '#22C55E', ...Shadow.card,
               }}
               className="active:opacity-80">
-              <ThemedText style={{ fontSize: 13, fontWeight: '800', color: '#06140C' }}>Track</ThemedText>
+              <ThemedText style={{ fontSize: 13, fontWeight: '800', color: '#06140C' }}>Acquire</ThemedText>
             </Pressable>
           )}
         </View>

@@ -1,164 +1,159 @@
 import { useSignIn } from '@clerk/clerk-expo';
-import { Link, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import {
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View } from 'react-native';
 
+import {
+  AuthButton,
+  AuthError,
+  AuthFooterLink,
+  AuthScreen,
+  AuthTextButton,
+} from '@/components/auth/AuthScreen';
 import { AuthTextInput } from '@/components/auth/AuthTextInput';
 import { ThemedText } from '@/components/themed-text';
-import { Brand, Radius, Shadow } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import { clerkErrorMessage } from '@/lib/clerk-errors';
 
 export default function ForgotPasswordScreen(): React.ReactElement {
   const { signIn, setActive, isLoaded } = useSignIn();
   const router = useRouter();
-  const theme = useTheme();
 
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [password, setPassword] = useState('');
   const [step, setStep] = useState<'form' | 'reset'>('form');
+  const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const parseError = (e: unknown): string => {
-    const clerkError = e as { errors?: { longMessage?: string; message?: string }[] };
-    return clerkError.errors?.[0]?.longMessage
-      ?? clerkError.errors?.[0]?.message
-      ?? (e instanceof Error ? e.message : null)
-      ?? 'Something went wrong. Please try again.';
-  };
-
-  const handleSendCode = useCallback(async () => {
-    if (!isLoaded) return;
-    setLoading(true);
-    setError('');
-    try {
-      await signIn.create({ strategy: 'reset_password_email_code', identifier: email });
-      setStep('reset');
-    } catch (e: unknown) {
-      setError(parseError(e));
-    } finally {
-      setLoading(false);
-    }
-  }, [isLoaded, signIn, email]);
+  const sendCode = useCallback(
+    async (isResend: boolean) => {
+      if (!isLoaded || loading) return;
+      setLoading(true);
+      setError('');
+      setNotice('');
+      try {
+        await signIn.create({
+          strategy: 'reset_password_email_code',
+          identifier: email.trim().toLowerCase(),
+        });
+        setStep('reset');
+        if (isResend) setNotice('New code sent. It can take a minute to arrive.');
+      } catch (e: unknown) {
+        setError(clerkErrorMessage(e));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [isLoaded, loading, signIn, email],
+  );
 
   const handleReset = useCallback(async () => {
-    if (!isLoaded) return;
+    if (!isLoaded || loading) return;
     setLoading(true);
     setError('');
+    setNotice('');
     try {
       const result = await signIn.attemptFirstFactor({
         strategy: 'reset_password_email_code',
-        code,
+        code: code.trim(),
         password,
       });
       if (result.status === 'complete') {
         await setActive({ session: result.createdSessionId });
         router.replace('/');
+      } else if (result.status === 'needs_second_factor') {
+        // The password is changed at this point; finish the second factor on sign-in.
+        setError('Password updated. Sign in again to finish your verification step.');
       } else {
-        setError('Invalid or expired code. Please try again.');
+        setError('Invalid or expired code. Send a new one and try again.');
       }
     } catch (e: unknown) {
-      setError(parseError(e));
+      setError(clerkErrorMessage(e));
     } finally {
       setLoading(false);
     }
-  }, [isLoaded, signIn, code, password, setActive, router]);
+  }, [isLoaded, loading, signIn, code, password, setActive, router]);
 
   return (
-    <View className="flex-1" style={{ backgroundColor: theme.background }}>
-      <SafeAreaView className="flex-1">
-        <KeyboardAvoidingView
-          behavior={Platform.select({ ios: 'padding', android: undefined })}
-          className="flex-1 justify-center px-6 gap-10">
-
-          <View className="items-center gap-3">
-            <View style={{ width: 64, height: 64, borderRadius: Radius.xl, backgroundColor: Brand[500], alignItems: 'center', justifyContent: 'center', ...Shadow.float }}>
-              <ThemedText style={{ fontSize: 34, fontWeight: '900', color: '#06140C' }}>$</ThemedText>
-            </View>
-            <ThemedText style={{ fontSize: 32, fontWeight: '800', letterSpacing: -0.8, color: theme.text }}>Reset password</ThemedText>
-            <ThemedText type="small" themeColor="textSecondary">
-              {step === 'form' ? 'Enter your email to get a code' : 'Check your email'}
+    <AuthScreen
+      title="Reset password"
+      subtitle={
+        step === 'form'
+          ? 'Enter your email and we’ll send you a code'
+          : `We sent a 6-digit code to ${email.trim()}`
+      }
+      footer={<AuthFooterLink prompt="Remembered it?" action="Sign in" href="/sign-in" />}>
+      {step === 'form' ? (
+        <View className="gap-4">
+          <AuthTextInput
+            label="Email"
+            value={email}
+            onChangeText={setEmail}
+            placeholder="you@example.com"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+            autoComplete="email"
+            textContentType="emailAddress"
+            autoFocus
+            returnKeyType="go"
+            onSubmitEditing={() => sendCode(false)}
+          />
+          <AuthError message={error} />
+          <AuthButton
+            label="Send Code"
+            onPress={() => sendCode(false)}
+            disabled={!email.trim()}
+            loading={loading}
+          />
+        </View>
+      ) : (
+        <View className="gap-4">
+          <AuthTextInput
+            value={code}
+            onChangeText={setCode}
+            placeholder="000000"
+            keyboardType="number-pad"
+            autoComplete="one-time-code"
+            textContentType="oneTimeCode"
+            autoFocus
+            maxLength={6}
+            style={{
+              fontSize: 30,
+              letterSpacing: 12,
+              fontWeight: '800',
+              textAlign: 'center',
+              fontVariant: ['tabular-nums'],
+            }}
+          />
+          <AuthTextInput
+            label="New password"
+            value={password}
+            onChangeText={setPassword}
+            placeholder="At least 8 characters"
+            secureTextEntry
+            autoCapitalize="none"
+            autoComplete="new-password"
+            textContentType="newPassword"
+            returnKeyType="go"
+            onSubmitEditing={handleReset}
+          />
+          <AuthError message={error} />
+          {!!notice && (
+            <ThemedText type="small" themeColor="textSecondary" className="text-center">
+              {notice}
             </ThemedText>
-          </View>
-
-          {step === 'form' ? (
-            <View className="gap-4">
-              <AuthTextInput
-                label="Email"
-                value={email}
-                onChangeText={setEmail}
-                placeholder="you@example.com"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoComplete="email"
-              />
-              {!!error && (
-                <ThemedText type="small" className="text-center" style={{ color: '#ef4444' }}>{error}</ThemedText>
-              )}
-              <Pressable
-                onPress={handleSendCode}
-                disabled={loading || !email}
-                className="py-4 items-center mt-1 active:opacity-80"
-                style={{ borderRadius: Radius.lg, backgroundColor: Brand[500], opacity: loading || !email ? 0.45 : 1, ...Shadow.card }}>
-                {loading
-                  ? <ActivityIndicator color="#06140C" />
-                  : <ThemedText style={{ fontWeight: '800', fontSize: 16, color: '#06140C' }}>Send Code</ThemedText>}
-              </Pressable>
-            </View>
-          ) : (
-            <View className="gap-4">
-              <ThemedText type="small" themeColor="textSecondary" className="text-center">
-                We sent a 6-digit code to {email}
-              </ThemedText>
-              <AuthTextInput
-                value={code}
-                onChangeText={setCode}
-                placeholder="000000"
-                keyboardType="number-pad"
-                maxLength={6}
-                style={{ fontSize: 30, letterSpacing: 12, fontWeight: '800', textAlign: 'center', fontVariant: ['tabular-nums'] }}
-              />
-              <AuthTextInput
-                label="New password"
-                value={password}
-                onChangeText={setPassword}
-                placeholder="At least 8 characters"
-                secureTextEntry
-                autoComplete="new-password"
-              />
-              {!!error && (
-                <ThemedText type="small" className="text-center" style={{ color: '#ef4444' }}>{error}</ThemedText>
-              )}
-              <Pressable
-                onPress={handleReset}
-                disabled={loading || code.length < 6 || !password}
-                className="py-4 items-center mt-1 active:opacity-80"
-                style={{ borderRadius: Radius.lg, backgroundColor: Brand[500], opacity: loading || code.length < 6 || !password ? 0.45 : 1, ...Shadow.card }}>
-                {loading
-                  ? <ActivityIndicator color="#06140C" />
-                  : <ThemedText style={{ fontWeight: '800', fontSize: 16, color: '#06140C' }}>Reset Password</ThemedText>}
-              </Pressable>
-            </View>
           )}
-
-          <Link href="/sign-in" asChild>
-            <Pressable className="items-center active:opacity-60">
-              <ThemedText type="small" themeColor="textSecondary">
-                Remembered it?{' '}
-                <ThemedText type="small" style={{ color: Brand[500], fontWeight: '700' }}>Sign in</ThemedText>
-              </ThemedText>
-            </Pressable>
-          </Link>
-        </KeyboardAvoidingView>
-      </SafeAreaView>
-    </View>
+          <AuthButton
+            label="Reset Password"
+            onPress={handleReset}
+            disabled={code.trim().length < 6 || password.length < 8}
+            loading={loading}
+          />
+          <AuthTextButton label="Send a new code" onPress={() => sendCode(true)} disabled={loading} />
+        </View>
+      )}
+    </AuthScreen>
   );
 }
