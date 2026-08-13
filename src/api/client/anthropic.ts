@@ -17,6 +17,7 @@ import { playbookRoutes, targetBucket, timeframeCalendarDays } from '@/api/clien
 import { buildRouteGenerationPrompt } from '@/api/client/route-generation-prompt';
 import { getDailyPool, setDailyPool } from '@/api/client/storage';
 import { applySourcedDebtFacts } from '@/lib/factual-route-data';
+import { apiBaseUrl } from '@/lib/api-base-url';
 import { buildCryptoRoutes } from '@/lib/crypto-routes';
 import { buildPolymarketRoutes } from '@/lib/polymarket-routes';
 import { enforceRouteIntegrity, filterRoutesForQuiz } from '@/lib/quiz-profile';
@@ -24,11 +25,10 @@ import { buildEtfRoutes } from '@/lib/etf-routes';
 import { isDebtRoute } from '@/lib/route-investment-metrics';
 import { isRecord, isRoute, parseJson, responseJson } from '@/lib/runtime-validation';
 import { buildSavingsAccountRoute, buildTreasuryRoutes } from '@/lib/savings-treasury-routes';
-import { sortByPolyProfitScore } from '@/lib/score';
+import { sortByPatheyScore } from '@/lib/score';
 import { stakeNeededForReturn } from '@/lib/stake-rescore';
 import type { Route, RouteParams } from '@/types/routes';
 
-const API_KEY = process.env.EXPO_PUBLIC_OPENAI_API_KEY ?? '';
 const DAILY_POOL_VERSION = 'return-bucket-v3';
 const TIMEFRAME_LABELS: Record<RouteParams['timeframe'], string> = {
   today: 'today (next 24 hours)',
@@ -40,7 +40,12 @@ const TIMEFRAME_LABELS: Record<RouteParams['timeframe'], string> = {
 };
 const inflightRoutes = new Map<string, Promise<Route[]>>();
 
-export async function fetchRoutes(params: RouteParams, options: { force?: boolean } = {}): Promise<Route[]> {
+type TokenProvider = () => Promise<string | null>;
+
+export async function fetchRoutes(
+  params: RouteParams,
+  options: { force?: boolean; getToken?: TokenProvider } = {},
+): Promise<Route[]> {
   const requestKey = routesCacheKey(params);
   const existing = inflightRoutes.get(requestKey);
   if (existing) return existing;
@@ -50,7 +55,7 @@ export async function fetchRoutes(params: RouteParams, options: { force?: boolea
       const cached = await getDailyPool(goalKey).catch(() => null);
       if (cached?.length) return cached;
     }
-    const routes = await generateRoutes(params);
+    const routes = await generateRoutes(params, options.getToken);
     await setDailyPool(goalKey, routes).catch(() => undefined);
     return routes;
   })().finally(() => inflightRoutes.delete(requestKey));
@@ -58,7 +63,7 @@ export async function fetchRoutes(params: RouteParams, options: { force?: boolea
   return request;
 }
 
-async function generateRoutes(params: RouteParams): Promise<Route[]> {
+async function generateRoutes(params: RouteParams, getToken?: TokenProvider): Promise<Route[]> {
   const { balance, target, timeframe } = params;
   const returnPct = balance > 0 ? (target / balance) * 100 : 0;
   const fallbackMaturity = timeframeCalendarDays(timeframe);
@@ -87,7 +92,7 @@ async function generateRoutes(params: RouteParams): Promise<Route[]> {
       whaleTrades: formatWhaleTrades(polymarketPicks.whaleTrades),
     },
   });
-  const aiRoutes = await requestAiRoutes(prompt.system, prompt.user, fallbackMaturity);
+  const aiRoutes = await requestAiRoutes(prompt.system, prompt.user, fallbackMaturity, getToken);
   return mergeAndRankRoutes(aiRoutes, polymarketUniverse, marketContext, params, returnPct, fallbackMaturity);
 }
 
@@ -95,30 +100,30 @@ async function generateRoutes(params: RouteParams): Promise<Route[]> {
 // (treasury / ETF / playbook) and the live Polymarket universe cover a full result set on
 // their own. So every failure here is non-fatal: log and return [], and let the merge
 // proceed. An empty or thin Polymarket feed must never blow up the whole search.
-async function requestAiRoutes(systemPrompt: string, userPrompt: string, fallbackMaturity: number): Promise<Route[]> {
-  if (!API_KEY) {
-    console.warn('[routes:ai] missing EXPO_PUBLIC_OPENAI_API_KEY — skipping AI Polymarket enrichment');
+async function requestAiRoutes(
+  systemPrompt: string,
+  userPrompt: string,
+  fallbackMaturity: number,
+  getToken?: TokenProvider,
+): Promise<Route[]> {
+  if (!getToken) {
+    console.warn('[routes:ai] no authenticated AI session — skipping AI Polymarket enrichment');
     return [];
   }
   try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const token = await getToken();
+    if (!token) return [];
+    const response = await fetch(`${apiBaseUrl()}/api/ai-routes`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${API_KEY}` },
-      body: JSON.stringify({
-        model: 'gpt-4o',
-        max_tokens: 5_000,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-      }),
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ systemPrompt, userPrompt }),
     });
     if (!response.ok) {
-      console.warn(`[routes:ai] OpenAI error ${response.status}: ${await response.text()}`);
+      console.warn(`[routes:ai] server error ${response.status}`);
       return [];
     }
     const payload = await responseJson(response);
-    const content = readAssistantContent(payload);
+    const content = isRecord(payload) && typeof payload.content === 'string' ? payload.content : '';
     const parsed = parseJson(extractJson(content));
     const values = Array.isArray(parsed) ? parsed : isRecord(parsed) && Array.isArray(parsed.routes) ? parsed.routes : [];
     const routes = values.filter(isRoute).map((route) => ({
@@ -160,7 +165,7 @@ function mergeAndRankRoutes(
   // one-week search.
   const merged = [...new Map([...tailored, ...livePolymarket].map((route) => [route.id, route])).values()];
   const unique = filterRoutesForQuiz(merged, params);
-  return sortByPolyProfitScore(unique, (route) => ({
+  return sortByPatheyScore(unique, (route) => ({
     target,
     requiredInvestment: stakeNeededForReturn(route, balance, target),
     availableInvestment: balance,
@@ -182,12 +187,6 @@ function extractJson(text: string): string {
   return text.match(/<routes>([\s\S]*?)<\/routes>/)?.[1]?.trim()
     ?? text.match(/```json\n?([\s\S]*?)```/)?.[1]?.trim()
     ?? text.slice(Math.max(0, text.indexOf('[')), text.lastIndexOf(']') + 1);
-}
-
-function readAssistantContent(value: unknown): string {
-  if (!isRecord(value) || !Array.isArray(value.choices)) return '';
-  const choice = value.choices[0];
-  return isRecord(choice) && isRecord(choice.message) && typeof choice.message.content === 'string' ? choice.message.content : '';
 }
 
 function routesCacheKey(params: RouteParams): string {

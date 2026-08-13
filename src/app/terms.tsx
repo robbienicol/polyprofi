@@ -38,9 +38,9 @@ export default function TermsScreen(): React.ReactElement {
           <ThemedText style={{ fontSize: 22, fontWeight: '800', color: theme.text }}>Terms of Service</ThemedText>
           <P>Last updated: 2026-08-10.</P>
 
-          <H>What PolyProfit is</H>
+          <H>What Pathey is</H>
           <P>
-            PolyProfit shows AI-generated, informational &quot;routes&quot; — ways you could try to reach a
+            Pathey shows AI-generated, informational &quot;routes&quot; — ways you could try to reach a
             money goal across markets like Polymarket, stocks, crypto, and treasuries. Routes are ranked
             by estimated risk and probability using historical and live market data plus AI-assisted
             analysis.
@@ -48,14 +48,14 @@ export default function TermsScreen(): React.ReactElement {
 
           <H>Not financial advice</H>
           <P>
-            Nothing in the app is financial, investment, tax, or legal advice, and PolyProfit is not a
+            Nothing in the app is financial, investment, tax, or legal advice, and Pathey is not a
             registered investment adviser or broker-dealer. Routes are for entertainment and informational
             purposes only. Always do your own research before acting on anything you see here.
           </P>
 
           <H>No trading or money movement in-app</H>
           <P>
-            PolyProfit does not execute trades, place bets, or move money on your behalf. Where a route
+            Pathey does not execute trades, place bets, or move money on your behalf. Where a route
             points to an external platform (like Polymarket or a brokerage), tapping through takes you to
             that platform, where you decide whether to act, at your own risk and subject to that
             platform&apos;s own terms.

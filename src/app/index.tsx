@@ -29,7 +29,8 @@ export default function Index(): React.ReactElement {
   // Signed-in users land on Home. Route generation runs only for subscribers;
   // route generation is open to everyone (no paywall).
   // DEV: set EXPO_PUBLIC_DEV_BYPASS_AUTH=1 in .env to skip sign-in while testing.
-  const bypassAuth = process.env.EXPO_PUBLIC_DEV_BYPASS_AUTH === '1';
+  // Gated on `__DEV__` so a release build can never skip auth, whatever the env holds.
+  const bypassAuth = __DEV__ && process.env.EXPO_PUBLIC_DEV_BYPASS_AUTH === '1';
   if (!isSignedIn && !bypassAuth) return <Redirect href="/sign-in" />;
 
   // Once, right after sign-in: a short profile survey (age/experience/goals) for the team's

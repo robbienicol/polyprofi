@@ -41,8 +41,8 @@ export default function PrivacyScreen(): React.ReactElement {
 
           <H>What this covers</H>
           <P>
-            This policy explains what PolyProfit collects when you use the app, why, and how you can
-            delete it. PolyProfit shows AI-generated, informational routes across markets (Polymarket,
+            This policy explains what Pathey collects when you use the app, why, and how you can
+            delete it. Pathey shows AI-generated, informational routes across markets (Polymarket,
             stocks, crypto, treasuries, etc.) — it does not hold funds, place trades, or move money on
             your behalf, and it does not currently connect to your bank or brokerage accounts.
           </P>

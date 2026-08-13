@@ -147,7 +147,7 @@ export default function OnboardingScreen(): React.ReactElement {
                 <ThemedText style={{ fontSize: 14, fontWeight: '900', color: '#06140C' }}>$</ThemedText>
               </View>
               <ThemedText style={{ fontSize: 15, fontWeight: '800', color: theme.text, letterSpacing: -0.3 }}>
-                PolyProfit
+                Pathey
               </ThemedText>
             </View>
             <ThemedText style={{ fontSize: 11, fontWeight: '700', color: theme.textTertiary, ...MONO }}>

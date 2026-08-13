@@ -41,7 +41,7 @@ export function useBiometricLock() {
 }
 
 /** Prompts Face ID / Touch ID / device passcode. Resolves true only on success. */
-export async function authenticateWithBiometrics(promptMessage = 'Unlock PolyProfit'): Promise<boolean> {
+export async function authenticateWithBiometrics(promptMessage = 'Unlock Pathey'): Promise<boolean> {
   const result = await LocalAuthentication.authenticateAsync({
     promptMessage,
     fallbackLabel: 'Use passcode',

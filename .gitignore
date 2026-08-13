@@ -50,3 +50,11 @@ example
 /ios
 /android
 .gstack/
+
+# generated pitch-deck build/edit workspaces — regenerate via deck tooling
+.deck-build/
+.deck-edit/
+*.inspect.ndjson
+
+# signed app binaries — regenerate via eas build
+*.ipa

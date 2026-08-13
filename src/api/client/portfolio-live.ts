@@ -3,13 +3,23 @@ import { Platform } from 'react-native';
 export interface TrackedAssetQuote {
   symbol: string;
   price: number;
+  previousClose?: number;
   fetchedAt: string;
+  marketTime?: string;
 }
 
 interface YahooChartResponse {
   chart?: {
     result?: {
-      meta?: { regularMarketPrice?: number; symbol?: string };
+      meta?: {
+        regularMarketPrice?: number;
+        previousClose?: number;
+        regularMarketTime?: number;
+        symbol?: string;
+      };
+      indicators?: {
+        quote?: { close?: (number | null)[] }[];
+      };
     }[];
   };
 }
@@ -32,13 +42,22 @@ async function fetchTrackedAssetQuote(symbol: string): Promise<TrackedAssetQuote
   }
 
   const data = (await response.json()) as YahooChartResponse;
-  const meta = data.chart?.result?.[0]?.meta;
+  const result = data.chart?.result?.[0];
+  const meta = result?.meta;
   if (!meta?.regularMarketPrice || !Number.isFinite(meta.regularMarketPrice)) return null;
+  const closes = result?.indicators?.quote?.[0]?.close?.filter(
+    (price): price is number => typeof price === 'number' && Number.isFinite(price)
+  ) ?? [];
+  const previousDailyClose = closes.length >= 2 ? closes[closes.length - 2] : meta.previousClose;
 
   return {
     symbol: meta.symbol ?? symbol,
     price: meta.regularMarketPrice,
+    previousClose: previousDailyClose,
     fetchedAt: new Date().toISOString(),
+    marketTime: meta.regularMarketTime
+      ? new Date(meta.regularMarketTime * 1_000).toISOString()
+      : undefined,
   };
 }
 

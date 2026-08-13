@@ -63,14 +63,16 @@ export function usePortfolioProgress(fallbackBalance: number) {
     const point: PortfolioProgressPoint = {
       time: now,
       value: snapshot.value,
+      basisValue: snapshot.basisValue,
       livePnl: snapshot.livePnl,
       projectedPnl: snapshot.projectedPnl,
     };
     const basis: PortfolioProgressPoint = {
       time: now - 60_000,
-      value: snapshot.value,
-      livePnl: snapshot.livePnl,
-      projectedPnl: snapshot.projectedPnl,
+      value: snapshot.basisValue,
+      basisValue: snapshot.basisValue,
+      livePnl: 0,
+      projectedPnl: 0,
     };
 
     recordPortfolioProgress(point, basis).then((points) => {
@@ -100,6 +102,8 @@ export function usePortfolioProgress(fallbackBalance: number) {
     isRefreshing: monitoring.isFetching || quotesQuery.isFetching,
     updatedAt: updatedAt > 0 ? new Date(updatedAt) : null,
     observedAt: now,
+    statusById: monitoring.statusById,
+    sellAlerts: monitoring.sellAlerts,
     refresh,
   };
 }

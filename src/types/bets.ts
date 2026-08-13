@@ -6,6 +6,12 @@ export interface SavingsGoal {
   targetAmount: number; // price of the thing, in dollars
   createdAt: string; // ISO
   achievedAt?: string; // ISO, set once tracked value first reaches the target
+  /**
+   * ISO time the congratulations screen was shown for this goal. Absent while a
+   * reached goal still owes the user its celebration, which is what makes the
+   * celebration survive a cold start: it is persisted state, not an event.
+   */
+  celebratedAt?: string;
 }
 
 /** Persisted savings-goal state: the current goal plus a lifetime count of goals reached. */
@@ -49,14 +55,32 @@ export interface TrackedBet {
   entryPrice?: number;
   /** Sports / Polymarket line copied from the route at track time. */
   line?: string;
-  /** Fuzzy search text for live Polymarket price lookup. */
+  /** Extra text used when matching this position to a live sports scoreboard. */
   monitorQuery?: string;
+  /**
+   * Slug of the source Polymarket market, copied from the route at track time.
+   * This is how live monitoring finds the position's own price; without it the
+   * monitor can only fall back to an exact question-text match.
+   */
+  sourceSlug?: string;
+  /**
+   * The outcome the user bought ("No", "Los Angeles Lakers", …). Required to
+   * price the right side of the market — a No position valued off the Yes
+   * column inverts its P&L.
+   */
+  outcomeSide?: string;
   /** User dismissed the sell alert for this session. */
   sellAlertDismissed?: boolean;
   /** Ticker captured when a stock or ETF route is tracked (for example, VOO). */
   assetSymbol?: string;
   /** Market price per share when the route was tracked. */
   assetEntryPrice?: number;
+  /** Shares represented by the tracked dollar amount at the recorded entry price. */
+  assetQuantity?: number;
+  /** Principal assigned to this position. Kept separately from its current value. */
+  costBasis?: number;
+  /** Time the position was added to Pathey. */
+  positionOpenedAt?: string;
   /** Annualized sourced yield used for deterministic savings/Treasury accrual. */
   annualYieldPct?: number;
   /** Original route horizon, used to cap projected accrual at maturity. */

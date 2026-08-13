@@ -56,7 +56,8 @@ export function isSavingsGoal(value: unknown): value is SavingsGoal {
     && typeof value.emoji === 'string'
     && isFiniteNumber(value.targetAmount)
     && typeof value.createdAt === 'string'
-    && isOptional(value.achievedAt, isString);
+    && isOptional(value.achievedAt, isString)
+    && isOptional(value.celebratedAt, isString);
 }
 
 export function isSavingsGoalState(value: unknown): value is SavingsGoalState {
@@ -122,6 +123,7 @@ export function isPortfolioProgressPoint(value: unknown): value is PortfolioProg
   if (!isRecord(value)) return false;
   return isFiniteNumber(value.time)
     && isFiniteNumber(value.value)
+    && isFiniteNumber(value.basisValue)
     && isFiniteNumber(value.livePnl)
     && isFiniteNumber(value.projectedPnl);
 }

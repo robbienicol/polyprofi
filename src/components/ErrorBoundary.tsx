@@ -36,7 +36,7 @@ function ErrorFallback({ error, onRetry }: { error: Error; onRetry: () => void }
         <ThemedText type="small" themeColor="textSecondary" style={{ textAlign: 'center', maxWidth: 280 }}>
           {clerkDown
             ? 'We couldn’t load the sign-in service. Check your connection and try again.'
-            : 'PolyProfit hit an unexpected error. Try again, and if it keeps happening, restart the app.'}
+            : 'Pathey hit an unexpected error. Try again, and if it keeps happening, restart the app.'}
         </ThemedText>
         {clerkDown && __DEV__ && (
           <ThemedText type="small" themeColor="textSecondary" style={{ textAlign: 'center', maxWidth: 300, opacity: 0.5 }}>

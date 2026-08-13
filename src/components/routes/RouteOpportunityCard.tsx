@@ -233,6 +233,51 @@ export function RouteOpportunityCard({
         />
       </Section>
 
+      {route.exitPlan?.kind === "bracket" && (
+        <Section title="Exit Plan">
+          <View className="flex-row gap-2">
+            <Fact
+              label="Buy / sell"
+              value={`${route.exitPlan.entryCents}¢ → ${route.exitPlan.takeProfitCents}¢`}
+            />
+            <Fact label="Stop" value={`${route.exitPlan.stopCents}¢`} />
+          </View>
+          <View className="flex-row gap-2">
+            <Fact
+              label="Sell hit first"
+              value={`${route.exitPlan.barrierProbability}%`}
+            />
+            <Fact
+              label="Break-even needs"
+              value={`${route.exitPlan.breakevenProbability}%`}
+            />
+          </View>
+          <View className="flex-row gap-2">
+            <Fact
+              label="Most you can lose"
+              value={`~${Math.round(route.exitPlan.effectiveLossFraction * 100)}% of stake`}
+            />
+            <Fact
+              label="Typical exit"
+              value={formatMaturity(route.exitPlan.expectedExitDays)}
+            />
+          </View>
+          {/* The disclosure has to sit next to the numbers, not in a footnote: the plan is
+              zero-EV before costs and negative after, so anything that reads as an edge is
+              a lie. See @/lib/prediction-swing. */}
+          <ThemedText
+            style={{ fontSize: 11.5, lineHeight: 17, color: theme.textSecondary }}>
+            {`Hitting ${route.exitPlan.takeProfitCents}¢ before ${route.exitPlan.stopCents}¢ happens ` +
+              `${route.exitPlan.barrierProbability}% of the time, and you need ` +
+              `${route.exitPlan.breakevenProbability}% just to cover the ` +
+              `${route.exitPlan.roundTripCostCents}¢ round-trip spread — a ` +
+              `${Math.abs(route.exitPlan.costEdgePts).toFixed(1)}-point drag. A busier market ` +
+              `does not improve those odds, only how fast you find out. What the plan buys is the ` +
+              `capped loss and the earlier exit.`}
+          </ThemedText>
+        </Section>
+      )}
+
       {marketQuality && (
         <Section title="Market Quality">
           <View className="flex-row gap-2">

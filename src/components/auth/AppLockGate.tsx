@@ -86,7 +86,7 @@ export function AppLockGate({ children }: { children: React.ReactNode }): React.
         </View>
 
         <View className="items-center gap-2">
-          <ThemedText style={{ fontSize: 20, fontWeight: '800', color: theme.text }}>PolyProfit is locked</ThemedText>
+          <ThemedText style={{ fontSize: 20, fontWeight: '800', color: theme.text }}>Pathey is locked</ThemedText>
           <ThemedText type="small" themeColor="textSecondary">Unlock with Face ID to continue</ThemedText>
         </View>
 

@@ -42,7 +42,7 @@ const STEP_TITLES: Record<Step, string> = {
   age: 'How old are you?',
   country: 'Where are you\nbased?',
   experience: 'How experienced\nare you investing?',
-  reason: 'What brought you\nto PolyProfit?',
+  reason: 'What brought you\nto Pathey?',
   goal: "What's your main\ngoal right now?",
   amount: 'How much are you\nstarting with?',
   markets: 'Any markets you\ncare about?',

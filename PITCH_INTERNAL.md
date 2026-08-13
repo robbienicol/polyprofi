@@ -1,4 +1,4 @@
-# PolyProfit — Internal Pitch Breakdown
+# Pathey — Internal Pitch Breakdown
 
 > INTERNAL ONLY. Includes honest criticisms and open risks. Do not show to investors verbatim — pull the strong parts into the deck, keep the "Risks & Hard Truths" section for yourself.
 > Date: 2026-06-24 · Stage: pre-product, no users yet · Source: /office-hours session + design doc
@@ -7,7 +7,7 @@
 
 ## 1. One-liner
 
-**PolyProfit is a GPS for money: tell it your goal and risk, and it shows you the honest, ranked routes to get there — across savings, stocks, crypto, sports, and prediction markets.**
+**Pathey is a GPS for money: tell it your goal and risk, and it shows you the honest, ranked routes to get there — across savings, stocks, crypto, sports, and prediction markets.**
 
 Alt framings to test in the deck:
 - "Google Maps for your money goal."
@@ -18,7 +18,7 @@ Alt framings to test in the deck:
 
 ## 2. The Idea
 
-A user sets a concrete goal — "$8,000 → $9,000 in 1 year, as safe as possible" — and PolyProfit returns a ranked set of "routes" calibrated to that goal: the math-best vehicle, the real probability of hitting it, the expected return, and the risk profile. Routes span every money-making avenue on one risk/reward map, from a T-bill to a parlay.
+A user sets a concrete goal — "$8,000 → $9,000 in 1 year, as safe as possible" — and Pathey returns a ranked set of "routes" calibrated to that goal: the math-best vehicle, the real probability of hitting it, the expected return, and the risk profile. Routes span every money-making avenue on one risk/reward map, from a T-bill to a parlay.
 
 The wedge (what we sell first): **the honest answer, not picks.**  this is a tough call. ai was saying like amazon sold books before they sold everything, netflix sent cd's before they became the center of movies, what do we target as a neiche before expanding to every single person that want to make money? i think the wedge is the safety percentage meter and putting a number to the risk you take when doing x options but we need to xpand and find a pocket of people. like are we selling to sports degens or smart money people
 
@@ -149,7 +149,7 @@ Before any more code: **talk to Eddie + 4 more like him this week.** Don't demo.
 
 ## 15. Pitch Deck Outline (slide-by-slide)
 
-1. **Title** — PolyProfit + one-liner ("GPS for money").
+1. **Title** — Pathey + one-liner ("GPS for money").
 2. **Problem** — fragmentation, no calibration, trust vacuum. Show the 10-conflicting-tabs reality.
 3. **Insight** — everything is one risk/reward map; people don't need more picks, they need the honest answer.
 4. **Product** — goal in → ranked honest routes out. Screenshot of the honest-answer screen.

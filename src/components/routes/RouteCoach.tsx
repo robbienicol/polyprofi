@@ -1,3 +1,4 @@
+import { useAuth } from '@clerk/clerk-expo';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, TextInput, View } from 'react-native';
 
@@ -13,6 +14,7 @@ interface CoachMessage {
 }
 
 export function RouteCoach({ route }: { route: Route }): React.ReactElement {
+  const { getToken } = useAuth();
   const theme = useTheme();
   const [question, setQuestion] = useState('');
   const [messages, setMessages] = useState<CoachMessage[]>([]);
@@ -25,7 +27,7 @@ export function RouteCoach({ route }: { route: Route }): React.ReactElement {
     setQuestion('');
     setMessages((current) => [...current, { role: 'user', text: trimmed }]);
     setLoading(true);
-    const reply = await fetchRouteCoachReply(route, trimmed).catch(() => 'I could not reach the coach right now. The key check is still probability versus downside before you size this.');
+    const reply = await fetchRouteCoachReply(route, trimmed, getToken).catch(() => 'I could not reach the coach right now. The key check is still probability versus downside before you size this.');
     setMessages((current) => [...current, { role: 'coach', text: reply }]);
     setLoading(false);
   }

@@ -30,7 +30,7 @@ export default function AppTabs() {
             <TabButton icon="briefcase">Portfolio</TabButton>
           </TabTrigger>
           <TabTrigger name="profile" href="/(tabs)/profile" asChild>
-            <TabButton icon="person">Profile</TabButton>
+            <TabButton icon="gearshape">Settings</TabButton>
           </TabTrigger>
         </CustomTabList>
       </TabList>
@@ -68,7 +68,7 @@ export function CustomTabList(props: TabListProps) {
       <ThemedView type="backgroundElement" style={[styles.innerContainer, compact && styles.compactInnerContainer]}>
         {!compact ? (
           <ThemedText type="smallBold" style={styles.brandText}>
-            PolyProfit
+            Pathey
           </ThemedText>
         ) : null}
 

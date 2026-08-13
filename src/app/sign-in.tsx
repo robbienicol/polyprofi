@@ -166,7 +166,7 @@ export default function SignInScreen(): React.ReactElement {
 
   return (
     <AuthScreen
-      title="PolyProfit"
+      title="Pathey"
       subtitle="Sign in to your account"
       footer={<AuthFooterLink prompt="Don’t have an account?" action="Sign up" href="/sign-up" />}>
       <View className="gap-4">

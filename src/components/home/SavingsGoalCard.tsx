@@ -1,5 +1,6 @@
 import { Pressable, View } from 'react-native';
 
+import { useMoney } from '@/api/hooks/usePreferences';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -9,16 +10,20 @@ const MONO = { fontVariant: ['tabular-nums' as const] };
 
 interface SavingsGoalCardProps {
   goal: SavingsGoal;
-  value: number; // current tracked value toward the goal
+  value: number; // net gains only; invested principal never counts
   achievedCount: number;
   onSetNew: () => void;
 }
 
 export function SavingsGoalCard({ goal, value, achievedCount, onSetNew }: SavingsGoalCardProps): React.ReactElement {
   const theme = useTheme();
-  const achieved = value >= goal.targetAmount || goal.achievedAt != null;
-  const progress = Math.max(0, Math.min(1, value / goal.targetAmount));
-  const remaining = Math.max(0, goal.targetAmount - value);
+  const money = useMoney();
+  const netGain = value;
+  const achieved = netGain >= goal.targetAmount;
+  const progress = Math.max(0, Math.min(1, netGain / goal.targetAmount));
+  const remaining = Math.max(0, goal.targetAmount - netGain);
+  const netGainLabel = money(netGain, { decimals: 0, signed: true });
+  const targetLabel = money(goal.targetAmount, { decimals: 0, signed: true });
 
   if (achieved) {
     return (
@@ -28,14 +33,14 @@ export function SavingsGoalCard({ goal, value, achievedCount, onSetNew }: Saving
             <ThemedText style={{ fontSize: 28 }}>{goal.emoji}</ThemedText>
           </View>
           <View className="flex-1">
-            <ThemedText style={{ fontSize: 12, fontWeight: '800', color: Brand[500], letterSpacing: 0.4 }}>GOAL REACHED 🎉</ThemedText>
+            <ThemedText style={{ fontSize: 12, fontWeight: '800', color: Brand[500], letterSpacing: 0.4 }}>PROFIT GOAL HIT 🎉</ThemedText>
             <ThemedText style={{ fontSize: 18, fontWeight: '800', color: theme.text, marginTop: 2 }} numberOfLines={1}>
-              You saved for {goal.label}!
+              You earned enough for {goal.label}
             </ThemedText>
           </View>
         </View>
         <ThemedText style={{ fontSize: 13, lineHeight: 19, color: theme.textSecondary }}>
-          You reached your ${goal.targetAmount.toLocaleString()} goal. Set your next one and keep the momentum going.
+          {netGainLabel} in net gains reached your {targetLabel} goal. Your invested principal is not included.
         </ThemedText>
         <Pressable
           onPress={onSetNew}
@@ -57,7 +62,7 @@ export function SavingsGoalCard({ goal, value, achievedCount, onSetNew }: Saving
     <Pressable
       onPress={onSetNew}
       accessibilityRole="button"
-      accessibilityLabel={`Savings goal: ${goal.label}. ${Math.round(progress * 100)} percent there. Tap to change.`}
+      accessibilityLabel={`Profit goal: ${goal.label}. ${netGainLabel} net profit and loss. ${Math.round(progress * 100)} percent there. Tap to change.`}
       className="active:opacity-95"
       style={{ borderRadius: Radius.xl, backgroundColor: theme.backgroundElevated, borderWidth: 1, borderColor: theme.border, padding: 20, gap: 16, ...Shadow.card }}>
       <View className="flex-row items-center" style={{ gap: 12 }}>
@@ -65,7 +70,7 @@ export function SavingsGoalCard({ goal, value, achievedCount, onSetNew }: Saving
           <ThemedText style={{ fontSize: 28 }}>{goal.emoji}</ThemedText>
         </View>
         <View className="flex-1">
-          <ThemedText style={{ fontSize: 11, fontWeight: '800', color: theme.textTertiary, letterSpacing: 0.5 }}>SAVING FOR</ThemedText>
+          <ThemedText style={{ fontSize: 11, fontWeight: '800', color: theme.textTertiary, letterSpacing: 0.5 }}>PROFIT GOAL</ThemedText>
           <ThemedText style={{ fontSize: 18, fontWeight: '800', color: theme.text, marginTop: 1, letterSpacing: -0.2 }} numberOfLines={1}>
             {goal.label}
           </ThemedText>
@@ -81,11 +86,11 @@ export function SavingsGoalCard({ goal, value, achievedCount, onSetNew }: Saving
         </View>
         <View className="flex-row items-baseline justify-between">
           <ThemedText style={{ fontSize: 15, fontWeight: '800', color: theme.text, ...MONO }}>
-            ${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-            <ThemedText style={{ fontSize: 13, fontWeight: '600', color: theme.textTertiary }}> of ${goal.targetAmount.toLocaleString()}</ThemedText>
+            {netGainLabel}
+            <ThemedText style={{ fontSize: 13, fontWeight: '600', color: theme.textTertiary }}> net P&amp;L of {targetLabel}</ThemedText>
           </ThemedText>
           <ThemedText style={{ fontSize: 12, fontWeight: '700', color: theme.textSecondary, ...MONO }}>
-            ${remaining.toLocaleString(undefined, { maximumFractionDigits: 0 })} to go
+            {money(remaining, { decimals: 0 })} to go
           </ThemedText>
         </View>
       </View>

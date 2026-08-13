@@ -1,5 +1,5 @@
 import { timeframeCalendarDays } from '@/api/client/playbook';
-import { goalEffectivenessScore, sortByPolyProfitScore } from '@/lib/score';
+import { goalEffectivenessScore, sortByPatheyScore } from '@/lib/score';
 import type { GoalScoreBreakdown, GoalScoreContext } from '@/lib/score';
 import { rescoreForStake, stakeNeededForReturn } from '@/lib/stake-rescore';
 import type { Route, RouteParams } from '@/types/routes';
@@ -19,6 +19,10 @@ export interface RouteResults {
   requiredInvestmentById: Map<string, number | null>;
   scoreById: Map<string, GoalScoreBreakdown>;
   selectedStake: (route: Route) => number;
+}
+
+export function resolveInvestmentAmount(editedAmount: number | null, referenceStake: number): number {
+  return editedAmount ?? referenceStake;
 }
 
 /**
@@ -100,7 +104,7 @@ export function buildRouteResults(
   const scoreById = new Map(
     rescored.map((route) => [route.id, goalEffectivenessScore(route, scoreContext(route))] as const)
   );
-  const ranked = sortByPolyProfitScore(rescored, scoreContext);
+  const ranked = sortByPatheyScore(rescored, scoreContext);
 
   let filtered = ranked;
   if (filters.category) filtered = filtered.filter((route) => route.category === filters.category);
@@ -115,6 +119,13 @@ export function buildRouteResults(
 
 // ── self-check ──────────────────────────────────────────────────────────────
 export function __selfCheck(): void {
+  if (resolveInvestmentAmount(null, 1000) !== 1000) {
+    throw new Error('an untouched investment amount uses the saved default');
+  }
+  if (resolveInvestmentAmount(0, 1000) !== 0) {
+    throw new Error('a temporarily empty investment input stays empty while editing');
+  }
+
   // The reported case: +$300 goal, intends $4,901; T-bill projects +$199 and needs $7,378.
   const tbill = { target: 300, projectedReturn: 199, requiredInvestment: 7378, intendedInvestment: 4901 };
   console.assert(!isRelevantRoute(tbill), 'far-off T-bill (66% of goal, 1.5× capital) is hidden');

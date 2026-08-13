@@ -1,12 +1,13 @@
-import { View } from 'react-native';
+import { useState } from 'react';
+import { LayoutChangeEvent, View } from 'react-native';
+import Svg, { Circle, Defs, LinearGradient, Path, Stop } from 'react-native-svg';
 
+import { ThemedText } from '@/components/themed-text';
 import { Accent, Brand, Radius } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { betEv } from '@/lib/portfolio';
 import type { TrackedBet } from '@/types/bets';
 
-const CHART_WIDTH = 280;
-const CHART_HEIGHT = 150;
 const CLASS_COLORS = {
   Polymarket: Brand[500],
   Treasuries: '#84CC16',
@@ -61,46 +62,190 @@ export function buildEquitySeries(bets: TrackedBet[], fallbackCash: number, cons
   return points;
 }
 
-export function AllocationDonut({ rows }: { rows: AllocationRow[] }): React.ReactElement {
-  const segments = 40;
-  const activeRows = rows.filter((row) => row.pct > 0);
-  const cumulative = activeRows.map((_, index) => activeRows.slice(0, index + 1).reduce((sum, row) => sum + row.pct, 0));
-  const colors = Array.from({ length: segments }, (_, index) => {
-    const midpoint = ((index + 0.5) / segments) * 100;
-    const rowIndex = cumulative.findIndex((threshold) => midpoint <= threshold);
-    return activeRows[rowIndex < 0 ? activeRows.length - 1 : rowIndex]?.color ?? '#1F2937';
+/**
+ * Allocation ring. Real SVG arcs (stroke dash offsets around one circle) rather
+ * than rotated rectangles, so segments meet cleanly and the hole picks up the
+ * card colour in both themes.
+ */
+export function AllocationDonut({
+  rows,
+  size = 128,
+  thickness = 18,
+  caption,
+  value,
+}: {
+  rows: AllocationRow[];
+  size?: number;
+  thickness?: number;
+  /** Small label under the centred value, e.g. "staked". */
+  caption?: string;
+  value?: string;
+}): React.ReactElement {
+  const theme = useTheme();
+  const radius = (size - thickness) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const segments = rows.filter((row) => row.pct > 0.05);
+
+  const arcs = segments.map((row, index) => {
+    const precedingPct = segments.slice(0, index).reduce((sum, earlier) => sum + earlier.pct, 0);
+    return {
+      key: row.category,
+      color: row.color,
+      length: (row.pct / 100) * circumference,
+      offset: (precedingPct / 100) * circumference,
+    };
   });
+
   return (
-    <View style={{ width: 142, height: 142, alignItems: 'center', justifyContent: 'center' }}>
-      {colors.map((color, index) => <View key={`${color}-${index}`} style={{ position: 'absolute', width: 10, height: 24, borderRadius: 6, backgroundColor: color, transform: [{ rotate: `${(index / segments) * 360}deg` }, { translateY: -58 }] }} />)}
-      <View style={{ width: 82, height: 82, borderRadius: 999, backgroundColor: '#07120F', borderWidth: 1, borderColor: '#10251D' }} />
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+      <Svg width={size} height={size} style={{ position: 'absolute' }}>
+        <Circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          stroke={theme.backgroundSelected}
+          strokeWidth={thickness}
+          fill="none"
+        />
+        {arcs.map((arc) => (
+          <Circle
+            key={arc.key}
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            stroke={arc.color}
+            strokeWidth={thickness}
+            strokeLinecap="butt"
+            fill="none"
+            strokeDasharray={`${Math.max(arc.length - 1.5, 0.5)} ${circumference}`}
+            strokeDashoffset={-arc.offset}
+            // Start at 12 o'clock and run clockwise.
+            transform={`rotate(-90 ${size / 2} ${size / 2})`}
+          />
+        ))}
+      </Svg>
+      {value ? (
+        <View style={{ alignItems: 'center' }}>
+          <ThemedText
+            style={{ fontSize: 17, fontWeight: '800', color: theme.text, fontVariant: ['tabular-nums'] }}>
+            {value}
+          </ThemedText>
+          {caption ? (
+            <ThemedText style={{ fontSize: 10, fontWeight: '700', letterSpacing: 0.5, color: theme.textTertiary }}>
+              {caption.toUpperCase()}
+            </ThemedText>
+          ) : null}
+        </View>
+      ) : null}
     </View>
   );
 }
 
-export function PerformanceChart({ points }: { points: EquityPoint[] }): React.ReactElement {
+/**
+ * Equity curve. Measures its own width so the line fills the card instead of
+ * sitting in a fixed 280px box, and fades an area fill under it.
+ */
+export function PerformanceChart({
+  points,
+  height = 132,
+}: {
+  points: EquityPoint[];
+  height?: number;
+}): React.ReactElement {
   const theme = useTheme();
+  const [width, setWidth] = useState(0);
+  const onLayout = (event: LayoutChangeEvent) => setWidth(event.nativeEvent.layout.width);
+
+  const padY = 12;
+  // Keep the end-of-series dot fully inside the box instead of half-clipped.
+  const padX = 5;
+  const plotWidth = Math.max(width - padX * 2, 1);
   const values = points.map((point) => point.value);
   const min = Math.min(...values);
-  const range = Math.max(1, Math.max(...values) - min);
-  const color = points[points.length - 1].value >= points[0].value ? Brand[500] : Accent.red;
-  const normalized = points.map((point, index) => ({
-    x: (index / Math.max(1, points.length - 1)) * CHART_WIDTH,
-    y: CHART_HEIGHT - ((point.value - min) / range) * (CHART_HEIGHT - 18) - 9,
+  const max = Math.max(...values);
+  const span = Math.max(max - min, Math.max(1, max * 0.01));
+  const rising = points.length > 1 && values[values.length - 1] >= values[0];
+  const color = rising ? Brand[500] : Accent.red;
+
+  const coords = points.map((point, index) => ({
+    x: padX + (index / Math.max(1, points.length - 1)) * plotWidth,
+    y: height - padY - ((point.value - min) / span) * (height - padY * 2),
   }));
-  const segments = normalized.slice(1).map((point, index) => {
-    const previous = normalized[index];
-    const dx = point.x - previous.x;
-    const dy = point.y - previous.y;
-    return { key: `${index}-${point.x}`, left: previous.x, top: previous.y, width: Math.hypot(dx, dy), angle: Math.atan2(dy, dx) };
-  });
+
+  const line = coords.map((point, index) => `${index === 0 ? 'M' : 'L'}${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(' ');
+  const last = coords[coords.length - 1];
+  const area = `${line} L${last.x.toFixed(2)} ${height} L${padX} ${height} Z`;
+
   return (
-    <View style={{ width: '100%', height: CHART_HEIGHT, overflow: 'hidden' }}>
-      {[0.25, 0.5, 0.75].map((position) => <View key={position} style={{ position: 'absolute', left: 0, right: 0, top: CHART_HEIGHT * position, height: 1, backgroundColor: theme.border, opacity: 0.5 }} />)}
-      <View style={{ width: CHART_WIDTH, height: CHART_HEIGHT, alignSelf: 'center' }}>
-        {segments.map((segment) => <View key={segment.key} style={{ position: 'absolute', left: segment.left, top: segment.top, width: segment.width, height: 3, borderRadius: Radius.pill, backgroundColor: color, transform: [{ translateX: segment.width / 2 }, { rotateZ: `${segment.angle}rad` }, { translateX: -segment.width / 2 }] }} />)}
-        {normalized.slice(-1).map((point) => <View key={`${point.x}-${point.y}`} style={{ position: 'absolute', left: point.x - 4, top: point.y - 4, width: 8, height: 8, borderRadius: Radius.pill, backgroundColor: color }} />)}
-      </View>
+    <View onLayout={onLayout} style={{ width: '100%', height }}>
+      {width > 0 ? (
+        <Svg width={width} height={height}>
+          <Defs>
+            <LinearGradient id="equityFill" x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0" stopColor={color} stopOpacity={0.28} />
+              <Stop offset="1" stopColor={color} stopOpacity={0} />
+            </LinearGradient>
+          </Defs>
+          {[0, 0.5, 1].map((position) => (
+            <Path
+              key={position}
+              d={`M0 ${(height - 1) * position + 0.5} H${width}`}
+              stroke={theme.border}
+              strokeWidth={1}
+            />
+          ))}
+          {points.length > 1 ? (
+            <>
+              <Path d={area} fill="url(#equityFill)" />
+              <Path d={line} stroke={color} strokeWidth={2.5} fill="none" strokeLinejoin="round" strokeLinecap="round" />
+              <Circle cx={last.x} cy={last.y} r={7} fill={color} fillOpacity={0.18} />
+              <Circle cx={last.x} cy={last.y} r={3.5} fill={color} />
+            </>
+          ) : (
+            <Path
+              d={`M0 ${height / 2} H${width}`}
+              stroke={theme.borderStrong}
+              strokeWidth={2}
+              strokeDasharray="5 6"
+            />
+          )}
+        </Svg>
+      ) : null}
+      {points.length <= 1 ? (
+        <ThemedText
+          style={{
+            position: 'absolute',
+            alignSelf: 'center',
+            top: height / 2 + 10,
+            fontSize: 11,
+            color: theme.textTertiary,
+          }}>
+          Acquire a position to start the curve
+        </ThemedText>
+      ) : null}
+    </View>
+  );
+}
+
+/** Thin proportion bar used by the allocation legend. */
+export function AllocationBar({ pct, color }: { pct: number; color: string }): React.ReactElement {
+  const theme = useTheme();
+  return (
+    <View
+      style={{
+        height: 5,
+        borderRadius: Radius.pill,
+        backgroundColor: theme.backgroundSelected,
+        overflow: 'hidden',
+      }}>
+      <View
+        style={{
+          width: `${Math.max(Math.min(pct, 100), 1.5)}%`,
+          height: '100%',
+          borderRadius: Radius.pill,
+          backgroundColor: color,
+        }}
+      />
     </View>
   );
 }

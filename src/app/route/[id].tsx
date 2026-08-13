@@ -16,6 +16,7 @@ import { TrackRouteForm } from "@/components/routes/TrackRouteForm";
 import { ThemedText } from "@/components/themed-text";
 import { Brand, Radius } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
+import { betOutcomeSide } from "@/lib/bet-monitor-match";
 import { parseEntryPrice } from "@/lib/parse-bet-line";
 import {
   openTradeDestination,
@@ -24,7 +25,7 @@ import {
 } from "@/lib/route-actions";
 import { goalEffectivenessScore } from "@/lib/score";
 import { rescoreForStake, stakeNeededForReturn } from "@/lib/stake-rescore";
-import { trackedAssetFields } from "@/lib/tracked-assets";
+import { trackedPositionFields } from "@/lib/tracked-assets";
 
 export default function RouteDetailScreen(): React.ReactElement {
   const theme = useTheme();
@@ -142,6 +143,7 @@ export default function RouteDetailScreen(): React.ReactElement {
       (predictionMarket && route.probability > 0
         ? route.probability / 100
         : undefined);
+    const openedAt = new Date().toISOString();
     trackBet(
       {
         id: `${route.id}-${Date.now()}`,
@@ -155,12 +157,14 @@ export default function RouteDetailScreen(): React.ReactElement {
         expectedReturn: route.expectedReturn,
         amountWagered: amount,
         status: "active",
-        createdAt: new Date().toISOString(),
+        createdAt: openedAt,
         profitGoal: targetProfit,
         line: route.line,
         entryPrice,
         monitorQuery: `${route.description} ${route.line ?? ""}`,
-        ...trackedAssetFields(route),
+        sourceSlug: route.sourceSlug,
+        outcomeSide: betOutcomeSide(route) ?? undefined,
+        ...trackedPositionFields(route, amount, openedAt),
       },
       {
         onSuccess: () => {

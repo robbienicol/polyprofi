@@ -24,7 +24,7 @@ export default function LearnScreen(): React.ReactElement {
           <View className="items-center gap-2 pb-2">
             <ThemedText type="subtitle">How it works</ThemedText>
             <ThemedText type="small" themeColor="textSecondary" className="text-center" style={{ maxWidth: 300 }}>
-              Set a profit goal. PolyProfit uses AI to find the best routes across every market — sorted safest to riskiest.
+              Set a profit goal. Pathey uses AI to find the best routes across every market — sorted safest to riskiest.
             </ThemedText>
           </View>
 
@@ -54,7 +54,7 @@ export default function LearnScreen(): React.ReactElement {
           ))}
 
           <ThemedText type="small" themeColor="textSecondary" className="text-center" style={{ opacity: 0.5 }}>
-            PolyProfit is for entertainment purposes only. Always research before investing or betting real money.
+            Pathey is for entertainment purposes only. Always research before investing or betting real money.
           </ThemedText>
         </ScrollView>
       </SafeAreaView>

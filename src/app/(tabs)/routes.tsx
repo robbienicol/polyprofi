@@ -12,15 +12,16 @@ import { RoutesHeader } from '@/components/routes/RoutesHeader';
 import { TrackRouteForm } from '@/components/routes/TrackRouteForm';
 import { RouteCard } from '@/components/molecules/RouteCard';
 import { ThemedText } from '@/components/themed-text';
-import { AnalyzingLoader } from '@/components/ui/loaders';
+import { AnalyzingLoader, BrandLoader } from '@/components/ui/loaders';
 import { Accent, Brand, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { betOutcomeSide } from '@/lib/bet-monitor-match';
 import { scheduleWeeklyReminder } from '@/lib/notifications';
 import { parseEntryPrice } from '@/lib/parse-bet-line';
 import { openTradeDestination, preferredTradeDestination, tradeDestinationLabel } from '@/lib/route-actions';
-import { buildRouteResults } from '@/lib/route-results';
+import { buildRouteResults, resolveInvestmentAmount } from '@/lib/route-results';
 import type { RouteFilters as Filters } from '@/lib/route-results';
-import { trackedAssetFields } from '@/lib/tracked-assets';
+import { trackedPositionFields } from '@/lib/tracked-assets';
 import type { Route, RouteParams, SavedRoutesBatch } from '@/types/routes';
 
 const DEFAULT_FILTERS: Filters = {
@@ -34,7 +35,7 @@ export default function RoutesScreen(): React.ReactElement {
   const theme = useTheme();
   const router = useRouter();
   const { batchId, generate } = useLocalSearchParams<{ batchId?: string; generate?: string }>();
-  const { quizAnswers } = useQuizAnswers();
+  const { quizAnswers, isLoading: quizLoading } = useQuizAnswers();
   const { history, saveGeneratedRoutes } = useSavedRoutes();
   const { trackBet } = useTrackedBets();
 
@@ -55,7 +56,7 @@ export default function RoutesScreen(): React.ReactElement {
   const [trackingId, setTrackingId] = useState<string | null>(null);
   const [trackingAmount, setTrackingAmount] = useState('');
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
-  const [investment, setInvestment] = useState(0);
+  const [investment, setInvestment] = useState<number | null>(null);
   const [autoSize, setAutoSize] = useState(true);
   const [visibleCount, setVisibleCount] = useState(30);
   const savedGeneration = useRef<string | null>(null);
@@ -75,7 +76,7 @@ export default function RoutesScreen(): React.ReactElement {
   }, [fetchedRoutes, isFetching, isGenerating, isLoading, quizAnswers, router, saveGeneratedRoutes]);
 
   const referenceStake = sessionParams?.balance ?? 1_000;
-  const displayedInvestment = investment || referenceStake;
+  const displayedInvestment = resolveInvestmentAmount(investment, referenceStake);
 
   function setInvestmentAndReset(amount: number): void {
     setAutoSize(false);
@@ -117,6 +118,7 @@ export default function RoutesScreen(): React.ReactElement {
     const predictionMarket = /polymarket|prediction/i.test(`${route.category} ${route.platform}`);
     const entryPrice = parseEntryPrice(route.line) ?? (predictionMarket && route.probability > 0 ? route.probability / 100 : undefined);
     const destination = preferredTradeDestination(route, sessionParams?.preferredPlatforms);
+    const openedAt = new Date().toISOString();
     trackBet({
       id: `${route.id}-${Date.now()}`,
       category: route.category,
@@ -129,12 +131,14 @@ export default function RoutesScreen(): React.ReactElement {
       expectedReturn: route.expectedReturn,
       amountWagered: amount,
       status: 'active',
-      createdAt: new Date().toISOString(),
+      createdAt: openedAt,
       profitGoal: sessionParams?.target || route.expectedReturn,
       line: route.line,
       entryPrice,
       monitorQuery: `${route.description} ${route.line ?? ''}`,
-      ...trackedAssetFields(route),
+      sourceSlug: route.sourceSlug,
+      outcomeSide: betOutcomeSide(route) ?? undefined,
+      ...trackedPositionFields(route, amount, openedAt),
     }, {
       onSuccess: () => {
         setTrackingId(null);
@@ -146,8 +150,14 @@ export default function RoutesScreen(): React.ReactElement {
   if (shouldFetch && isLoading && !error) {
     return <Screen><AnalyzingLoader /></Screen>;
   }
+  if (quizLoading) {
+    return <BrandLoader subtitle="Loading your saved quiz…" />;
+  }
   if (history.length === 0 && !isGenerating && routes.length === 0 && !error) {
-    return <EmptyRoutes onStart={() => router.push('/quiz')} />;
+    return <EmptyRoutes
+      hasSavedQuiz={!!quizAnswers}
+      onStart={() => router.push(quizAnswers ? '/(tabs)/routes?generate=1' : '/quiz')}
+    />;
   }
 
   const goal = sessionParams ? {
@@ -225,9 +235,9 @@ function Screen({ children }: React.PropsWithChildren): React.ReactElement {
   return <View className="flex-1" style={{ backgroundColor: theme.background }}><SafeAreaView className="flex-1">{children}</SafeAreaView></View>;
 }
 
-function EmptyRoutes({ onStart }: { onStart: () => void }): React.ReactElement {
+function EmptyRoutes({ hasSavedQuiz, onStart }: { hasSavedQuiz: boolean; onStart: () => void }): React.ReactElement {
   const theme = useTheme();
-  return <Screen><View className="flex-1 justify-center px-6"><View className="items-center gap-4 py-10 px-6" style={{ borderRadius: Radius.xl, backgroundColor: theme.backgroundElevated, borderWidth: 1, borderColor: theme.border, ...Shadow.card }}><ThemedText style={{ fontSize: 40 }}>🎯</ThemedText><ThemedText style={{ fontSize: 22, fontWeight: '800', color: theme.text, textAlign: 'center' }}>Find prediction routes</ThemedText><ThemedText className="text-center" style={{ fontSize: 14, color: theme.textSecondary, lineHeight: 21, maxWidth: 300 }}>Set your goal and timeframe — we&apos;ll scan prediction markets and generate routes in one step.</ThemedText><Pressable onPress={onStart} className="self-stretch py-4 items-center active:opacity-85 mt-2" style={{ borderRadius: Radius.lg, backgroundColor: Brand[500], ...Shadow.card }}><ThemedText style={{ fontSize: 16, fontWeight: '800', color: '#06140C' }}>Set goal & search →</ThemedText></Pressable></View></View></Screen>;
+  return <Screen><View className="flex-1 justify-center px-6"><View className="items-center gap-4 py-10 px-6" style={{ borderRadius: Radius.xl, backgroundColor: theme.backgroundElevated, borderWidth: 1, borderColor: theme.border, ...Shadow.card }}><ThemedText style={{ fontSize: 40 }}>🎯</ThemedText><ThemedText style={{ fontSize: 22, fontWeight: '800', color: theme.text, textAlign: 'center' }}>Find prediction routes</ThemedText><ThemedText className="text-center" style={{ fontSize: 14, color: theme.textSecondary, lineHeight: 21, maxWidth: 300 }}>{hasSavedQuiz ? 'Use your saved goal and preferences to generate fresh routes.' : 'Set your goal and timeframe — we\'ll scan prediction markets and generate routes in one step.'}</ThemedText><Pressable onPress={onStart} className="self-stretch py-4 items-center active:opacity-85 mt-2" style={{ borderRadius: Radius.lg, backgroundColor: Brand[500], ...Shadow.card }}><ThemedText style={{ fontSize: 16, fontWeight: '800', color: '#06140C' }}>{hasSavedQuiz ? 'Find routes from saved quiz →' : 'Set goal & search →'}</ThemedText></Pressable></View></View></Screen>;
 }
 
 function RoutesError({ message, onRetry }: { message: string; onRetry: () => void }): React.ReactElement {

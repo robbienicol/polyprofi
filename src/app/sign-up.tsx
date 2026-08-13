@@ -148,7 +148,7 @@ export default function SignUpScreen(): React.ReactElement {
 
   return (
     <AuthScreen
-      title="PolyProfit"
+      title="Pathey"
       subtitle="Create your account"
       footer={
         <View className="gap-6">

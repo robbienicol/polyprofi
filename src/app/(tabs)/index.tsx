@@ -5,6 +5,8 @@ import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { usePortfolioProgress } from '@/api/hooks/usePortfolioProgress';
+import { useMoney } from '@/api/hooks/usePreferences';
+import { useQuizAnswers } from '@/api/hooks/useQuizAnswers';
 import { useSavedRoutes } from '@/api/hooks/useSavedRoutes';
 import { useSavingsGoal } from '@/api/hooks/useSavingsGoal';
 import { SavingsGoalCard } from '@/components/home/SavingsGoalCard';
@@ -15,7 +17,7 @@ import {
 import { ThemedText } from '@/components/themed-text';
 import { Accent, Brand, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { hasReachedProfitGoal } from '@/lib/portfolio-progress';
+import { cashFlowAdjustedChange, hasReachedProfitGoal } from '@/lib/portfolio-progress';
 
 const MONO = { fontVariant: ['tabular-nums' as const] };
 
@@ -38,6 +40,8 @@ export default function HomeScreen(): React.ReactElement {
   const theme = useTheme();
   const router = useRouter();
   const { user } = useUser();
+  const money = useMoney();
+  const { quizAnswers, isLoading: quizLoading } = useQuizAnswers();
   const { history } = useSavedRoutes();
   const latestSearch = history[0] ?? null;
   const fallbackBalance = latestSearch?.quizSnapshot.balance ?? 0;
@@ -45,7 +49,7 @@ export default function HomeScreen(): React.ReactElement {
   const { goal, achievedCount, markAchieved } = useSavingsGoal();
   const [range, setRange] = useState<PortfolioRange>('1W');
 
-  // Principal never counts toward the target. Only tracked gains can complete a goal.
+  // Principal never counts toward the target. Only tracked net gains can complete a goal.
   useEffect(() => {
     if (goal && !goal.achievedAt && hasReachedProfitGoal(progress.goalProgress, goal.targetAmount)) markAchieved();
   }, [goal, progress.goalProgress, markAchieved]);
@@ -54,6 +58,7 @@ export default function HomeScreen(): React.ReactElement {
     const current = {
       time: progress.updatedAt?.getTime() ?? progress.observedAt,
       value: progress.value,
+      basisValue: progress.basisValue,
       livePnl: progress.livePnl,
       projectedPnl: progress.projectedPnl,
     };
@@ -68,16 +73,25 @@ export default function HomeScreen(): React.ReactElement {
       : [...progress.points, current];
   }, [progress.basisValue, progress.livePnl, progress.observedAt, progress.points, progress.projectedPnl, progress.updatedAt, progress.value]);
 
-  const rangeStartValue = useMemo(() => {
-    if (chartPoints.length === 0) return progress.basisValue;
-    if (range === 'ALL') return chartPoints[0].value;
+  const rangeStartPoint = useMemo(() => {
+    if (chartPoints.length === 0) {
+      return {
+        time: progress.observedAt,
+        value: progress.basisValue,
+        basisValue: progress.basisValue,
+        livePnl: 0,
+        projectedPnl: 0,
+      };
+    }
+    if (range === 'ALL') return chartPoints[0];
     const cutoff = chartPoints[chartPoints.length - 1].time - RANGE_MS[range];
     const first = chartPoints.find((point) => point.time >= cutoff);
-    return first?.value ?? chartPoints[0].value;
-  }, [chartPoints, progress.basisValue, range]);
+    return first ?? chartPoints[0];
+  }, [chartPoints, progress.basisValue, progress.observedAt, range]);
 
-  const change = progress.value - rangeStartValue;
-  const changePct = rangeStartValue > 0 ? (change / rangeStartValue) * 100 : 0;
+  const adjustedChange = cashFlowAdjustedChange(rangeStartPoint, progress);
+  const change = adjustedChange.amount;
+  const changePct = adjustedChange.percent;
   const positive = change >= 0;
   const changeColor = positive ? Brand[500] : Accent.red;
   const greeting = user?.firstName ? `Hey, ${user.firstName}` : 'Welcome back';
@@ -109,7 +123,7 @@ export default function HomeScreen(): React.ReactElement {
           <View className="flex-row items-center justify-between" style={{ paddingHorizontal: 2 }}>
             <View>
               <ThemedText style={{ fontSize: 11, fontWeight: '900', color: Brand[500], letterSpacing: 1.1 }}>
-                POLYPROFIT
+                PATHEY
               </ThemedText>
               <ThemedText style={{ fontSize: 18, fontWeight: '700', color: theme.text, marginTop: 3 }}>
                 {greeting}
@@ -195,11 +209,11 @@ export default function HomeScreen(): React.ReactElement {
                 marginTop: 9,
                 ...MONO,
               }}>
-              ${progress.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {money(progress.value)}
             </ThemedText>
             <View className="flex-row items-center" style={{ gap: 7, marginTop: 2 }}>
               <ThemedText style={{ fontSize: 14, fontWeight: '800', color: changeColor, ...MONO }}>
-                {positive ? '+' : '-'}${Math.abs(change).toFixed(2)} ({positive ? '+' : '-'}{Math.abs(changePct).toFixed(2)}%)
+                {money(change, { signed: true })} ({positive ? '+' : '−'}{Math.abs(changePct).toFixed(2)}%)
               </ThemedText>
               <ThemedText style={{ fontSize: 12, color: theme.textTertiary }}>{range}</ThemedText>
             </View>
@@ -240,11 +254,18 @@ export default function HomeScreen(): React.ReactElement {
               </Pressable>
             ) : null}
             <Pressable
-              onPress={() => router.push('/quiz')}
+              onPress={() => router.push(quizAnswers ? '/(tabs)/routes?generate=1' : '/quiz')}
+              disabled={quizLoading}
               className="flex-1 py-4 items-center active:opacity-80"
-              style={{ borderRadius: Radius.lg, backgroundColor: Brand[500] }}>
+              style={{ borderRadius: Radius.lg, backgroundColor: Brand[500], opacity: quizLoading ? 0.5 : 1 }}>
               <ThemedText style={{ fontSize: 14, fontWeight: '800', color: '#06140C' }}>
-                {progress.activeCount > 0 ? 'Find another route' : 'Set goal & find routes'}
+                {quizLoading
+                  ? 'Loading saved quiz…'
+                  : progress.activeCount > 0
+                    ? 'Find another route'
+                    : quizAnswers
+                      ? 'Find routes'
+                      : 'Set goal & find routes'}
               </ThemedText>
             </Pressable>
           </View>
