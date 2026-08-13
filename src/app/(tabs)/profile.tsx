@@ -23,7 +23,8 @@ import { Accent, Brand, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { requestAppRating } from '@/lib/app-rating';
 import { requestNotificationPermission, syncWeeklyReminder } from '@/lib/notifications';
-import { CURRENCIES, currencyMeta, type CurrencyCode } from '@/lib/preferences';
+import { ACQUISITION_PLATFORMS, CURRENCIES, currencyMeta, type CurrencyCode } from '@/lib/preferences';
+import type { AcquisitionPlatform } from '@/types/bets';
 
 const SUPPORT_EMAIL = 'creators@tryzalt.com';
 
@@ -50,6 +51,17 @@ export default function SettingsScreen(): React.ReactElement {
   const { deleteAccount, isDeleting } = useDeleteAccount();
   const [deleteError, setDeleteError] = useState('');
   const [currencyOpen, setCurrencyOpen] = useState(false);
+
+  const togglePlatform = useCallback(
+    (platform: AcquisitionPlatform, enabled: boolean) => {
+      const next = enabled
+        ? ACQUISITION_PLATFORMS.map((entry) => entry.value).filter(
+            (value) => value === platform || preferences.preferredPlatforms.includes(value))
+        : preferences.preferredPlatforms.filter((value) => value !== platform);
+      update({ preferredPlatforms: next });
+    },
+    [preferences.preferredPlatforms, update],
+  );
 
   const activeCount = useMemo(() => bets.filter((bet) => bet.status === 'active').length, [bets]);
   const latestSearch = history[0] ?? null;
@@ -231,6 +243,26 @@ export default function SettingsScreen(): React.ReactElement {
               value={goal ? money(goal.targetAmount, { decimals: 0, signed: true }) : undefined}
               onPress={() => router.push('/goal-setup')}
             />
+          </SettingsSection>
+
+          {/* Where routes can be placed — applied to every search */}
+          <SettingsSection
+            title="Where I invest"
+            footer={
+              preferences.preferredPlatforms.length === 0
+                ? 'No apps selected — searches will open whichever marketplace supports the route.'
+                : 'Every search is steered to these apps. If a route isn\'t on any of them, we open the closest supported marketplace.'
+            }>
+            {ACQUISITION_PLATFORMS.map((platform) => (
+              <SettingsSwitchRow
+                key={platform.value}
+                icon={platform.icon}
+                label={platform.label}
+                description={platform.description}
+                value={preferences.preferredPlatforms.includes(platform.value)}
+                onValueChange={(next) => togglePlatform(platform.value, next)}
+              />
+            ))}
           </SettingsSection>
 
           {/* Notifications */}

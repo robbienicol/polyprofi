@@ -9,6 +9,8 @@
  * notification helpers can depend on it without a cycle.
  */
 
+import type { AcquisitionPlatform } from '@/types/bets';
+
 export interface CurrencyMeta {
   code: string;
   symbol: string;
@@ -33,9 +35,21 @@ export const CURRENCIES = [
 
 export type CurrencyCode = (typeof CURRENCIES)[number]['code'];
 
+/**
+ * The marketplaces a route can be placed on. Asked once in Settings rather than on
+ * every search — where you can trade is a standing fact about you, not part of a goal.
+ */
+export const ACQUISITION_PLATFORMS = [
+  { value: 'robinhood', label: 'Robinhood', icon: '🪶', description: 'Stocks, ETFs, crypto & predictions' },
+  { value: 'polymarket', label: 'Polymarket', icon: '🔮', description: 'Prediction markets' },
+  { value: 'kalshi', label: 'Kalshi', icon: '📊', description: 'Prediction markets' },
+] as const satisfies readonly { value: AcquisitionPlatform; label: string; icon: string; description: string }[];
+
 export interface Preferences {
   /** Symbol + decimals used to render money. Display only, never a conversion. */
   currency: CurrencyCode;
+  /** Apps the user can trade on — routes are steered to these every time they search. */
+  preferredPlatforms: AcquisitionPlatform[];
   /** "Goal hit — sell now" and goal-reached pushes. */
   positionAlerts: boolean;
   /** Sunday-evening nudge to check fresh routes. */
@@ -46,6 +60,8 @@ export interface Preferences {
 
 export const DEFAULT_PREFERENCES: Preferences = {
   currency: 'USD',
+  // Everything on by default: a new user should get results before they ever open Settings.
+  preferredPlatforms: ACQUISITION_PLATFORMS.map((platform) => platform.value),
   positionAlerts: true,
   weeklyReminder: true,
   conservativeProjections: false,
@@ -61,10 +77,18 @@ export function sanitizePreferences(value: unknown): Preferences {
   const raw = value as Record<string, unknown>;
   const bool = (key: keyof Preferences): boolean =>
     typeof raw[key] === 'boolean' ? (raw[key] as boolean) : (DEFAULT_PREFERENCES[key] as boolean);
+  // An empty list is a legitimate answer ("no preference"), so only fall back when the
+  // field is missing or isn't an array at all.
+  const platforms = Array.isArray(raw.preferredPlatforms)
+    ? ACQUISITION_PLATFORMS.map((platform) => platform.value).filter((value) =>
+        (raw.preferredPlatforms as unknown[]).includes(value))
+    : DEFAULT_PREFERENCES.preferredPlatforms;
+
   return {
     currency: CURRENCIES.some((entry) => entry.code === raw.currency)
       ? (raw.currency as CurrencyCode)
       : DEFAULT_PREFERENCES.currency,
+    preferredPlatforms: platforms,
     positionAlerts: bool('positionAlerts'),
     weeklyReminder: bool('weeklyReminder'),
     conservativeProjections: bool('conservativeProjections'),
