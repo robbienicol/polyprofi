@@ -24,7 +24,7 @@ export const ONBOARDING_SLIDES: OnboardingSlide[] = [
     id: 'rank',
     eyebrow: 'RANKED, NOT RANDOM',
     title: 'Then we rank them.\nBest one on top.',
-    body: 'Every option gets one 0–100 value score: chance of hitting your goal, capital safety, cash required, time to payout. No more guessing which tab had the good idea.',
+    body: 'Every option gets one 0–100 value score: chance of hitting your goal, downside protection, cash required, time to payout. No more guessing which tab had the good idea.',
     kind: 'rank',
   },
   {
@@ -78,7 +78,7 @@ export interface BreakdownFactor {
 
 export const BREAKDOWN_FACTORS: BreakdownFactor[] = [
   { label: 'Chance of hitting goal', weight: '35%', raw: 70, points: 24.5 },
-  { label: 'Capital safety', weight: '25%', raw: 88, points: 22.0 },
+  { label: 'Downside protection', weight: '25%', raw: 88, points: 22.0 },
   { label: 'Cash required', weight: '30%', raw: 100, points: 30.0 },
   { label: 'Time to payout', weight: '10%', raw: 55, points: 5.5 },
 ];

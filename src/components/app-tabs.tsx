@@ -28,6 +28,14 @@ export default function AppTabs() {
         />
       </NativeTabs.Trigger>
 
+      <NativeTabs.Trigger name="goals">
+        <NativeTabs.Trigger.Label>Goals</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon
+          sf={{ default: 'target', selected: 'target' }}
+          md={{ default: 'flag', selected: 'flag' }}
+        />
+      </NativeTabs.Trigger>
+
       <NativeTabs.Trigger name="portfolio">
         <NativeTabs.Trigger.Label>Portfolio</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon

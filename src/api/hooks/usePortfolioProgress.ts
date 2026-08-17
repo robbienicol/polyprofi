@@ -11,14 +11,19 @@ import { useBetMonitoring } from '@/api/hooks/useBetMonitoring';
 import { useTrackedBets } from '@/api/hooks/useTrackedBets';
 import { calculatePortfolioProgress, stockIdentity } from '@/lib/portfolio-progress';
 import { isStockOrEtfCategory } from '@/lib/tracked-assets';
+import type { TrackedBet } from '@/types/bets';
 
 const PROGRESS_QUERY_KEY = ['PORTFOLIO_PROGRESS'] as const;
 
-export function usePortfolioProgress(fallbackBalance: number) {
-  const queryClient = useQueryClient();
+/**
+ * Live inputs every progress calculation needs: the monitoring feed, refreshed
+ * asset quotes and a ticking clock. Shared so that valuing one goal, all goals,
+ * or the whole portfolio costs exactly one set of fetches.
+ */
+export function usePortfolioMarketInputs() {
   const { bets, isLoading: betsLoading } = useTrackedBets();
-  const active = useMemo(() => bets.filter((bet) => bet.status === 'active'), [bets]);
-  const monitoring = useBetMonitoring(active.length > 0);
+  const allActive = useMemo(() => bets.filter((bet) => bet.status === 'active'), [bets]);
+  const monitoring = useBetMonitoring(allActive.length > 0);
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -27,11 +32,11 @@ export function usePortfolioProgress(fallbackBalance: number) {
   }, []);
 
   const symbols = useMemo(
-    () => [...new Set(active
+    () => [...new Set(allActive
       .filter((bet) => isStockOrEtfCategory(bet.category))
       .map((bet) => stockIdentity(bet).symbol)
       .filter((symbol): symbol is string => Boolean(symbol)))],
-    [active]
+    [allActive]
   );
 
   const quotesQuery = useQuery({
@@ -42,6 +47,49 @@ export function usePortfolioProgress(fallbackBalance: number) {
     refetchInterval: symbols.length > 0 ? 60_000 : false,
   });
 
+  const refresh = useCallback(async () => {
+    setNow(Date.now());
+    await Promise.all([
+      monitoring.refetch(),
+      symbols.length > 0 ? quotesQuery.refetch() : Promise.resolve(),
+    ]);
+  }, [monitoring, quotesQuery, symbols.length]);
+
+  return {
+    allActive,
+    betsLoading,
+    now,
+    quotes: quotesQuery.data ?? [],
+    quotesUpdatedAt: quotesQuery.dataUpdatedAt,
+    statusById: monitoring.statusById,
+    sellAlerts: monitoring.sellAlerts,
+    monitoringUpdatedAt: monitoring.lastUpdated?.getTime() ?? 0,
+    isRefreshing: monitoring.isFetching || quotesQuery.isFetching,
+    refresh,
+  };
+}
+
+export interface PortfolioProgressOptions {
+  /**
+   * Restrict the snapshot to one goal's positions. Live prices and the monitoring
+   * feed are still requested for every position, so a scoped call reuses the same
+   * query cache as the whole-portfolio call rather than starting its own fetches.
+   */
+  scopeToBets?: (bets: TrackedBet[]) => TrackedBet[];
+  /**
+   * Whether to append to the stored portfolio history. Only the whole-portfolio
+   * call may — a scoped snapshot would write a smaller value into the same series.
+   */
+  recordHistory?: boolean;
+}
+
+export function usePortfolioProgress(fallbackBalance: number, options: PortfolioProgressOptions = {}) {
+  const { scopeToBets, recordHistory = true } = options;
+  const queryClient = useQueryClient();
+  const market = usePortfolioMarketInputs();
+  const { allActive, betsLoading, now, quotes, statusById } = market;
+  const active = useMemo(() => (scopeToBets ? scopeToBets(allActive) : allActive), [allActive, scopeToBets]);
+
   const historyQuery = useQuery({
     queryKey: PROGRESS_QUERY_KEY,
     queryFn: getPortfolioProgress,
@@ -51,14 +99,14 @@ export function usePortfolioProgress(fallbackBalance: number) {
     return calculatePortfolioProgress({
       active,
       fallbackBalance,
-      statusesById: monitoring.statusById,
-      quotes: quotesQuery.data ?? [],
+      statusesById: statusById,
+      quotes,
       now,
     });
-  }, [active, fallbackBalance, monitoring.statusById, now, quotesQuery.data]);
+  }, [active, fallbackBalance, statusById, now, quotes]);
 
   useEffect(() => {
-    if (betsLoading || historyQuery.isLoading || snapshot.basisValue <= 0) return;
+    if (!recordHistory || betsLoading || historyQuery.isLoading || snapshot.basisValue <= 0) return;
 
     const point: PortfolioProgressPoint = {
       time: now,
@@ -78,19 +126,11 @@ export function usePortfolioProgress(fallbackBalance: number) {
     recordPortfolioProgress(point, basis).then((points) => {
       queryClient.setQueryData(PROGRESS_QUERY_KEY, points);
     }).catch(() => {});
-  }, [active, betsLoading, historyQuery.isLoading, now, queryClient, snapshot]);
-
-  const refresh = useCallback(async () => {
-    setNow(Date.now());
-    await Promise.all([
-      monitoring.refetch(),
-      symbols.length > 0 ? quotesQuery.refetch() : Promise.resolve(),
-    ]);
-  }, [monitoring, quotesQuery, symbols.length]);
+  }, [active, betsLoading, historyQuery.isLoading, now, queryClient, recordHistory, snapshot]);
 
   const updatedAt = Math.max(
-    monitoring.lastUpdated?.getTime() ?? 0,
-    quotesQuery.dataUpdatedAt,
+    market.monitoringUpdatedAt,
+    market.quotesUpdatedAt,
     snapshot.projectedPositions > 0 ? now : 0
   );
 
@@ -99,11 +139,11 @@ export function usePortfolioProgress(fallbackBalance: number) {
     points: historyQuery.data ?? [],
     activeCount: active.length,
     isLoading: betsLoading || historyQuery.isLoading,
-    isRefreshing: monitoring.isFetching || quotesQuery.isFetching,
+    isRefreshing: market.isRefreshing,
     updatedAt: updatedAt > 0 ? new Date(updatedAt) : null,
     observedAt: now,
-    statusById: monitoring.statusById,
-    sellAlerts: monitoring.sellAlerts,
-    refresh,
+    statusById,
+    sellAlerts: market.sellAlerts,
+    refresh: market.refresh,
   };
 }

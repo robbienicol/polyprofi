@@ -9,8 +9,10 @@ import type { Route } from '@/types/routes';
 
 const LOSS_PROFILE_FILTERS: { label: string; value: Route['lossProfile']; color: string }[] = [
   { label: 'All-or-nothing', value: 'binary', color: Accent.red },
-  { label: 'Capital safe', value: 'partial', color: Brand[500] },
+  { label: 'Lower downside', value: 'partial', color: Brand[500] },
 ];
+
+const ASSET_CLASS_ORDER = ['Polymarket', 'Savings & Treasuries', 'Stocks & ETFs', 'Crypto'];
 
 const SORT_OPTIONS: { label: string; value: RouteSort }[] = [
   { label: 'Top score', value: 'score' },
@@ -21,15 +23,29 @@ const SORT_OPTIONS: { label: string; value: RouteSort }[] = [
 
 interface RouteFiltersProps {
   filters: Filters;
+  categories: string[];
   onChange: (filters: Filters) => void;
 }
 
-export function RouteFilters({ filters, onChange }: RouteFiltersProps): React.ReactElement {
+export function RouteFilters({ filters, categories, onChange }: RouteFiltersProps): React.ReactElement {
   const theme = useTheme();
   const update = (patch: Partial<Filters>) => onChange({ ...filters, ...patch });
+  const assetClasses = [...new Set(categories)].sort(compareAssetClasses);
 
   return (
     <>
+      <FilterRow label="Asset class">
+        <FilterChip label="All" active={filters.category === null} onPress={() => update({ category: null })} />
+        {assetClasses.map((category) => (
+          <FilterChip
+            key={category}
+            label={assetClassLabel(category)}
+            active={filters.category === category}
+            onPress={() => update({ category })}
+          />
+        ))}
+      </FilterRow>
+
       <View style={{ borderRadius: Radius.lg, backgroundColor: theme.backgroundElement, borderWidth: 1, borderColor: theme.border, paddingHorizontal: 14, paddingVertical: 10, gap: 2 }}>
         <View className="flex-row justify-between items-center">
           <ThemedText style={{ fontSize: 12, fontWeight: '600', color: theme.textSecondary }}>Chance of hitting goal</ThemedText>
@@ -66,8 +82,23 @@ function FilterRow({ label, children }: React.PropsWithChildren<{ label?: string
 function FilterChip({ label, active, activeColor = Brand[500], onPress }: { label: string; active: boolean; activeColor?: string; onPress: () => void }): React.ReactElement {
   const theme = useTheme();
   return (
-    <Pressable onPress={onPress} style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: Radius.pill, borderWidth: 1, borderColor: active ? activeColor : theme.border, backgroundColor: active ? activeColor + '1A' : theme.backgroundElement }}>
+    <Pressable accessibilityRole="button" accessibilityState={{ selected: active }} onPress={onPress} style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: Radius.pill, borderWidth: 1, borderColor: active ? activeColor : theme.border, backgroundColor: active ? activeColor + '1A' : theme.backgroundElement }}>
       <ThemedText style={{ fontSize: 13, fontWeight: active ? '800' : '600', color: active ? activeColor : theme.textSecondary }}>{label}</ThemedText>
     </Pressable>
   );
+}
+
+function compareAssetClasses(a: string, b: string): number {
+  const aIndex = ASSET_CLASS_ORDER.indexOf(a);
+  const bIndex = ASSET_CLASS_ORDER.indexOf(b);
+  if (aIndex === -1 && bIndex === -1) return a.localeCompare(b);
+  if (aIndex === -1) return 1;
+  if (bIndex === -1) return -1;
+  return aIndex - bIndex;
+}
+
+function assetClassLabel(category: string): string {
+  if (category === 'Polymarket') return 'Prediction markets';
+  if (category === 'Savings & Treasuries') return 'Treasuries & cash';
+  return category;
 }

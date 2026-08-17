@@ -1,6 +1,13 @@
 import type { PortfolioProgressPoint } from '@/api/client/storage';
 import type { SportsMatch } from '@/lib/sports-market-match';
-import type { AcquisitionPlatform, QuizAnswers, SavingsGoal, SavingsGoalState, TrackedBet } from '@/types/bets';
+import type {
+  AcquisitionPlatform,
+  LegacySavingsGoalState,
+  QuizAnswers,
+  SavingsGoal,
+  SavingsGoalState,
+  TrackedBet,
+} from '@/types/bets';
 import type { MarketQualityFacts, Route, SavedRoutesBatch } from '@/types/routes';
 
 type JsonRecord = Record<string, unknown>;
@@ -54,17 +61,26 @@ export function isSavingsGoal(value: unknown): value is SavingsGoal {
   return typeof value.id === 'string'
     && typeof value.label === 'string'
     && typeof value.emoji === 'string'
-    && isFiniteNumber(value.targetAmount)
+    // Absent for an open-ended goal, which has no target to reach.
+    && isOptional(value.targetAmount, isFiniteNumber)
     && typeof value.createdAt === 'string'
+    && isOptional(value.draft, isBoolean)
+    && isOptional(value.deadline, isString)
     && isOptional(value.achievedAt, isString)
     && isOptional(value.celebratedAt, isString);
 }
 
-export function isSavingsGoalState(value: unknown): value is SavingsGoalState {
+/**
+ * Accepts both the multi-goal shape and the single-`current` shape written before
+ * version 6 — payloads are validated on the way in, before the migration that
+ * converts them, so rejecting the old shape would discard the user's goal.
+ */
+export function isSavingsGoalState(value: unknown): value is SavingsGoalState | LegacySavingsGoalState {
   if (!isRecord(value)) return false;
-  return (value.current === null || isSavingsGoal(value.current))
-    && isFiniteNumber(value.achievedCount)
-    && isOptional(value.accountingVersion, isFiniteNumber);
+  if (!isFiniteNumber(value.achievedCount) || !isOptional(value.accountingVersion, isFiniteNumber)) return false;
+
+  if (Array.isArray(value.goals)) return value.goals.every(isSavingsGoal);
+  return value.current === null || isSavingsGoal(value.current);
 }
 
 export function isRoute(value: unknown): value is Route {
@@ -116,7 +132,8 @@ export function isTrackedBet(value: unknown): value is TrackedBet {
     && isFiniteNumber(value.expectedReturn)
     && isFiniteNumber(value.amountWagered)
     && isOneOf(value.status, ['active', 'won', 'lost'])
-    && typeof value.createdAt === 'string';
+    && typeof value.createdAt === 'string'
+    && isOptional(value.goalId, isString);
 }
 
 export function isPortfolioProgressPoint(value: unknown): value is PortfolioProgressPoint {
@@ -134,7 +151,8 @@ export function isSavedRoutesBatch(value: unknown): value is SavedRoutesBatch {
     && typeof value.generatedAt === 'string'
     && isQuizAnswers(value.quizSnapshot)
     && Array.isArray(value.routes)
-    && value.routes.every(isRoute);
+    && value.routes.every(isRoute)
+    && isOptional(value.goalId, isString);
 }
 
 export function isSportsMatch(value: unknown): value is SportsMatch {
@@ -161,6 +179,10 @@ function isFiniteNumber(value: unknown): value is number {
 
 function isString(value: unknown): value is string {
   return typeof value === 'string';
+}
+
+function isBoolean(value: unknown): value is boolean {
+  return typeof value === 'boolean';
 }
 
 function isOptional<T>(value: unknown, validator: Validator<T>): value is T | undefined {

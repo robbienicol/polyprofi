@@ -6,6 +6,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { timeframeCalendarDays } from "@/api/client/playbook";
 import { useMarketComparison } from "@/api/hooks/useMarketComparison";
 import { useSavedRoutes } from "@/api/hooks/useSavedRoutes";
+import { useSavingsGoal } from "@/api/hooks/useSavingsGoal";
 import { useTrackedBets } from "@/api/hooks/useTrackedBets";
 import { MarketComparisonCard } from "@/components/routes/MarketComparisonCard";
 import { RelatedRoutes } from "@/components/routes/RelatedRoutes";
@@ -40,6 +41,7 @@ export default function RouteDetailScreen(): React.ReactElement {
     available?: string;
   }>();
   const { history } = useSavedRoutes();
+  const { allGoals, confirmGoal } = useSavingsGoal();
   const { trackBet, isTracking } = useTrackedBets();
   const [added, setAdded] = useState(false);
   const [showAcquireForm, setShowAcquireForm] = useState(false);
@@ -49,6 +51,11 @@ export default function RouteDetailScreen(): React.ReactElement {
     item.routes.some((route) => route.id === id),
   );
   const savedRoute = batch?.routes.find((route) => route.id === id);
+  // A goal swept away since the search is dropped rather than left dangling on a
+  // position that would then belong to nothing.
+  const routeGoalId = batch?.goalId && allGoals.some((goal) => goal.id === batch.goalId)
+    ? batch.goalId
+    : undefined;
   const { comparison } = useMarketComparison(savedRoute);
   if (!savedRoute) {
     return (
@@ -147,6 +154,9 @@ export default function RouteDetailScreen(): React.ReactElement {
     trackBet(
       {
         id: `${route.id}-${Date.now()}`,
+        // The goal comes from the saved search that produced this route, so a
+        // position opened from a deep link days later still lands on the right one.
+        goalId: routeGoalId,
         category: route.category,
         emoji: route.emoji,
         description: route.description,
@@ -170,6 +180,8 @@ export default function RouteDetailScreen(): React.ReactElement {
         onSuccess: () => {
           setAdded(true);
           setShowAcquireForm(false);
+          // Acquiring is the commitment that turns a searched-for goal into a real one.
+          if (routeGoalId) confirmGoal(routeGoalId);
           void openTradeDestination(route, destination, destinationOptions);
         },
       },

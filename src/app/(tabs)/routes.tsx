@@ -1,4 +1,4 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuizAnswers } from '@/api/hooks/useQuizAnswers';
 import { useRoutes } from '@/api/hooks/useRoutes';
 import { useSavedRoutes } from '@/api/hooks/useSavedRoutes';
+import { useSavingsGoal } from '@/api/hooks/useSavingsGoal';
 import { useTrackedBets } from '@/api/hooks/useTrackedBets';
 import { RouteFilters } from '@/components/routes/RouteFilters';
 import { RoutesHeader } from '@/components/routes/RoutesHeader';
@@ -34,9 +35,12 @@ const DEFAULT_FILTERS: Filters = {
 export default function RoutesScreen(): React.ReactElement {
   const theme = useTheme();
   const router = useRouter();
-  const { batchId, generate } = useLocalSearchParams<{ batchId?: string; generate?: string }>();
+  // The goal this search is for, handed over by the quiz. Historical batches carry
+  // their own goalId instead.
+  const { batchId, generate, goalId } = useLocalSearchParams<{ batchId?: string; generate?: string; goalId?: string }>();
   const { quizAnswers, isLoading: quizLoading } = useQuizAnswers();
   const { history, saveGeneratedRoutes } = useSavedRoutes();
+  const { allGoals, confirmGoal } = useSavingsGoal();
   const { trackBet } = useTrackedBets();
 
   const viewedBatch = batchId ? history.find((batch) => batch.id === batchId) ?? null : null;
@@ -46,6 +50,14 @@ export default function RoutesScreen(): React.ReactElement {
   const sessionParams: RouteParams | null = isGenerating && quizAnswers
     ? quizAnswers
     : viewedBatch?.quizSnapshot ?? latestBatch?.quizSnapshot ?? null;
+  // The goal these routes belong to: the one the quiz handed over, else the one
+  // the shown batch was saved for. Every position taken here inherits it. A goal
+  // that has since been swept away is dropped rather than left dangling on a
+  // position, so a stale batch can't attach money to something that isn't there.
+  const batchGoalId = goalId ?? viewedBatch?.goalId ?? latestBatch?.goalId;
+  const sessionGoalId = batchGoalId && allGoals.some((goal) => goal.id === batchGoalId)
+    ? batchGoalId
+    : undefined;
 
   const [manualRefresh, setManualRefresh] = useState(false);
   const [recentRoutes, setRecentRoutes] = useState<Route[] | null>(null);
@@ -57,7 +69,6 @@ export default function RoutesScreen(): React.ReactElement {
   const [trackingAmount, setTrackingAmount] = useState('');
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [investment, setInvestment] = useState<number | null>(null);
-  const [autoSize, setAutoSize] = useState(true);
   const [visibleCount, setVisibleCount] = useState(30);
   const savedGeneration = useRef<string | null>(null);
 
@@ -71,20 +82,17 @@ export default function RoutesScreen(): React.ReactElement {
     if (savedGeneration.current === generationKey) return;
     savedGeneration.current = generationKey;
     setRecentRoutes(fetchedRoutes);
-    saveGeneratedRoutes(quizAnswers, fetchedRoutes);
-    router.replace('/(tabs)/routes');
-  }, [fetchedRoutes, isFetching, isGenerating, isLoading, quizAnswers, router, saveGeneratedRoutes]);
+    saveGeneratedRoutes(quizAnswers, fetchedRoutes, goalId);
+    // Drop generate=1 so a remount doesn't re-search, but keep the goal: the saved
+    // batch that carries it may not have landed in the cache yet.
+    router.replace((goalId ? `/(tabs)/routes?goalId=${goalId}` : '/(tabs)/routes') as Href);
+  }, [goalId, fetchedRoutes, isFetching, isGenerating, isLoading, quizAnswers, router, saveGeneratedRoutes]);
 
   const referenceStake = sessionParams?.balance ?? 1_000;
   const displayedInvestment = resolveInvestmentAmount(investment, referenceStake);
 
   function setInvestmentAndReset(amount: number): void {
-    setAutoSize(false);
     setInvestment(Math.max(0, Math.round(amount)));
-    setVisibleCount(30);
-  }
-  function setAutoSizeAndReset(enabled: boolean): void {
-    setAutoSize(enabled);
     setVisibleCount(30);
   }
   function setFiltersAndReset(next: Filters): void {
@@ -93,7 +101,7 @@ export default function RoutesScreen(): React.ReactElement {
   }
 
   const results = sessionParams
-    ? buildRouteResults(routes, sessionParams, displayedInvestment, autoSize, filters)
+    ? buildRouteResults(routes, sessionParams, displayedInvestment, filters)
     : null;
   const ranked = results?.ranked ?? [];
   const filtered = results?.filtered ?? [];
@@ -105,7 +113,7 @@ export default function RoutesScreen(): React.ReactElement {
       const refreshed = await refresh();
       if (refreshed.length > 0) {
         setRecentRoutes(refreshed);
-        saveGeneratedRoutes(sessionParams, refreshed);
+        saveGeneratedRoutes(sessionParams, refreshed, sessionGoalId);
       }
     } finally {
       setManualRefresh(false);
@@ -121,6 +129,8 @@ export default function RoutesScreen(): React.ReactElement {
     const openedAt = new Date().toISOString();
     trackBet({
       id: `${route.id}-${Date.now()}`,
+      // The position works toward the goal this search was run for.
+      goalId: sessionGoalId,
       category: route.category,
       emoji: route.emoji,
       description: route.description,
@@ -142,6 +152,9 @@ export default function RoutesScreen(): React.ReactElement {
     }, {
       onSuccess: () => {
         setTrackingId(null);
+        // Acquiring is the commitment: this is where a searched-for goal becomes a
+        // goal the user actually has, and joins the Goals tab.
+        if (sessionGoalId) confirmGoal(sessionGoalId);
         void openTradeDestination(route, destination);
       },
     });
@@ -178,16 +191,14 @@ export default function RoutesScreen(): React.ReactElement {
             historical={isHistorical}
             batchLabel={isHistorical && viewedBatch ? formatBatchLabel(viewedBatch) : null}
             amount={displayedInvestment}
-            autoSize={autoSize}
             referenceStake={referenceStake}
-            routeCount={ranked.length}
+            routeCount={filtered.length}
             onAmountChange={setInvestmentAndReset}
-            onAutoSizeChange={setAutoSizeAndReset}
             onNewSearch={() => router.push('/quiz')}
             onBackToLatest={() => router.replace('/(tabs)/routes')}
           />
         )}
-        {ranked.length > 0 && <RouteFilters filters={filters} onChange={setFiltersAndReset} />}
+        {ranked.length > 0 && <RouteFilters filters={filters} categories={ranked.map((route) => route.category)} onChange={setFiltersAndReset} />}
         {error && <RoutesError message={error} onRetry={refresh} />}
         {visibleRoutes.map((route) => {
           const scoreBreakdown = results?.scoreById.get(route.id);
@@ -204,7 +215,7 @@ export default function RoutesScreen(): React.ReactElement {
                   setTrackingId(route.id);
                   setTrackingAmount(String(results?.selectedStake(route) ?? referenceStake));
                 } : undefined}
-                onPress={() => router.push(`/route/${route.id}?stake=${results?.selectedStake(route) ?? referenceStake}&available=${autoSize ? referenceStake : displayedInvestment}`)}
+                onPress={() => router.push(`/route/${route.id}?stake=${results?.selectedStake(route) ?? referenceStake}&available=${displayedInvestment}`)}
               />
               {trackingId === route.id && (
                 <TrackRouteForm

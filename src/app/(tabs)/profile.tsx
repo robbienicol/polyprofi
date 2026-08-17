@@ -40,7 +40,7 @@ export default function SettingsScreen(): React.ReactElement {
   const { signOut } = useAuth();
   const { history } = useSavedRoutes();
   const { bets } = useTrackedBets();
-  const { goal } = useSavingsGoal();
+  const { goals, achievedCount } = useSavingsGoal();
   const { preferences, update } = usePreferences();
   const money = useMoney();
   const {
@@ -237,11 +237,17 @@ export default function SettingsScreen(): React.ReactElement {
               onValueChange={(conservativeProjections) => update({ conservativeProjections })}
             />
             <SettingsRow
-              icon={goal?.emoji ?? '🎯'}
-              label="Profit goal"
-              description={goal ? goal.label : 'Not set yet'}
-              value={goal ? money(goal.targetAmount, { decimals: 0, signed: true }) : undefined}
-              onPress={() => router.push('/goal-setup')}
+              icon={goals[0]?.emoji ?? '🎯'}
+              label="Goals"
+              description={
+                goals.length === 0
+                  ? 'None yet'
+                  : goals.length === 1
+                    ? goals[0].label
+                    : `${goals[0].label} + ${goals.length - 1} more`
+              }
+              value={achievedCount > 0 ? `🏆 ${achievedCount}` : undefined}
+              onPress={() => router.push('/(tabs)/goals')}
             />
           </SettingsSection>
 

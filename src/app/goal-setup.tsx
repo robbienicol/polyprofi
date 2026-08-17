@@ -27,11 +27,22 @@ const GOAL_PRESETS: GoalPreset[] = [
 ];
 
 const CUSTOM_ID = 'custom';
+const OPEN_ENDED_ID = 'open-ended';
+
+/** For people who don't want a finish line — no target, so it never completes. */
+const OPEN_ENDED_GOAL = { emoji: '💸', label: 'Just make me money' };
+
+interface ChosenGoal {
+  emoji: string;
+  label: string;
+  /** Absent for the open-ended goal. */
+  targetAmount?: number;
+}
 
 export default function GoalSetupScreen(): React.ReactElement {
   const theme = useTheme();
   const router = useRouter();
-  const { setGoal } = useSavingsGoal();
+  const { addGoal, hasGoal, isLoading } = useSavingsGoal();
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [customLabel, setCustomLabel] = useState('');
@@ -40,9 +51,16 @@ export default function GoalSetupScreen(): React.ReactElement {
   const [labelFocused, setLabelFocused] = useState(false);
 
   const isCustom = selectedId === CUSTOM_ID;
+  const isOpenEnded = selectedId === OPEN_ENDED_ID;
   const customAmountValue = Number(customAmount.replace(/[^0-9]/g, '')) || 0;
+  // Whether this is the very first goal decides the copy and where "done" goes.
+  // Read live rather than latched on mount: on mount the stored goals may still be
+  // loading, which would make every visit look like the first one. The navigation
+  // callback closes over the value from the tap, before the write flips it.
+  const isFirstGoal = !hasGoal;
 
-  const chosen = useMemo(() => {
+  const chosen = useMemo((): ChosenGoal | null => {
+    if (isOpenEnded) return OPEN_ENDED_GOAL;
     if (isCustom) {
       return customLabel.trim() && customAmountValue > 0
         ? { emoji: '🎯', label: customLabel.trim(), targetAmount: customAmountValue }
@@ -50,13 +68,18 @@ export default function GoalSetupScreen(): React.ReactElement {
     }
     const preset = GOAL_PRESETS.find((goal) => goal.label === selectedId);
     return preset ? { emoji: preset.emoji, label: preset.label, targetAmount: preset.targetAmount } : null;
-  }, [isCustom, customLabel, customAmountValue, selectedId]);
+  }, [isOpenEnded, isCustom, customLabel, customAmountValue, selectedId]);
 
   const start = (): void => {
     if (!chosen) return;
-    setGoal(chosen);
-    router.replace('/(tabs)');
+    addGoal(chosen, {
+      // First goal lands you in the app; a later one belongs back in the list.
+      onSettled: () => router.replace(isFirstGoal ? '/(tabs)' : '/(tabs)/goals'),
+    });
   };
+
+  // Existing goals decide the copy, so don't paint until they're known.
+  if (isLoading) return <View className="flex-1" style={{ backgroundColor: theme.background }} />;
 
   return (
     <View className="flex-1" style={{ backgroundColor: theme.background }}>
@@ -68,11 +91,16 @@ export default function GoalSetupScreen(): React.ReactElement {
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 24, paddingBottom: 24 }}>
 
+            {isFirstGoal ? null : (
+              <Pressable onPress={() => router.back()} accessibilityRole="button" hitSlop={8} className="self-start active:opacity-60 py-1" style={{ marginBottom: 6 }}>
+                <ThemedText style={{ fontSize: 14, fontWeight: '700', color: theme.textSecondary }}>← Cancel</ThemedText>
+              </Pressable>
+            )}
             <ThemedText style={{ fontSize: 12, fontWeight: '800', color: Brand[500], letterSpacing: 1 }}>
-              LET&apos;S MAKE IT REAL
+              {isFirstGoal ? "LET'S MAKE IT REAL" : 'ANOTHER ONE'}
             </ThemedText>
             <ThemedText style={{ fontSize: 34, lineHeight: 40, fontWeight: '800', color: theme.text, letterSpacing: -0.8, marginTop: 8 }}>
-              What are you{'\n'}saving for?
+              {isFirstGoal ? <>What are you{'\n'}saving for?</> : <>What&apos;s the{'\n'}next goal?</>}
             </ThemedText>
             <ThemedText style={{ fontSize: 15, lineHeight: 22, color: theme.textSecondary, marginTop: 10, maxWidth: 320 }}>
               Pick a goal and we&apos;ll map the routes — safe to bold — that get you there.
@@ -119,6 +147,40 @@ export default function GoalSetupScreen(): React.ReactElement {
                   </Pressable>
                 );
               })}
+
+              {/* No finish line: for people who want the routes without the nagging. */}
+              <Pressable
+                onPress={() => setSelectedId(OPEN_ENDED_ID)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isOpenEnded }}
+                className="active:opacity-90"
+                style={{
+                  width: '100%',
+                  borderRadius: Radius.lg,
+                  borderWidth: 1.5,
+                  borderColor: isOpenEnded ? Brand[500] : theme.border,
+                  backgroundColor: isOpenEnded ? Brand[500] + '14' : theme.backgroundElement,
+                  padding: 16,
+                }}>
+                <View className="flex-row items-center" style={{ gap: 12 }}>
+                  <View style={{ width: 46, height: 46, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center', backgroundColor: isOpenEnded ? Brand[500] + '22' : theme.backgroundSelected }}>
+                    <ThemedText style={{ fontSize: 24 }}>{OPEN_ENDED_GOAL.emoji}</ThemedText>
+                  </View>
+                  <View className="flex-1">
+                    <ThemedText style={{ fontSize: 15, fontWeight: '800', color: theme.text }}>
+                      {OPEN_ENDED_GOAL.label}
+                    </ThemedText>
+                    <ThemedText style={{ fontSize: 11, lineHeight: 15, color: theme.textTertiary, marginTop: 2 }}>
+                      No target, no progress bar. Just routes and what they earned.
+                    </ThemedText>
+                  </View>
+                  {isOpenEnded ? (
+                    <View style={{ width: 22, height: 22, borderRadius: 999, backgroundColor: Brand[500], alignItems: 'center', justifyContent: 'center' }}>
+                      <ThemedText style={{ fontSize: 12, fontWeight: '900', color: '#06140C' }}>✓</ThemedText>
+                    </View>
+                  ) : null}
+                </View>
+              </Pressable>
 
               {/* Custom goal */}
               <Pressable
@@ -190,7 +252,7 @@ export default function GoalSetupScreen(): React.ReactElement {
                   Saving for {chosen.emoji} {chosen.label}
                 </ThemedText>
                 <ThemedText style={{ fontSize: 15, fontWeight: '900', color: Brand[500], fontVariant: ['tabular-nums'] }}>
-                  ${chosen.targetAmount.toLocaleString()}
+                  {chosen.targetAmount != null ? `$${chosen.targetAmount.toLocaleString()}` : 'No target'}
                 </ThemedText>
               </View>
             ) : (
@@ -205,7 +267,7 @@ export default function GoalSetupScreen(): React.ReactElement {
               className="py-4 items-center active:opacity-85"
               style={{ borderRadius: Radius.lg, backgroundColor: Brand[500], opacity: chosen ? 1 : 0.4, ...Shadow.card }}>
               <ThemedText style={{ fontSize: 16, fontWeight: '900', color: '#06140C' }}>
-                {chosen ? 'Start saving →' : 'Start saving'}
+                {isFirstGoal ? (chosen ? 'Start saving →' : 'Start saving') : chosen ? 'Add goal →' : 'Add goal'}
               </ThemedText>
             </Pressable>
           </View>

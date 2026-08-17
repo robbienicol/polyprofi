@@ -119,4 +119,6 @@ export interface SavedRoutesBatch {
   routes: Route[];
   rerankedAt?: string;
   previousTopRouteId?: string;
+  /** The savings goal this search was run for. Absent on searches saved before goals. */
+  goalId?: string;
 }

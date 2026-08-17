@@ -8,6 +8,7 @@ import { useEffect, useRef } from 'react';
 import { useColorScheme } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { useGoalMaintenance } from '@/api/hooks/useGoalMaintenance';
 import { useSavingsGoal } from '@/api/hooks/useSavingsGoal';
 import { AppLockGate } from '@/components/auth/AppLockGate';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -45,6 +46,11 @@ function useNotificationObserver() {
  * it works identically whether the user opens the notification, comes back to a
  * backgrounded app, or launches it cold days later.
  */
+function GoalHousekeeping(): null {
+  useGoalMaintenance();
+  return null;
+}
+
 function GoalCelebrationGate(): null {
   const { pendingCelebration } = useSavingsGoal();
   const pathname = usePathname();
@@ -55,7 +61,9 @@ function GoalCelebrationGate(): null {
       return;
     }
     presentedGoalId.current = pendingCelebration?.id ?? null;
-    router.push('/goal-achieved' as Href);
+    // The goal travels as an argument: the screen congratulates the goal it was
+    // opened for, not whatever is pending by the time it renders.
+    router.push(`/goal-achieved?goalId=${pendingCelebration?.id ?? ''}` as Href);
   }, [pendingCelebration, pathname]);
 
   return null;
@@ -72,6 +80,7 @@ export default function RootLayout(): React.ReactElement {
             <AppLockGate>
               <Stack screenOptions={{ headerShown: false }} />
               <GoalCelebrationGate />
+              <GoalHousekeeping />
               <OfflineBanner />
             </AppLockGate>
           </QueryClientProvider>

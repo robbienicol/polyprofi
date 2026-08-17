@@ -3,8 +3,22 @@ export interface SavingsGoal {
   id: string;
   label: string; // "New surfboard"
   emoji: string; // "🏄"
-  targetAmount: number; // price of the thing, in dollars
+  /**
+   * Price of the thing, in dollars. Absent for an open-ended goal ("just grow my
+   * money"), which has no finish line and so can never be achieved — every
+   * target-shaped calculation has to treat it as unbounded rather than as zero.
+   */
+  targetAmount?: number;
   createdAt: string; // ISO
+  /**
+   * Set while a goal exists only because a route search named it. A draft is real
+   * enough to carry a search and its routes, but stays out of the Goals tab until
+   * the user acquires something against it — searching is not committing. Cleared
+   * on the first acquire; swept away if the deadline passes with nothing attached.
+   */
+  draft?: boolean;
+  /** ISO time this goal's timeframe runs out, from the search that created it. */
+  deadline?: string;
   achievedAt?: string; // ISO, set once tracked value first reaches the target
   /**
    * ISO time the congratulations screen was shown for this goal. Absent while a
@@ -14,11 +28,23 @@ export interface SavingsGoal {
   celebratedAt?: string;
 }
 
-/** Persisted savings-goal state: the current goal plus a lifetime count of goals reached. */
+/**
+ * Persisted savings-goal state: every goal the user is running, plus a lifetime
+ * count of goals reached. There is deliberately no "active goal" — a goal is an
+ * argument that flows from the quiz into the search that produced a route and on
+ * into the position taken from it, never a hidden mode the user can't see.
+ */
 export interface SavingsGoalState {
-  current: SavingsGoal | null;
+  goals: SavingsGoal[];
   achievedCount: number;
   /** Version of the math used to decide whether goals are achieved. */
+  accountingVersion?: number;
+}
+
+/** The single-goal shape persisted before version 6. Read by the migration only. */
+export interface LegacySavingsGoalState {
+  current: SavingsGoal | null;
+  achievedCount: number;
   accountingVersion?: number;
 }
 
@@ -38,6 +64,12 @@ export interface QuizAnswers {
 
 export interface TrackedBet {
   id: string;
+  /**
+   * The savings goal this position is working toward — the active goal at track
+   * time. Absent on positions tracked before goals were the organising unit;
+   * those roll up under the primary goal rather than vanishing from every view.
+   */
+  goalId?: string;
   category: string;
   emoji: string;
   description: string;

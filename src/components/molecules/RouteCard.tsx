@@ -173,7 +173,7 @@ function RouteCardInner({ route, requiredInvestment, currentInvestment, scoreBre
               <DebtFact label="MATURITY" value={route.maturesInDays ? formatMaturity(route.maturesInDays) : 'Flexible'} />
             </View>
             <View className="flex-row justify-between gap-2">
-              <DebtFact label="DOWNSIDE" value={route.lossProfile === 'partial' ? 'Capital safer' : 'Can lose stake'} />
+              <DebtFact label="DOWNSIDE" value={route.lossProfile === 'partial' ? 'Lower downside' : 'Can lose stake'} />
               <DebtFact label="LIQUIDITY" value={debtLiquidity ?? 'Check terms'} />
             </View>
             {route.investmentFacts?.yieldSource ? (
@@ -197,7 +197,7 @@ function RouteCardInner({ route, requiredInvestment, currentInvestment, scoreBre
                   backgroundColor: binary ? Accent.red + '15' : '#22C55E15',
                 }}>
                 <ThemedText style={{ fontSize: 9.5, fontWeight: '700', color: binary ? Accent.red : '#22C55E', letterSpacing: 0.2 }}>
-                  {binary ? 'ALL-OR-NOTHING' : 'CAPITAL SAFE'}
+                  {binary ? 'ALL-OR-NOTHING' : 'LOWER DOWNSIDE'}
                 </ThemedText>
               </View>
             </View>

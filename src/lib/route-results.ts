@@ -64,7 +64,6 @@ export function buildRouteResults(
   routes: Route[],
   params: RouteParams,
   investment: number,
-  autoSize: boolean,
   filters: RouteFilters
 ): RouteResults {
   const referenceStake = params.balance || 1;
@@ -77,8 +76,8 @@ export function buildRouteResults(
     ] as const)
   );
   // Drop irrelevant near-misses before anything else, so scores, ranking, and the
-  // "N ways to make $X" count all reflect only routes worth showing (judged against
-  // the amount the user intends to invest, independent of the auto-size toggle).
+  // "N ways to make $X" count all reflect only routes worth showing, judged against
+  // the amount the user said they are willing to invest.
   const relevantRoutes = routes.filter((route) =>
     isRelevantRoute({
       target,
@@ -87,8 +86,9 @@ export function buildRouteResults(
       intendedInvestment,
     })
   );
+  // Spend only what a route needs to reach the target, never more than the user
+  // is willing to invest.
   const selectedStake = (route: Route): number => {
-    if (!autoSize) return intendedInvestment;
     const requiredInvestment = requiredInvestmentById.get(route.id);
     return Math.min(requiredInvestment ?? intendedInvestment, intendedInvestment);
   };
@@ -98,7 +98,7 @@ export function buildRouteResults(
   const scoreContext = (route: Route): GoalScoreContext => ({
     target,
     requiredInvestment: requiredInvestmentById.get(route.id) ?? null,
-    availableInvestment: autoSize ? referenceStake : investment || target || referenceStake,
+    availableInvestment: intendedInvestment,
     deadlineDays: timeframeCalendarDays(params.timeframe),
   });
   const scoreById = new Map(
@@ -190,10 +190,10 @@ export function __selfCheck(): void {
     lossProfile: 'binary',
     meetsTarget: true,
   };
-  const autoSized = buildRouteResults([reportedRoute], params, 1000, true, filters);
-  const sizedRoute = autoSized.ranked[0];
+  const sized = buildRouteResults([reportedRoute], params, 1000, filters);
+  const sizedRoute = sized.ranked[0];
   console.assert(
-    autoSized.selectedStake(sizedRoute) === 670 && sizedRoute.expectedReturn === 100,
+    sized.selectedStake(sizedRoute) === 670 && sizedRoute.expectedReturn === 100,
     '87¢ route uses $670 to make the $100 goal instead of risking the full $1,000',
   );
 
@@ -206,10 +206,21 @@ export function __selfCheck(): void {
     line: undefined,
     lossProfile: 'partial',
   };
-  const capped = buildRouteResults([overBudgetRoute], params, 1000, true, filters);
+  const capped = buildRouteResults([overBudgetRoute], params, 1000, filters);
   console.assert(
     capped.selectedStake(capped.ranked[0]) === 1000 && capped.ranked[0].expectedReturn === 80,
-    'auto-size never exceeds the amount the user has available',
+    'a route never uses more than the amount the user is willing to invest',
+  );
+
+  const stocksOnly = buildRouteResults(
+    [reportedRoute, overBudgetRoute],
+    params,
+    1000,
+    { ...filters, category: 'Stocks & ETFs' },
+  );
+  console.assert(
+    stocksOnly.filtered.length === 1 && stocksOnly.filtered[0].id === overBudgetRoute.id,
+    'asset-class filter keeps only routes in the selected category',
   );
 }
 

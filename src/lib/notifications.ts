@@ -109,7 +109,8 @@ export async function scheduleWeeklyReminder(): Promise<void> {
 export async function notifyGoalAchieved(goal: {
   label: string;
   emoji: string;
-  targetAmount: number;
+  /** Absent on an open-ended goal — which never reaches a target, so never gets here. */
+  targetAmount?: number;
 }): Promise<void> {
   try {
     if (Platform.OS === 'web') return;
@@ -119,7 +120,7 @@ export async function notifyGoalAchieved(goal: {
     await Notifications.scheduleNotificationAsync({
       content: {
         title: `${goal.emoji} Goal reached — ${goal.label}!`,
-        body: `Your gains just covered your $${goal.targetAmount.toLocaleString()} goal. Open the app to celebrate and pick your next one.`,
+        body: `Your gains just covered your $${(goal.targetAmount ?? 0).toLocaleString()} goal. Open the app to celebrate and pick your next one.`,
       },
       trigger: null,
     });

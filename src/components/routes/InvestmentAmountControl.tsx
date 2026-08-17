@@ -1,109 +1,84 @@
-import { Pressable, TextInput, View } from 'react-native';
+import Slider from '@react-native-community/slider';
+import { TextInput, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { Brand, Radius } from '@/constants/theme';
+import { Brand, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 interface InvestmentAmountControlProps {
   amount: number;
-  autoSize: boolean;
   referenceStake: number;
-  target: number;
-  routeCount: number;
-  goalWhen: string;
   onAmountChange: (amount: number) => void;
-  onAutoSizeChange: (autoSize: boolean) => void;
 }
 
+/**
+ * Round increments that keep the slider's stops readable at any budget — 24-ish
+ * steps across the range, landing on numbers a person would actually type.
+ */
+function stepFor(referenceStake: number): number {
+  if (referenceStake <= 500) return 10;
+  if (referenceStake <= 2_000) return 50;
+  if (referenceStake <= 10_000) return 100;
+  if (referenceStake <= 50_000) return 500;
+  return 1_000;
+}
+
+/**
+ * How much the user is willing to invest, set either by dragging or by typing —
+ * the same number, two ways in, because a slider can't hit an exact figure and a
+ * keyboard is slow for rough ones. It is a ceiling: each route uses only what it
+ * needs to reach the target, and never more than this.
+ */
 export function InvestmentAmountControl({
   amount,
-  autoSize,
   referenceStake,
-  target,
-  routeCount,
-  goalWhen,
   onAmountChange,
-  onAutoSizeChange,
 }: InvestmentAmountControlProps): React.ReactElement {
   const theme = useTheme();
-  const presets = [
-    { label: '25%', value: Math.max(1, Math.round(referenceStake * 0.25)) },
-    { label: '50%', value: Math.max(1, Math.round(referenceStake * 0.5)) },
-    { label: 'All', value: Math.max(1, Math.round(referenceStake)) },
-  ];
+  const step = stepFor(referenceStake);
+  // Typing can exceed the slider's range, so the track ends at whichever is
+  // larger rather than snapping a deliberately bigger number back down.
+  const maximum = Math.max(step, Math.round(referenceStake), amount);
 
   return (
-    <View className="gap-3">
-      <ThemedText style={{ fontSize: 12, fontWeight: '600', color: theme.textSecondary }}>
-        {autoSize ? 'Maximum available per route' : 'Exact amount to invest'}
+    <View style={{ borderRadius: Radius.xl, backgroundColor: theme.backgroundElevated, borderWidth: 1, borderColor: theme.border, paddingHorizontal: 16, paddingVertical: 14, gap: 8, ...Shadow.card }}>
+      <ThemedText style={{ fontSize: 13, fontWeight: '700', color: theme.text }}>
+        Amount you&apos;re willing to invest
       </ThemedText>
 
-      <View className="flex-row items-center" style={{ gap: 10 }}>
-        <View
-          className="flex-1 flex-row items-center"
-          style={{ minHeight: 54, borderRadius: Radius.md, borderWidth: 1.5, borderColor: autoSize ? theme.border : Brand[500], backgroundColor: theme.background, paddingHorizontal: 16, opacity: autoSize ? 0.55 : 1 }}>
-          {autoSize ? (
-            <ThemedText style={{ color: theme.text, fontSize: 20, fontWeight: '800', fontVariant: ['tabular-nums'] }}>
-              Up to ${amount.toLocaleString()}
-            </ThemedText>
-          ) : (
-            <>
-              <ThemedText style={{ color: Brand[500], fontSize: 22, fontWeight: '800', marginRight: 4 }}>$</ThemedText>
-              <TextInput
-                value={amount > 0 ? String(amount) : ''}
-                onChangeText={(text) => onAmountChange(Number(text.replace(/[^0-9]/g, '')) || 0)}
-                onBlur={() => amount < 1 && onAmountChange(1)}
-                keyboardType="number-pad"
-                inputMode="numeric"
-                returnKeyType="done"
-                accessibilityLabel="Exact investment amount in dollars"
-                placeholder="0"
-                placeholderTextColor={theme.textTertiary}
-                style={{ flex: 1, color: theme.text, fontSize: 26, fontWeight: '800', fontVariant: ['tabular-nums'], paddingVertical: 10 }}
-              />
-            </>
-          )}
-        </View>
-        <Pressable
-          onPress={() => onAutoSizeChange(!autoSize)}
-          accessibilityRole="button"
-          accessibilityState={{ selected: autoSize }}
-          className="active:opacity-75"
-          style={{ minHeight: 54, justifyContent: 'center', alignItems: 'center', borderRadius: Radius.md, borderWidth: 1.5, borderColor: autoSize ? Brand[500] : theme.borderStrong, backgroundColor: autoSize ? Brand[500] + '1A' : theme.background, paddingHorizontal: 16 }}>
-          <ThemedText style={{ fontSize: 13, fontWeight: '800', color: autoSize ? Brand[500] : theme.textSecondary }}>
-            {autoSize ? 'Use full amount' : 'Auto-size'}
-          </ThemedText>
-        </Pressable>
+      {/* Full width so the number is a comfortable tap target and long figures
+          never squeeze the label. */}
+      <View
+        className="flex-row items-center"
+        style={{ borderRadius: Radius.md, borderWidth: 1.5, borderColor: theme.borderStrong, backgroundColor: theme.background, paddingHorizontal: 14 }}>
+        <ThemedText style={{ fontSize: 20, fontWeight: '800', color: Brand[500], marginRight: 4 }}>$</ThemedText>
+        <TextInput
+          value={amount > 0 ? String(amount) : ''}
+          onChangeText={(text) => onAmountChange(Number(text.replace(/[^0-9]/g, '')) || 0)}
+          onBlur={() => amount < 1 && onAmountChange(1)}
+          keyboardType="number-pad"
+          inputMode="numeric"
+          returnKeyType="done"
+          selectTextOnFocus
+          accessibilityLabel="Amount you are willing to invest, in dollars"
+          placeholder="0"
+          placeholderTextColor={theme.textTertiary}
+          style={{ flex: 1, color: theme.text, fontSize: 20, fontWeight: '800', fontVariant: ['tabular-nums'], paddingVertical: 11 }}
+        />
       </View>
 
-      {autoSize ? (
-        <ThemedText style={{ fontSize: 12, lineHeight: 17, color: theme.textSecondary }}>
-          Uses only what each route needs to reach +${target.toLocaleString()}, never more than ${amount.toLocaleString()}.
-        </ThemedText>
-      ) : (
-        <View className="flex-row" style={{ gap: 8 }}>
-          {presets.map((preset) => {
-            const active = amount === preset.value;
-            return (
-              <Pressable
-                key={preset.label}
-                onPress={() => onAmountChange(preset.value)}
-                accessibilityRole="button"
-                accessibilityState={{ selected: active }}
-                className="flex-1 flex-row items-baseline justify-center active:opacity-70"
-                style={{ gap: 5, borderRadius: Radius.pill, borderWidth: 1, borderColor: active ? Brand[500] : theme.border, backgroundColor: active ? Brand[500] + '14' : theme.backgroundElement, paddingVertical: 10 }}>
-                <ThemedText style={{ fontSize: 11, fontWeight: '700', color: active ? Brand[500] : theme.textTertiary }}>{preset.label}</ThemedText>
-                <ThemedText style={{ fontSize: 13, fontWeight: '800', color: active ? Brand[500] : theme.textSecondary, fontVariant: ['tabular-nums'] }}>${preset.value.toLocaleString()}</ThemedText>
-              </Pressable>
-            );
-          })}
-        </View>
-      )}
-
-      <ThemedText style={{ fontSize: 12, color: theme.textTertiary }}>
-        <ThemedText style={{ fontSize: 12, fontWeight: '800', color: theme.textSecondary, fontVariant: ['tabular-nums'] }}>{routeCount}</ThemedText>
-        {` route${routeCount === 1 ? '' : 's'} to +$${target.toLocaleString()} ${goalWhen}`}
-      </ThemedText>
+      <Slider
+        style={{ width: '100%', height: 32 }}
+        minimumValue={step}
+        maximumValue={maximum}
+        step={step}
+        value={Math.min(Math.max(amount, step), maximum)}
+        onValueChange={(value) => onAmountChange(Math.round(value))}
+        accessibilityLabel="Amount you are willing to invest"
+        minimumTrackTintColor={Brand[500]}
+        maximumTrackTintColor={theme.backgroundSelected}
+        thumbTintColor={Brand[500]}
+      />
     </View>
   );
 }

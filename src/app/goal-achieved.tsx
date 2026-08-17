@@ -1,4 +1,4 @@
-import { Redirect, Stack, useRouter } from 'expo-router';
+import { Redirect, Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Animated, Pressable, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -20,8 +20,12 @@ const MONO = { fontVariant: ['tabular-nums' as const] };
 export default function GoalAchievedScreen(): React.ReactElement {
   const theme = useTheme();
   const router = useRouter();
-  const { goal, achievedCount, markCelebrated, isLoading } = useSavingsGoal();
+  const { goalId } = useLocalSearchParams<{ goalId?: string }>();
+  const { goals, pendingCelebration, achievedCount, markCelebrated, isLoading } = useSavingsGoal();
   const [entrance] = useState(() => new Animated.Value(0));
+  // The goal comes from the navigation that opened this screen, so claiming the
+  // celebration below can't pull it out from under the confetti.
+  const goal = goals.find((candidate) => candidate.id === goalId) ?? pendingCelebration;
 
   useEffect(() => {
     Animated.spring(entrance, { toValue: 1, friction: 6, tension: 60, useNativeDriver: true }).start();
@@ -30,8 +34,8 @@ export default function GoalAchievedScreen(): React.ReactElement {
   // Claim the celebration as soon as it is on screen, so a crash or a swipe-away
   // can't leave the user stuck being congratulated on every app open.
   useEffect(() => {
-    if (goal?.achievedAt && !goal.celebratedAt) markCelebrated();
-  }, [goal?.achievedAt, goal?.celebratedAt, markCelebrated]);
+    if (goal?.achievedAt && !goal.celebratedAt) markCelebrated(goal.id);
+  }, [goal?.id, goal?.achievedAt, goal?.celebratedAt, markCelebrated]);
 
   if (isLoading) return <View style={{ flex: 1, backgroundColor: theme.background }} />;
   if (!goal?.achievedAt) return <Redirect href="/(tabs)" />;
@@ -101,7 +105,7 @@ export default function GoalAchievedScreen(): React.ReactElement {
               borderColor: Brand[500] + '55',
             }}>
             <ThemedText style={{ fontSize: 30, fontWeight: '900', color: Brand[500], ...MONO }}>
-              +${goal.targetAmount.toLocaleString()}
+              +${(goal.targetAmount ?? 0).toLocaleString()}
             </ThemedText>
             <ThemedText style={{ fontSize: 13, color: theme.textSecondary }}>in net gains</ThemedText>
           </View>
