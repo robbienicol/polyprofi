@@ -19,6 +19,12 @@ export interface EtfDefinition {
   riskLevel: number; // 1–5, position on the risk map
   expenseRatioPct: number; // 0 for individual stocks (no fund fee)
   kind?: 'etf' | 'stock'; // defaults to 'etf'; drives "fund" vs "stock" copy
+  /**
+   * Who owes the money, for debt funds only. The fund's brand is the wrapper, not
+   * the borrower: iShares sells LQD but corporations owe the coupons, and for
+   * anything other than government paper that difference is the actual risk.
+   */
+  issuer?: string;
 }
 
 /**
@@ -31,14 +37,14 @@ export interface EtfDefinition {
  */
 export const ETF_UNIVERSE: EtfDefinition[] = [
   // Broad funds (safe → growth)
-  { symbol: 'SGOV', name: 'iShares 0–3 Month Treasury ETF', bucket: 'Cash / ultra-short T-bills', riskLevel: 1, expenseRatioPct: 0.09 },
-  { symbol: 'BND', name: 'Vanguard Total Bond Market ETF', bucket: 'US bonds', riskLevel: 2, expenseRatioPct: 0.03 },
-  { symbol: 'SCHP', name: 'Schwab US TIPS ETF', bucket: 'Inflation-protected treasuries (TIPS)', riskLevel: 2, expenseRatioPct: 0.03 },
-  { symbol: 'MUB', name: 'iShares National Muni Bond ETF', bucket: 'Municipal bonds', riskLevel: 2, expenseRatioPct: 0.05 },
-  { symbol: 'BNDX', name: 'Vanguard Total International Bond ETF', bucket: 'International bonds', riskLevel: 2, expenseRatioPct: 0.07 },
-  { symbol: 'LQD', name: 'iShares iBoxx $ Investment Grade Corporate Bond ETF', bucket: 'Investment-grade corporate bonds', riskLevel: 2, expenseRatioPct: 0.14 },
+  { symbol: 'SGOV', name: 'iShares 0–3 Month Treasury ETF', bucket: 'Cash / ultra-short T-bills', riskLevel: 1, expenseRatioPct: 0.09 , issuer: 'U.S. Treasury (0–3 month bills)' },
+  { symbol: 'BND', name: 'Vanguard Total Bond Market ETF', bucket: 'US bonds', riskLevel: 2, expenseRatioPct: 0.03 , issuer: 'U.S. government & investment-grade corporates' },
+  { symbol: 'SCHP', name: 'Schwab US TIPS ETF', bucket: 'Inflation-protected treasuries (TIPS)', riskLevel: 2, expenseRatioPct: 0.03 , issuer: 'U.S. Treasury (inflation-protected)' },
+  { symbol: 'MUB', name: 'iShares National Muni Bond ETF', bucket: 'Municipal bonds', riskLevel: 2, expenseRatioPct: 0.05 , issuer: 'U.S. states & municipalities' },
+  { symbol: 'BNDX', name: 'Vanguard Total International Bond ETF', bucket: 'International bonds', riskLevel: 2, expenseRatioPct: 0.07 , issuer: 'Non-U.S. governments & corporates' },
+  { symbol: 'LQD', name: 'iShares iBoxx $ Investment Grade Corporate Bond ETF', bucket: 'Investment-grade corporate bonds', riskLevel: 2, expenseRatioPct: 0.14 , issuer: 'Investment-grade corporations' },
   { symbol: 'SCHD', name: 'Schwab US Dividend Equity ETF', bucket: 'US dividend equity', riskLevel: 2, expenseRatioPct: 0.06 },
-  { symbol: 'TLT', name: 'iShares 20+ Year Treasury Bond ETF', bucket: 'Long-term US treasuries', riskLevel: 3, expenseRatioPct: 0.15 },
+  { symbol: 'TLT', name: 'iShares 20+ Year Treasury Bond ETF', bucket: 'Long-term US treasuries', riskLevel: 3, expenseRatioPct: 0.15 , issuer: 'U.S. Treasury (20+ year bonds)' },
   { symbol: 'GLD', name: 'SPDR Gold Shares', bucket: 'Gold / diversifier', riskLevel: 3, expenseRatioPct: 0.4 },
   { symbol: 'VOO', name: 'Vanguard S&P 500 ETF', bucket: 'US large-cap equity (S&P 500)', riskLevel: 3, expenseRatioPct: 0.03 },
   { symbol: 'VTI', name: 'Vanguard Total Stock Market ETF', bucket: 'US total market', riskLevel: 3, expenseRatioPct: 0.03 },
@@ -135,6 +141,7 @@ export function buildEtfRoutes({
         meetsTarget: realistic,
         investmentFacts: {
           expenseRatioPct: etf.expenseRatioPct,
+          ...(etf.issuer ? { issuer: etf.issuer } : null),
           projectionBasis: `P(move ≥ +${targetPct.toFixed(1)}% in ${horizonTradingDays} trading days) from ~90-day realized volatility + ${driftPct.toFixed(1)}%/yr assumed return (5y trend, capped ${MAX_ASSUMED_ANNUAL_DRIFT_PCT}%)`,
           liquidity: 'Sells same-day on any brokerage',
           sourceCheckedAt: new Date().toISOString(),

@@ -176,6 +176,12 @@ export default function GoalDetailScreen(): React.ReactElement {
             bets={goalBets}
             fallbackCash={0}
             targetValue={openEnded ? null : staked + (goal.targetAmount ?? 0)}
+            valueNow={{
+              value: progress.value,
+              netPnl: progress.goalProgress,
+              livePositions: progress.livePositions,
+              projectedPositions: progress.projectedPositions,
+            }}
             onFindRoutes={findRoutes}
             onOpenPositions={() => router.push('/positions')}
             emptyTitle="Nothing working on this goal yet"

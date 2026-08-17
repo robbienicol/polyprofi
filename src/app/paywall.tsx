@@ -11,8 +11,8 @@ import { useTheme } from '@/hooks/use-theme';
 import { FEATURE_FLAGS } from '@/lib/feature-flags';
 
 const FEATURES = [
-  { emoji: '🧠', text: 'Edge-scored plays from our real-time market engine', color: Brand[500] },
-  { emoji: '📊', text: 'Risk-scored plays from safe to risky', color: '#84CC16' },
+  { emoji: '🧠', text: 'Live opportunities from our real-time market engine', color: Brand[500] },
+  { emoji: '📊', text: 'Compare risk from conservative to aggressive', color: '#84CC16' },
   { emoji: '📍', text: 'Monitor every position and see your P&L in real time', color: Accent.gold },
   { emoji: '🔄', text: 'Refresh routes anytime, as many times as you want', color: Accent.violet },
 ] as const;

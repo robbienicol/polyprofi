@@ -12,7 +12,6 @@ import { MarketComparisonCard } from "@/components/routes/MarketComparisonCard";
 import { RelatedRoutes } from "@/components/routes/RelatedRoutes";
 import { RouteCoach } from "@/components/routes/RouteCoach";
 import { RouteOpportunityCard } from "@/components/routes/RouteOpportunityCard";
-import { ScoreMathCard } from "@/components/routes/ScoreMathCard";
 import { TrackRouteForm } from "@/components/routes/TrackRouteForm";
 import { ThemedText } from "@/components/themed-text";
 import { Brand, Radius } from "@/constants/theme";
@@ -24,7 +23,6 @@ import {
   preferredTradeDestination,
   tradeDestinationLabel,
 } from "@/lib/route-actions";
-import { goalEffectivenessScore } from "@/lib/score";
 import { rescoreForStake, stakeNeededForReturn } from "@/lib/stake-rescore";
 import { trackedPositionFields } from "@/lib/tracked-assets";
 
@@ -80,6 +78,11 @@ export default function RouteDetailScreen(): React.ReactElement {
 
   const baseStake = batch?.quizSnapshot.balance ?? 0;
   const targetProfit = batch?.quizSnapshot.target ?? savedRoute.expectedReturn;
+  // The goal deadline of the search this route came from, so a debt maturity can be
+  // compared against the date the user actually needs the money.
+  const goalDeadlineDays = batch
+    ? timeframeCalendarDays(batch.quizSnapshot.timeframe)
+    : null;
   const defaultStake = Math.min(
     baseStake || 1,
     stakeNeededForReturn(savedRoute, baseStake || 1, targetProfit) ??
@@ -106,12 +109,6 @@ export default function RouteDetailScreen(): React.ReactElement {
     baseStake || stake || 1,
     targetProfit,
   );
-  const scoreBreakdown = goalEffectivenessScore(route, {
-    target: targetProfit,
-    requiredInvestment: neededToHitGoal,
-    availableInvestment,
-    deadlineDays: timeframeCalendarDays(batch?.quizSnapshot.timeframe ?? ""),
-  });
   const relatedRoutes = (batch?.routes ?? [])
     .filter((candidate) => candidate.id !== route.id)
     .sort(
@@ -239,6 +236,7 @@ export default function RouteDetailScreen(): React.ReactElement {
             added={added}
             adding={isTracking}
             onAdd={beginAcquire}
+            deadlineDays={goalDeadlineDays}
           />
 
           {showAcquireForm ? (
@@ -304,11 +302,6 @@ export default function RouteDetailScreen(): React.ReactElement {
                 `/route/${selected.id}?stake=${selectedStake}&available=${availableInvestment}`,
               );
             }}
-          />
-          <ScoreMathCard
-            scoreBreakdown={scoreBreakdown}
-            requiredInvestment={neededToHitGoal}
-            availableInvestment={availableInvestment}
           />
           <ThemedText
             className="text-center"

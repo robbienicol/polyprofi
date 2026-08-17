@@ -13,9 +13,9 @@ import {
   liquidityLabel,
   pricePositionLabel,
   routeDisplayTitle,
-  volatilityLabel,
 } from "@/lib/route-detail";
 import {
+  deadlineFitLabel,
   debtLiquidityLabel,
   debtYieldLabel,
   isDebtRoute,
@@ -31,12 +31,15 @@ interface RouteOpportunityCardProps {
   added: boolean;
   adding: boolean;
   onAdd: () => void;
+  /** Calendar days until the user's goal deadline, when a goal is in context. */
+  deadlineDays?: number | null;
 }
 
 export function RouteOpportunityCard({
   route,
   stake,
   neededToHitGoal,
+  deadlineDays,
   added,
   adding,
   onAdd,
@@ -45,20 +48,30 @@ export function RouteOpportunityCard({
   const color = riskColor(route.riskLevel);
   const binary = route.lossProfile === "binary";
   const returnPct = stake > 0 ? (route.expectedReturn / stake) * 100 : 0;
-  const volatility = volatilityLabel(route);
   const liquidity = liquidityLabel(route);
   const marketQuality = route.marketQuality;
-  const volatilityPercent =
-    marketQuality?.recentRangePts != null
-      ? Math.min(100, (marketQuality.recentRangePts / 30) * 100)
-      : route.riskLevel * 20;
   const liquidityPercent =
     marketQuality?.executionScore ??
     (liquidity === "High" ? 95 : liquidity === "Medium" ? 62 : 32);
-  const correlation = route.category.match(/treasur|savings|cash/i)
-    ? "High"
-    : "Low";
   const debt = isDebtRoute(route);
+  // The fund fee is levied on the yield, so net is what the user actually earns.
+  const grossYieldPct = route.investmentFacts?.yieldPct;
+  const expenseRatioPct = route.investmentFacts?.expenseRatioPct;
+  const netYieldPct = grossYieldPct != null && expenseRatioPct != null
+    ? Math.max(0, grossYieldPct - expenseRatioPct)
+    : null;
+  // A bill or CD fixes its rate the moment you buy; a savings account or a bond fund
+  // does not. The distinction decides whether the quoted yield is a promise or a
+  // snapshot, so it is read off the yield's own label rather than guessed.
+  const rateFixed = /coupon-equivalent|contractual|locked|fixed/i.test(
+    route.investmentFacts?.yieldLabel ?? "",
+  );
+  const yieldIsEstimate = route.investmentFacts?.yieldIsEstimate === true
+    // Older saved batches carry the caveat in the label rather than the flag.
+    || /proxy|not a live/i.test(route.investmentFacts?.yieldLabel ?? "");
+  // A bill that pays out after the goal date is the wrong instrument however good
+  // the yield is, so the comparison is stated rather than left to the user.
+  const deadlineFit = deadlineFitLabel(route.maturesInDays, deadlineDays);
 
   return (
     <View
@@ -194,44 +207,34 @@ export function RouteOpportunityCard({
         Based on historical data & live market odds
       </ThemedText>
 
-      <Section title="Risk Breakdown">
-        <RiskRow
-          label="Probability"
-          value={`${route.probability}%`}
-          percent={route.probability}
-          color={Brand[500]}
-        />
-        <RiskRow
-          label="Volatility"
-          value={volatility}
-          percent={volatilityPercent}
-          color={
-            volatility === "High"
-              ? Accent.red
-              : volatility === "Medium"
-                ? Accent.gold
-                : Brand[500]
-          }
-        />
-        <RiskRow
-          label="Liquidity"
-          value={liquidity}
-          percent={liquidityPercent}
-          color={
-            liquidity === "Low"
-              ? Accent.red
-              : liquidity === "Medium"
-                ? Accent.gold
-                : Brand[500]
-          }
-        />
-        <RiskRow
-          label="Correlation"
-          value={correlation}
-          percent={correlation === "High" ? 80 : 34}
-          color={correlation === "High" ? Accent.gold : Brand[500]}
-        />
-      </Section>
+      {/* Only the two measures with real backing. Volatility fell back to
+          riskLevel × 20 whenever a market carried no price history, which restates the
+          risk level rather than measuring volatility; correlation was a hardcoded
+          category match with nothing to correlate against. Both were noise.
+          Debt skips this entirely: its probability is ~100% by construction, and yield,
+          term and issuer are what decide it — see Investment Facts below. */}
+      {debt ? null : (
+        <Section title="Risk Breakdown">
+          <RiskRow
+            label="Probability"
+            value={`${route.probability}%`}
+            percent={route.probability}
+            color={Brand[500]}
+          />
+          <RiskRow
+            label="Liquidity"
+            value={liquidity}
+            percent={liquidityPercent}
+            color={
+              liquidity === "Low"
+                ? Accent.red
+                : liquidity === "Medium"
+                  ? Accent.gold
+                  : Brand[500]
+            }
+          />
+        </Section>
+      )}
 
       {route.exitPlan?.kind === "bracket" && (
         <Section title="Exit Plan">
@@ -359,7 +362,7 @@ export function RouteOpportunityCard({
               label="Capital risk"
               value={
                 route.lossProfile === "partial"
-                  ? "Lower downside"
+                  ? "Capital preservation"
                   : "Stake at risk"
               }
             />
@@ -378,6 +381,59 @@ export function RouteOpportunityCard({
               value={route.investmentFacts?.yieldAsOf ?? "Unavailable"}
             />
           </View>
+          {/* A fund fee is charged against the yield every year, so the headline rate
+              is not what reaches the user. Shown as the net rate rather than the fee
+              alone, because "4.73% after the 0.09% fee" is the number that matters. */}
+          {netYieldPct != null && (
+            <View className="flex-row gap-2">
+              <Fact
+                label="After fees"
+                value={`${netYieldPct.toFixed(2)}% net`}
+                subLabel={`${route.investmentFacts?.expenseRatioPct?.toFixed(2)}% expense ratio`}
+              />
+              <Fact
+                label="Rate can change"
+                value={rateFixed ? "No — locked at purchase" : "Yes — can move"}
+              />
+            </View>
+          )}
+          <View className="flex-row gap-2">
+            <Fact
+              label="Who owes you"
+              value={route.investmentFacts?.issuer ?? "Not stated"}
+            />
+            {deadlineFit && <Fact label="Vs your deadline" value={deadlineFit.label} />}
+          </View>
+          {deadlineFit?.misses && (
+            <ThemedText
+              style={{ fontSize: 12, lineHeight: 17, color: Accent.red, fontWeight: "700" }}
+            >
+              Pays out after your goal date — the money is locked up past the point you
+              wanted it.
+            </ThemedText>
+          )}
+          {yieldIsEstimate && (
+            <View
+              style={{
+                flexDirection: "row",
+                gap: 8,
+                borderRadius: Radius.md,
+                borderWidth: 1,
+                borderColor: Accent.gold + "66",
+                backgroundColor: Accent.gold + "14",
+                paddingHorizontal: 12,
+                paddingVertical: 10,
+              }}
+            >
+              <ThemedText style={{ fontSize: 13 }}>⚠️</ThemedText>
+              <ThemedText
+                style={{ flex: 1, fontSize: 12, lineHeight: 17, color: theme.text }}
+              >
+                This yield is an estimate, not a quote. Nobody has offered you this
+                rate — check the advertised APY before committing.
+              </ThemedText>
+            </View>
+          )}
           {route.investmentFacts?.projectionBasis && (
             <ThemedText
               style={{
@@ -584,6 +640,9 @@ function RiskRow({
         className="flex-1"
         style={{
           height: 6,
+          // Never collapses to nothing when the value beside it is a long phrase
+          // like "4.82% contractual yield" rather than "62%".
+          minWidth: 40,
           borderRadius: Radius.pill,
           backgroundColor: theme.backgroundSelected,
           overflow: "hidden",
@@ -599,9 +658,10 @@ function RiskRow({
         />
       </View>
       <ThemedText
-        numberOfLines={1}
+        numberOfLines={2}
         style={{
-          width: 62,
+          maxWidth: "46%",
+          flexShrink: 0,
           textAlign: "right",
           fontSize: 13,
           color: theme.text,
@@ -617,9 +677,12 @@ function RiskRow({
 function Fact({
   label,
   value,
+  subLabel,
 }: {
   label: string;
   value: string;
+  /** Optional smaller line under the value, for the input behind a derived number. */
+  subLabel?: string;
 }): React.ReactElement {
   const theme = useTheme();
   return (
@@ -648,6 +711,14 @@ function Fact({
       >
         {value}
       </ThemedText>
+      {subLabel && (
+        <ThemedText
+          style={{ fontSize: 10, color: theme.textTertiary, marginTop: 2 }}
+          numberOfLines={1}
+        >
+          {subLabel}
+        </ThemedText>
+      )}
     </View>
   );
 }

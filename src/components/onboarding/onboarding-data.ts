@@ -7,10 +7,9 @@ export interface OnboardingSlide {
 }
 
 /**
- * The pitch, in order: we scan everything → we rank it by value → you can audit the
- * ranking → a coach explains it → your goal turns into a plan. Every claim here has to
- * map to something the app actually does (the universes in lib/*-routes.ts, the score in
- * lib/score.ts, the breakdown on route/[id], RouteCoach) — no invented stats.
+ * The pitch, in order: we scan everything → you compare the options → you can inspect
+ * the underlying facts → a coach explains them → your goal turns into a plan. Every
+ * claim here has to map to something the app actually does — no invented stats.
  */
 export const ONBOARDING_SLIDES: OnboardingSlide[] = [
   {
@@ -22,16 +21,16 @@ export const ONBOARDING_SLIDES: OnboardingSlide[] = [
   },
   {
     id: 'rank',
-    eyebrow: 'RANKED, NOT RANDOM',
-    title: 'Then we rank them.\nBest one on top.',
-    body: 'Every option gets one 0–100 value score: chance of hitting your goal, downside protection, cash required, time to payout. No more guessing which tab had the good idea.',
+    eyebrow: 'ONE CLEAR COMPARISON',
+    title: 'Then compare them.\nSide by side.',
+    body: 'See each option through the same lens: chance of hitting your goal, downside, cash required, and time to payout.',
     kind: 'rank',
   },
   {
     id: 'breakdown',
     eyebrow: 'RECEIPTS, NOT VIBES',
     title: 'See the exact math\nbehind every pick',
-    body: 'Open any route for the full breakdown — the live price it came from, how the score was built, what happens if it goes against you. If we can\'t show our work, it doesn\'t rank.',
+    body: 'Open any route for the full breakdown — the live price, source, cash required, timeframe, and what happens if it goes against you.',
     kind: 'breakdown',
   },
   {
@@ -50,40 +49,35 @@ export const ONBOARDING_SLIDES: OnboardingSlide[] = [
   },
 ];
 
-/** Slide 2 — an honest-looking leaderboard: safe stuff wins, longshots are listed last. */
+/** Slide 2 — a compact cross-market comparison. */
 export interface RankedPreviewRow {
   emoji: string;
   name: string;
   platform: string;
-  score: number;
   riskLevel: number;
   note: string;
 }
 
 export const RANKED_PREVIEW: RankedPreviewRow[] = [
-  { emoji: '📈', name: 'VOO · S&P 500', platform: 'Vanguard', score: 82, riskLevel: 3, note: 'Capital preserved' },
-  { emoji: '🏦', name: 'SGOV · T-bills', platform: 'iShares', score: 74, riskLevel: 1, note: 'Contractual yield' },
-  { emoji: '🎯', name: 'Heat win · Yes 58¢', platform: 'Polymarket', score: 61, riskLevel: 3, note: 'All-or-nothing' },
-  { emoji: '₿', name: 'BTC', platform: 'Coinbase', score: 43, riskLevel: 5, note: 'High volatility' },
-  { emoji: '🎲', name: '4-leg parlay', platform: 'Sportsbook', score: 11, riskLevel: 5, note: 'Listed last, not hidden' },
+  { emoji: '📈', name: 'VOO · S&P 500', platform: 'Vanguard', riskLevel: 3, note: 'Market exposure' },
+  { emoji: '🏦', name: 'SGOV · T-bills', platform: 'iShares', riskLevel: 1, note: 'Contractual yield' },
+  { emoji: '🎯', name: 'Heat win · Yes 58¢', platform: 'Polymarket', riskLevel: 3, note: 'All-or-nothing' },
+  { emoji: '₿', name: 'BTC', platform: 'Coinbase', riskLevel: 5, note: 'High volatility' },
+  { emoji: '🎲', name: '4-leg parlay', platform: 'Sportsbook', riskLevel: 5, note: 'Four outcomes required' },
 ];
 
-/** Slide 3 — mirrors ScoreMathCard's real weights (35 / 25 / 30 / 10). */
+/** Slide 3 — the route facts users can inspect directly. */
 export interface BreakdownFactor {
   label: string;
-  weight: string;
-  raw: number;
-  points: number;
+  value: string;
 }
 
 export const BREAKDOWN_FACTORS: BreakdownFactor[] = [
-  { label: 'Chance of hitting goal', weight: '35%', raw: 70, points: 24.5 },
-  { label: 'Downside protection', weight: '25%', raw: 88, points: 22.0 },
-  { label: 'Cash required', weight: '30%', raw: 100, points: 30.0 },
-  { label: 'Time to payout', weight: '10%', raw: 55, points: 5.5 },
+  { label: 'Chance of hitting goal', value: '70%' },
+  { label: 'Downside', value: 'Market can decline' },
+  { label: 'Cash required', value: '$286' },
+  { label: 'Time to payout', value: '12 months' },
 ];
-
-export const BREAKDOWN_SCORE = 82;
 
 /** Slide 4 — scripted coach exchange. Mirrors what RouteCoach answers about. */
 export interface CoachTurn {
@@ -98,13 +92,13 @@ export const COACH_SCRIPT: CoachTurn[] = [
   { role: 'user', text: 'Why is VOO first and not the parlay?' },
   {
     role: 'coach',
-    text: 'The parlay pays more, but all four legs have to land — roughly a 6% shot, and a miss takes the whole stake. VOO clears your $30 target with your capital intact, so 82 vs 11.',
+    text: 'The parlay pays more, but all four legs have to land — roughly a 6% shot, and a miss takes the whole stake. VOO has a different payoff and downside profile.',
   },
 ];
 
 /** Slide 5 — closing proof points. Each maps to a real screen in the app. */
 export const CLOSING_PROOF: { emoji: string; label: string }[] = [
-  { emoji: '🧭', label: 'Every option in one ranked list' },
+  { emoji: '🧭', label: 'Every option in one comparison' },
   { emoji: '🧾', label: 'Full math and sources on each pick' },
   { emoji: '💬', label: 'AI coach on call while you decide' },
 ];

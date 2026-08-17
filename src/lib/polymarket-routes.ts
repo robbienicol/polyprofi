@@ -1,6 +1,7 @@
 import { PolymarketEntry } from '@/api/client/market-data';
 import { polymarketMarketQuality } from '@/lib/polymarket-market-quality';
 import { bracketRiskLevel, buildSwingPlan } from '@/lib/prediction-swing';
+import { topicForTags } from '@/lib/prediction-topics';
 import { ExitPlan, MarketQualityFacts, Route, RouteParams } from '@/types/routes';
 
 type RiskBand = 2 | 3 | 4 | 5;
@@ -63,7 +64,14 @@ function toRoute(candidate: Candidate, params: RouteParams, quality: MarketQuali
     marketQuality: quality,
     sourceSlug: market.slug,
     sourceEndDate: market.endDate,
+    ...topicField(market),
   };
+}
+
+/** Only set when the market's tags map to a bucket; never guessed. */
+function topicField(market: PolymarketEntry): { predictionTopic?: string } {
+  const topic = topicForTags(market.tagSlugs ?? []);
+  return topic ? { predictionTopic: topic } : {};
 }
 
 /**
@@ -118,6 +126,7 @@ function toSwingRoute(
     exitPlan: plan,
     sourceSlug: market.slug,
     sourceEndDate: market.endDate,
+    ...topicField(market),
   };
 }
 

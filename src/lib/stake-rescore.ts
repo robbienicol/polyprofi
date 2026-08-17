@@ -21,10 +21,21 @@ function decimalOddsFor(route: Route, refStake: number): number {
   return route.probability > 0 ? 100 / route.probability : 2; // fair-odds fallback
 }
 
+/**
+ * Term implied by the yield's own label ("13-week T-bill" → 91 days).
+ *
+ * Skipped when the yield is a proxy: a savings account quoted off the "4-week T-bill"
+ * yield borrows the rate, not the term. Reading 4 weeks there would give the most
+ * liquid product in the app a maturity it does not have — and then report it as
+ * missing the user's deadline when the money is withdrawable the same day.
+ */
 function sourcedYieldDays(route: Route): number | null {
   const label = route.investmentFacts?.yieldLabel ?? '';
-  const weekMatch = label.match(/(\d+)[-\s]?week/i);
-  if (weekMatch?.[1]) return Number(weekMatch[1]) * 7;
+  const isProxy = route.investmentFacts?.yieldIsEstimate === true || /proxy|not a live/i.test(label);
+  if (!isProxy) {
+    const weekMatch = label.match(/(\d+)[-\s]?week/i);
+    if (weekMatch?.[1]) return Number(weekMatch[1]) * 7;
+  }
   return route.maturesInDays ?? null;
 }
 
@@ -71,7 +82,12 @@ export function rescoreForStake(
     const sourcedYield = r.investmentFacts?.yieldPct;
     const sourcedDays = sourcedYieldDays(r);
     if (sourcedYield != null && sourcedDays != null) {
-      const instrument = r.description.split('—')[0]?.replace(/^Buy a\s+/i, '').replace(/^Put your \$[\d,]+ in\s+/i, '').trim() || r.category;
+      // Strip whatever lead-in the source route used, or the rewrite below stacks a
+      // second one on top: "Put your $1,000 in Park your $1,000 in a savings account".
+      const instrument = r.description
+        .split('—')[0]
+        ?.replace(/^(buy a|buy|put|park|place|move)\s+(your\s+)?(\$[\d,]+\s+)?(in|into|on)?\s*/i, '')
+        .trim() || r.category;
       const yieldLabel = r.investmentFacts?.yieldLabel ?? 'sourced yield';
       return {
         ...r,
@@ -114,4 +130,42 @@ export function __selfCheck(): void {
   const hits = rescoreForStake([part], 100, 2000, 100);
   console.assert(hits.length === 1 && hits[0].meetsTarget, 'route is marked as meeting the target once stake is sufficient');
   console.assert(stakeNeededForReturn(part, 100, 100) === 1250, '$8 per $100 needs $1,250 to make $100');
+
+  // ── sourced-yield instruments ─────────────────────────────────────────────
+  const bill: Route = {
+    id: '3', category: 'Savings & Treasuries', emoji: '🏦',
+    description: 'Buy a 13-week T-bill — 4.20% sourced yield projects +$10 in 3mo.',
+    riskLevel: 1, probability: 99, expectedReturn: 10, platform: '', strategy: '',
+    lossProfile: 'partial', meetsTarget: false, maturesInDays: 91,
+    investmentFacts: { yieldPct: 4.2, yieldLabel: '13-week T-bill coupon-equivalent yield' },
+  };
+  const billRescored = rescoreForStake([bill], 1000, 1000, 100)[0];
+  console.assert(billRescored.maturesInDays === 91, 'a real bill takes its term from its own label');
+  console.assert(
+    !/put your \$[\d,]+ in (buy|put|park)/i.test(billRescored.description),
+    'the rewritten description does not stack a second lead-in',
+  );
+
+  // A proxy borrows the rate, not the term: an HYSA quoted off the 4-week bill is
+  // still withdrawable the same day, and must not inherit a 28-day maturity.
+  const hysa: Route = {
+    ...bill,
+    id: '4',
+    description: 'Park your $1,000 in a high-yield online savings account — top HYSAs track the 4-week T-bill.',
+    maturesInDays: 7,
+    investmentFacts: {
+      yieldPct: 4.6,
+      yieldLabel: 'Proxy: 4-week T-bill yield (not a live bank quote)',
+      yieldIsEstimate: true,
+    },
+  };
+  const hysaRescored = rescoreForStake([hysa], 1000, 1000, 100)[0];
+  console.assert(
+    hysaRescored.maturesInDays === 7,
+    'a proxy yield does not hand its source instrument\'s term to the route',
+  );
+  console.assert(
+    hysaRescored.description.startsWith('Put your $1,000 in a high-yield online savings account'),
+    'the lead-in is replaced rather than doubled for a "Park your $X in" description',
+  );
 }

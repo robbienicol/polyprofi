@@ -67,7 +67,7 @@ export interface GoalScoreBreakdown {
  * Routes with a known loss fraction get one extra correction: the score is scaled by
  * expected surviving capital, p + (1 − p)·(1 − lossFraction). The four components measure
  * how good the route is *when it works*, but a bet that vaporises the stake when it misses
- * shouldn't out-rank a lower-downside stock just because it needs little money and resolves
+ * shouldn't out-rank a capital-preservation stock just because it needs little money and resolves
  * fast. Probability deliberately matters twice for destructive routes (once as reliability,
  * once as this survival scale) precisely because the downside is catastrophic.
  *
@@ -304,12 +304,12 @@ export function __selfCheck(): void {
   invariant(binary.lossFraction === 1, 'a binary route loses the whole stake on a miss');
   invariant(binary.capitalSurvivalFactor === 1, 'a certain (100%) binary route is not dragged');
 
-  // Capital-destruction drag: a coin-flip binary bet must score below a lower-downside route
+  // Capital-destruction drag: a coin-flip binary bet must score below a capital-preservation route
   // with the same probability — losing the whole stake half the time is not "goal effectiveness".
   const binaryCoinflip = goalEffectivenessScore(mk({ lossProfile: 'binary', probability: 50 }), context(1000));
   const safeCoinflip = goalEffectivenessScore(mk({ lossProfile: 'partial', probability: 50, riskLevel: 3 }), context(1000));
   invariant(binaryCoinflip.capitalSurvivalFactor === 0.5, 'a total-loss route drags by exactly the success probability');
-  invariant(binaryCoinflip.score < safeCoinflip.score, 'all-or-nothing coin flip must score below a lower-downside equivalent');
+  invariant(binaryCoinflip.score < safeCoinflip.score, 'all-or-nothing coin flip must score below a capital-preservation equivalent');
   // A near-certain binary bet keeps most of its score — the drag is proportional, not a flat cap.
   const binaryLikely = goalEffectivenessScore(mk({ lossProfile: 'binary', probability: 95 }), context(1000));
   invariant(binaryLikely.score > binaryCoinflip.score, 'higher-probability binary routes are dragged less');

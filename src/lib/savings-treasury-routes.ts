@@ -54,6 +54,7 @@ export function buildTreasuryRoutes({
           projectedProfit,
           projectionBasis: `$${balance.toLocaleString()} × ${term.yieldPct.toFixed(2)}% annual yield × ${term.days}/365 days`,
           liquidity: 'Treasury bill held to maturity or sold in secondary market',
+          issuer: 'U.S. Treasury (full faith and credit)',
           sourceCheckedAt: new Date().toISOString(),
         },
       } satisfies Route;
@@ -111,6 +112,9 @@ export function buildSavingsAccountRoute({
       projectedProfit,
       projectionBasis: `$${balance.toLocaleString()} × ${proxy.yieldPct.toFixed(2)}% proxy annual yield × ${deadlineDays}/365 days`,
       liquidity: 'Withdraw anytime, no penalty',
+      issuer: 'FDIC-insured bank (to $250k per depositor)',
+      // Inferred off the T-bill curve, not quoted by any bank — the UI must say so.
+      yieldIsEstimate: true,
       sourceCheckedAt: new Date().toISOString(),
     },
   } satisfies Route];

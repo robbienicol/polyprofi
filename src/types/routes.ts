@@ -95,6 +95,13 @@ export interface Route {
   // Absent for AI-generated and non-Polymarket routes.
   sourceSlug?: string;
   sourceEndDate?: string;
+  /**
+   * Coarse prediction-market topic ('sports', 'politics', ...) resolved from the
+   * source market's tags — see @/lib/prediction-topics. Only ever set on
+   * prediction-market routes, and absent when the market carried no recognisable
+   * topic, so filters must treat undefined as "unknown" rather than "no match".
+   */
+  predictionTopic?: string;
 }
 
 interface RouteInvestmentFacts {
@@ -108,6 +115,18 @@ interface RouteInvestmentFacts {
   liquidity?: string;
   expenseRatioPct?: number;
   sourceCheckedAt?: string;
+  /**
+   * Who actually owes the money — "U.S. Treasury", "Investment-grade corporates".
+   * Distinct from `platform`, which is only where you buy it: iShares sells SGOV but
+   * the Treasury is the borrower, and for anything other than government debt that
+   * difference is the risk.
+   */
+  issuer?: string;
+  /**
+   * Set when the yield is inferred rather than quoted — a proxy off a related
+   * instrument. A number nobody promised has to look different from one that was.
+   */
+  yieldIsEstimate?: boolean;
 }
 
 export type RouteParams = QuizAnswers;

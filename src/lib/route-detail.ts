@@ -9,18 +9,6 @@ export function routeDisplayTitle(route: { line?: string; description: string; c
     .trim() || route.category;
 }
 
-export function volatilityLabel(route: Route): 'Low' | 'Medium' | 'High' {
-  const range = route.marketQuality?.recentRangePts;
-  if (range != null) {
-    if (range < 5) return 'Low';
-    if (range < 15) return 'Medium';
-    return 'High';
-  }
-  if (route.riskLevel <= 2) return 'Low';
-  if (route.riskLevel === 3) return 'Medium';
-  return 'High';
-}
-
 export function liquidityLabel(route: Route): 'Low' | 'Medium' | 'High' {
   const executionScore = route.marketQuality?.executionScore;
   if (executionScore != null) {

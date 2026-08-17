@@ -6,7 +6,6 @@ import {
   AllocationBar,
   AllocationDonut,
   buildAllocationRows,
-  buildEquitySeries,
   compactAssetClass,
   PerformanceChart,
 } from '@/components/portfolio/PortfolioVisuals';
@@ -20,6 +19,27 @@ const MONO = { fontVariant: ['tabular-nums' as const] };
 
 type AllocationMetric = 'share' | 'return';
 
+/** Plain-language horizon for the expectation: "3 days", "5 weeks", "4 months". */
+function maturityWords(days: number): string {
+  if (days <= 1) return 'a day';
+  if (days < 14) return `${days} days`;
+  if (days < 60) return `${Math.round(days / 7)} weeks`;
+  if (days < 365) return `${Math.round(days / 30)} months`;
+  return `${(days / 365).toFixed(1)} years`;
+}
+
+/** What the positions are worth right now, measured rather than modelled. */
+export interface PortfolioValueNow {
+  /** Principal plus current gains and losses, from live prices where they exist. */
+  value: number;
+  /** Net gains only — the money made, with the principal excluded. */
+  netPnl: number;
+  /** Positions priced from a live market. */
+  livePositions: number;
+  /** Positions whose movement is estimated from tracked yield rather than a quote. */
+  projectedPositions: number;
+}
+
 export interface PortfolioOverviewProps {
   /** Positions in scope: every tracked position, or just one goal's. */
   bets: TrackedBet[];
@@ -27,6 +47,14 @@ export interface PortfolioOverviewProps {
   fallbackCash: number;
   /** Portfolio value that would mean "done". Null when there is no target to claim. */
   targetValue: number | null;
+  /** Measured value of the positions. Absent while it is still being fetched. */
+  valueNow?: PortfolioValueNow;
+  /**
+   * Recorded value history, for the chart. Only the whole-portfolio view has one:
+   * history is not kept per goal, and drawing the global series on a single goal
+   * would be a lie about that goal.
+   */
+  historyPoints?: { time: number; value: number }[];
   onFindRoutes: () => void;
   onOpenPositions: () => void;
   /** Copy for the nothing-tracked-yet state, which differs per goal. */
@@ -35,18 +63,26 @@ export interface PortfolioOverviewProps {
 }
 
 /**
- * Projected value, allocation and positions for a set of tracked positions.
- * Shared by the Portfolio tab (every position) and the Goals tab (one goal's),
- * so the two never drift into showing the same numbers two different ways.
+ * Value, allocation and positions for a set of tracked positions. Shared by the
+ * Portfolio tab (every position) and a goal's own page (one goal's), so the two
+ * never drift into showing the same numbers two different ways.
+ *
+ * The headline is what the positions are worth *now*, from live prices — the same
+ * measurement Home shows, so the two screens agree. Expected profit is a separate,
+ * labelled figure: it is a probability-weighted average over outcomes, not a value
+ * the portfolio will ever print, and summing it into the headline made a modelled
+ * number look like a real balance.
  */
 export function PortfolioOverview({
   bets,
   fallbackCash,
   targetValue,
+  valueNow,
+  historyPoints,
   onFindRoutes,
   onOpenPositions,
   emptyTitle = 'No portfolio yet',
-  emptyBody = 'Set a goal, pick a route, and your allocation, projected value, and odds of hitting the target all show up here.',
+  emptyBody = 'Set a goal, pick a route, and what it is worth, where it sits, and your odds of hitting the target all show up here.',
 }: PortfolioOverviewProps): React.ReactElement {
   const theme = useTheme();
   const money = useMoney();
@@ -57,14 +93,22 @@ export function PortfolioOverview({
   const activeBets = useMemo(() => bets.filter((bet) => bet.status === 'active'), [bets]);
   const stats = useMemo(() => portfolioStats(bets, conservative), [bets, conservative]);
   const rows = useMemo(() => buildAllocationRows(bets, fallbackCash, conservative), [bets, conservative, fallbackCash]);
-  const equity = useMemo(() => buildEquitySeries(bets, fallbackCash, conservative), [bets, conservative, fallbackCash]);
 
   const staked = activeBets.reduce((sum, bet) => sum + bet.amountWagered, 0);
-  const projectedValue = equity.at(-1)?.value ?? staked;
-  const startingValue = equity[0]?.value ?? projectedValue;
-  const change = projectedValue - startingValue;
-  const changePct = startingValue > 0 ? (change / startingValue) * 100 : 0;
-  const positive = change >= 0;
+  // Falls back to the principal rather than to a modelled figure: before any price
+  // arrives, what you put in is the only thing actually known.
+  const value = valueNow?.value ?? staked;
+  const netPnl = valueNow?.netPnl ?? 0;
+  const netPct = staked > 0 ? (netPnl / staked) * 100 : 0;
+  const positive = netPnl >= 0;
+  const expectedProfit = activeBets.length > 0 ? stats.totalEv : 0;
+  // The horizon the expectation belongs to. Without it, a 3-day bet and a 5-month
+  // bond get summed into one number with no date attached to it.
+  const longestMaturity = activeBets.reduce(
+    (longest, bet) => Math.max(longest, bet.maturesInDays ?? 0),
+    0,
+  );
+  const chartPoints = historyPoints && historyPoints.length >= 2 ? historyPoints : null;
   const goalProbability = activeBets.length > 0 ? stats.goalProbability : 0;
   const weightedReturn = activeBets.length > 0 ? stats.weightedReturnPct : 0;
   const isEmpty = activeBets.length === 0 && fallbackCash <= 0;
@@ -89,35 +133,50 @@ export function PortfolioOverview({
         }}>
         <View className="flex-row items-center justify-between">
           <ThemedText style={{ fontSize: 11, fontWeight: '800', color: theme.textTertiary, letterSpacing: 0.8 }}>
-            PROJECTED VALUE
+            WORTH NOW
           </ThemedText>
           <ThemedText style={{ fontSize: 11, fontWeight: '700', color: theme.textSecondary, ...MONO }}>
-            {money(staked, { decimals: 0 })} staked
+            {money(staked, { decimals: 0 })} put in
           </ThemedText>
         </View>
 
         <ThemedText
           style={{ fontSize: 38, lineHeight: 46, fontWeight: '800', color: theme.text, letterSpacing: -1.3, marginTop: 8, ...MONO }}
           numberOfLines={1}>
-          {money(projectedValue)}
+          {money(value)}
         </ThemedText>
 
         <View className="flex-row items-center" style={{ gap: 7, marginTop: 1 }}>
           <ThemedText style={{ fontSize: 14, fontWeight: '800', color: positive ? Brand[500] : Accent.red, ...MONO }}>
-            {money(change, { signed: true })} ({positive ? '+' : '−'}{Math.abs(changePct).toFixed(1)}%)
+            {money(netPnl, { signed: true })} ({positive ? '+' : '−'}{Math.abs(netPct).toFixed(1)}%)
           </ThemedText>
-          <ThemedText style={{ fontSize: 12, color: theme.textTertiary }}>expected</ThemedText>
+          <ThemedText style={{ fontSize: 12, color: theme.textTertiary }}>
+            since you bought in
+          </ThemedText>
         </View>
 
-        <View style={{ marginTop: 10 }}>
-          <PerformanceChart points={equity} />
-        </View>
+        {/* Real recorded history only. The old chart plotted each position's expected
+            future profit against the date it was opened, so the line climbed simply
+            because you had opened something. */}
+        {chartPoints ? (
+          <View style={{ marginTop: 10 }}>
+            <PerformanceChart points={chartPoints} />
+          </View>
+        ) : null}
 
         <View
           className="flex-row items-center justify-between"
           style={{ borderTopWidth: 1, borderTopColor: theme.border, paddingTop: 12, marginTop: 8, gap: 10 }}>
           <ThemedText style={{ fontSize: 11, lineHeight: 15, color: theme.textTertiary, flex: 1 }}>
-            Modelled from expected value — not a guarantee.
+            {valueNow == null
+              ? 'Waiting on prices — showing what you put in.'
+              : valueNow.livePositions > 0 && valueNow.projectedPositions > 0
+                ? `${valueNow.livePositions} priced live · ${valueNow.projectedPositions} estimated from yield.`
+                : valueNow.livePositions > 0
+                  ? `${valueNow.livePositions} position${valueNow.livePositions === 1 ? '' : 's'} priced from live markets.`
+                  : valueNow.projectedPositions > 0
+                    ? 'Estimated from tracked yield and time held.'
+                    : 'No live price yet — showing what you put in.'}
           </ThemedText>
           <Pressable
             onPress={() => update({ conservativeProjections: !conservative })}
@@ -144,10 +203,16 @@ export function PortfolioOverview({
       {/* Headline metrics */}
       <View className="flex-row" style={{ gap: 12 }}>
         <MetricTile
-          label="Weighted return"
-          value={`${weightedReturn < 0 ? '−' : ''}${Math.abs(weightedReturn).toFixed(1)}%`}
-          valueColor={weightedReturn >= 0 ? Brand[500] : Accent.red}
-          caption={conservative ? 'Stocks & crypto counted at 0%' : 'Across every active position'}
+          label="Expected profit"
+          value={money(expectedProfit, { decimals: 0, signed: true })}
+          valueColor={expectedProfit >= 0 ? Brand[500] : Accent.red}
+          caption={
+            activeBets.length === 0
+              ? 'Nothing working yet'
+              : `${weightedReturn >= 0 ? '+' : '−'}${Math.abs(weightedReturn).toFixed(1)}% on average${
+                longestMaturity > 0 ? ` over ${maturityWords(longestMaturity)}` : ''
+              }${conservative ? ' · stocks & crypto at 0%' : ''}`
+          }
         />
         <MetricTile
           label="Goal probability"

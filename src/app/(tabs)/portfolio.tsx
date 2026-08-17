@@ -4,6 +4,7 @@ import { ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useGoalsProgress } from '@/api/hooks/useGoalProgress';
+import { usePortfolioProgress } from '@/api/hooks/usePortfolioProgress';
 import { useSavedRoutes } from '@/api/hooks/useSavedRoutes';
 import { useSavingsGoal } from '@/api/hooks/useSavingsGoal';
 import { useTrackedBets } from '@/api/hooks/useTrackedBets';
@@ -27,6 +28,9 @@ export default function PortfolioScreen(): React.ReactElement {
 
   const latestSearch = history[0] ?? null;
   const fallbackCash = latestSearch?.quizSnapshot.balance ?? 0;
+  // The same measurement Home shows, so the two screens can't disagree about what
+  // the portfolio is worth.
+  const progress = usePortfolioProgress(fallbackCash);
   const activeBets = useMemo(() => bets.filter((bet) => bet.status === 'active'), [bets]);
   const staked = activeBets.reduce((sum, bet) => sum + bet.amountWagered, 0);
 
@@ -63,6 +67,13 @@ export default function PortfolioScreen(): React.ReactElement {
             bets={bets}
             fallbackCash={fallbackCash}
             targetValue={targetValue}
+            valueNow={{
+              value: progress.value,
+              netPnl: progress.goalProgress,
+              livePositions: progress.livePositions,
+              projectedPositions: progress.projectedPositions,
+            }}
+            historyPoints={progress.points}
             onFindRoutes={() => router.push('/(tabs)/routes')}
             onOpenPositions={() => router.push('/positions')}
           />

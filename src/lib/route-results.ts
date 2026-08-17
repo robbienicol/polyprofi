@@ -1,4 +1,5 @@
 import { timeframeCalendarDays } from '@/api/client/playbook';
+import { isPredictionCategory } from '@/lib/prediction-topics';
 import { goalEffectivenessScore, sortByPatheyScore } from '@/lib/score';
 import type { GoalScoreBreakdown, GoalScoreContext } from '@/lib/score';
 import { rescoreForStake, stakeNeededForReturn } from '@/lib/stake-rescore';
@@ -11,6 +12,21 @@ export interface RouteFilters {
   lossProfile: Route['lossProfile'] | null;
   minimumProbability: number;
   sort: RouteSort;
+  /**
+   * Prediction-market topic ('sports', 'politics', ...). Only meaningful while the
+   * prediction asset class is selected, since no other route carries a topic.
+   */
+  predictionTopic: string | null;
+  /** Longest acceptable time to resolution, in days. Null means any. */
+  maxDaysToResolve: number | null;
+  /** Sections the list by probability band instead of showing one flat ranking. */
+  groupByChance: boolean;
+  /**
+   * Free-text market search ("Messi", "Tesla"). Matches on what the user can read
+   * on the card, and while it is set the near-miss relevance rule stands down —
+   * asking for a market by name should show it even when it misses the goal.
+   */
+  keyword: string;
 }
 
 export interface RouteResults {
@@ -19,6 +35,71 @@ export interface RouteResults {
   requiredInvestmentById: Map<string, number | null>;
   scoreById: Map<string, GoalScoreBreakdown>;
   selectedStake: (route: Route) => number;
+}
+
+/** A run of routes that share a probability band, in descending order of chance. */
+export interface RouteGroup {
+  /** Lower bound of the band, in percent — also the group's identity. */
+  floor: number;
+  label: string;
+  routes: Route[];
+}
+
+/**
+ * Bands routes by market-implied chance. Bounds mirror polymarketRiskLevel in
+ * @/lib/polymarket-routes so a band means the same thing here as it does when the
+ * pool is built: 85+ high confidence, 65-84 likely, 35-64 a coin-flip-ish call,
+ * under 35 a long shot.
+ */
+const CHANCE_BANDS: readonly { floor: number; label: string }[] = [
+  { floor: 85, label: 'Very likely' },
+  { floor: 65, label: 'Likely' },
+  { floor: 35, label: 'Toss-up' },
+  { floor: 0, label: 'Long shot' },
+];
+
+/**
+ * Whether the prediction-only facets are live. They apply only while a prediction
+ * asset class is selected — the panel that sets them is hidden otherwise, and a
+ * filter the user cannot see narrowing the list is a bug, not a feature. State is
+ * kept rather than cleared so returning to prediction markets restores the picks.
+ */
+export function predictionFacetsActive(filters: RouteFilters): boolean {
+  return isPredictionCategory(filters.category);
+}
+
+/** The keyword actually in force: only while the prediction facets are live. */
+export function activeKeyword(filters: RouteFilters): string {
+  return predictionFacetsActive(filters) ? filters.keyword.trim() : '';
+}
+
+/**
+ * Whether a route reads as a match for the typed words. Matches on the text the
+ * user can actually see — description and line — so a hit is always explicable by
+ * looking at the card. Every word must appear, which makes "messi ronaldo" narrow
+ * rather than widen.
+ */
+export function routeMatchesKeyword(route: Route, keyword: string): boolean {
+  const words = keyword.toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return true;
+  const haystack = `${route.description} ${route.line ?? ''}`.toLowerCase();
+  return words.every((word) => haystack.includes(word));
+}
+
+export function groupRoutesByChance(routes: Route[]): RouteGroup[] {
+  return CHANCE_BANDS
+    .map(({ floor, label }, index) => {
+      // Bands are listed descending, so this band's ceiling is the previous band's
+      // floor. Deriving it by searching for "a larger floor" would find the largest
+      // one every time and make the lower bands overlap.
+      const ceiling = index === 0 ? Infinity : CHANCE_BANDS[index - 1].floor;
+      return {
+        floor,
+        label,
+        routes: routes.filter((route) => route.probability >= floor && route.probability < ceiling),
+      };
+    })
+    .filter((group) => group.routes.length > 0);
 }
 
 export function resolveInvestmentAmount(editedAmount: number | null, referenceStake: number): number {
@@ -77,15 +158,20 @@ export function buildRouteResults(
   );
   // Drop irrelevant near-misses before anything else, so scores, ranking, and the
   // "N ways to make $X" count all reflect only routes worth showing, judged against
-  // the amount the user said they are willing to invest.
-  const relevantRoutes = routes.filter((route) =>
-    isRelevantRoute({
-      target,
-      projectedReturn: rescoreForStake([route], referenceStake, intendedInvestment, target)[0].expectedReturn,
-      requiredInvestment: requiredInvestmentById.get(route.id) ?? null,
-      intendedInvestment,
-    })
-  );
+  // the amount the user said they are willing to invest. A keyword search is the one
+  // exception: the user named what they want, so hiding a match for missing the goal
+  // would look broken. The score and the "below current goal" label still say so.
+  const keyword = activeKeyword(filters);
+  const relevantRoutes = keyword
+    ? routes
+    : routes.filter((route) =>
+      isRelevantRoute({
+        target,
+        projectedReturn: rescoreForStake([route], referenceStake, intendedInvestment, target)[0].expectedReturn,
+        requiredInvestment: requiredInvestmentById.get(route.id) ?? null,
+        intendedInvestment,
+      })
+    );
   // Spend only what a route needs to reach the target, never more than the user
   // is willing to invest.
   const selectedStake = (route: Route): number => {
@@ -111,6 +197,18 @@ export function buildRouteResults(
   if (filters.lossProfile) filtered = filtered.filter((route) => route.lossProfile === filters.lossProfile);
   if (filters.minimumProbability > 0) {
     filtered = filtered.filter((route) => route.probability >= filters.minimumProbability);
+  }
+  if (predictionFacetsActive(filters)) {
+    if (keyword) filtered = filtered.filter((route) => routeMatchesKeyword(route, keyword));
+    // A route with no topic is unknown, not a non-match, but it still cannot satisfy a
+    // topic the user asked for — so it drops out while a topic filter is active.
+    if (filters.predictionTopic) {
+      filtered = filtered.filter((route) => route.predictionTopic === filters.predictionTopic);
+    }
+    if (filters.maxDaysToResolve != null) {
+      const limit = filters.maxDaysToResolve;
+      filtered = filtered.filter((route) => (route.maturesInDays ?? Infinity) <= limit);
+    }
   }
   if (filters.sort !== 'score') filtered = [...filtered].sort(sortComparator(filters.sort));
 
@@ -174,6 +272,10 @@ export function __selfCheck(): void {
     lossProfile: null,
     minimumProbability: 0,
     sort: 'score',
+    predictionTopic: null,
+    maxDaysToResolve: null,
+    groupByChance: false,
+    keyword: '',
   };
   const reportedRoute: Route = {
     id: 'reported-87c',
@@ -221,6 +323,123 @@ export function __selfCheck(): void {
   console.assert(
     stocksOnly.filtered.length === 1 && stocksOnly.filtered[0].id === overBudgetRoute.id,
     'asset-class filter keeps only routes in the selected category',
+  );
+
+  // ── prediction facets ─────────────────────────────────────────────────────
+  const sportsRoute: Route = { ...reportedRoute, id: 'pm-sports', predictionTopic: 'sports' };
+  const politicsRoute: Route = { ...reportedRoute, id: 'pm-politics', predictionTopic: 'politics' };
+  const untaggedRoute: Route = { ...reportedRoute, id: 'pm-untagged' };
+  const pool = [sportsRoute, politicsRoute, untaggedRoute];
+
+  const sportsOnly = buildRouteResults(pool, params, 1000, { ...filters, category: 'Polymarket', predictionTopic: 'sports' });
+  console.assert(
+    sportsOnly.filtered.length === 1 && sportsOnly.filtered[0].id === 'pm-sports',
+    'a topic filter keeps only routes carrying that topic',
+  );
+  console.assert(
+    buildRouteResults(pool, params, 1000, filters).filtered.length === 3,
+    'with no topic filter, untagged prediction routes still show',
+  );
+  // Regression: leaving the prediction asset class hides the facet panel, so its
+  // filters must stop applying. Otherwise the list silently narrows with no visible
+  // control explaining why.
+  const topicSetButPanelHidden = buildRouteResults(pool, params, 1000, {
+    ...filters,
+    category: null,
+    predictionTopic: 'sports',
+    maxDaysToResolve: 7,
+  });
+  console.assert(
+    topicSetButPanelHidden.filtered.length === 3,
+    'prediction facets do not apply while the panel that sets them is hidden',
+  );
+  console.assert(
+    buildRouteResults(pool, params, 1000, { ...filters, category: 'Polymarket', predictionTopic: 'sports' }).filtered.length === 1,
+    'prediction facets do apply once a prediction asset class is selected',
+  );
+  console.assert(
+    !predictionFacetsActive({ ...filters, category: null }) && predictionFacetsActive({ ...filters, category: 'Polymarket' }),
+    'facets are live only for prediction asset classes',
+  );
+
+  const soon: Route = { ...reportedRoute, id: 'soon', maturesInDays: 3 };
+  const later: Route = { ...reportedRoute, id: 'later', maturesInDays: 40 };
+  const noDate: Route = { ...reportedRoute, id: 'no-date', maturesInDays: undefined };
+  const within7 = buildRouteResults([soon, later, noDate], params, 1000, { ...filters, category: 'Polymarket', maxDaysToResolve: 7 });
+  console.assert(
+    within7.filtered.length === 1 && within7.filtered[0].id === 'soon',
+    'a resolution window keeps only routes maturing inside it, and drops undated ones',
+  );
+
+  // ── chance grouping ───────────────────────────────────────────────────────
+  const band = (id: string, probability: number): Route => ({ ...reportedRoute, id, probability });
+  const groups = groupRoutesByChance([band('a', 92), band('b', 70), band('c', 50), band('d', 12), band('e', 88)]);
+  console.assert(
+    groups.map((g) => g.floor).join(',') === '85,65,35,0',
+    'groups run from most to least likely',
+  );
+  console.assert(
+    groups[0].routes.length === 2 && groups[0].label === 'Very likely',
+    'the 85+ band collects every route at or above 85',
+  );
+  console.assert(
+    groups.every((g) => g.routes.length > 0),
+    'empty bands are omitted rather than rendered as empty sections',
+  );
+  console.assert(
+    groupRoutesByChance([band('x', 84)])[0].floor === 65,
+    '84% sits in the 65-84 band, not the 85+ one',
+  );
+  console.assert(groupRoutesByChance([]).length === 0, 'no routes means no groups');
+
+  // ── keyword search ────────────────────────────────────────────────────────
+  const messi: Route = { ...reportedRoute, id: 'pm-messi', description: 'Buy Yes on “Will Lionel Messi score in the final?” at 41¢', line: 'Yes 41¢' };
+  const tesla: Route = { ...reportedRoute, id: 'pm-tesla', description: 'Buy No on “Tesla launches robotaxis in California by Dec 31” at 84¢', line: 'No 84¢' };
+  console.assert(routeMatchesKeyword(messi, 'messi'), 'a keyword matches case-insensitively');
+  console.assert(routeMatchesKeyword(messi, 'MESSI final'), 'every word must appear, and case is ignored');
+  console.assert(!routeMatchesKeyword(messi, 'messi ronaldo'), 'an extra word narrows rather than widens');
+  console.assert(!routeMatchesKeyword(tesla, 'messi'), 'an unrelated route does not match');
+  console.assert(routeMatchesKeyword(tesla, '  '), 'an all-whitespace keyword matches everything');
+  console.assert(routeMatchesKeyword(tesla, '84¢'), 'the line is searchable too');
+
+  const keyworded = buildRouteResults([messi, tesla], params, 1000, { ...filters, category: 'Polymarket', keyword: 'messi' });
+  console.assert(
+    keyworded.filtered.length === 1 && keyworded.filtered[0].id === 'pm-messi',
+    'a keyword narrows the list to matching routes',
+  );
+  console.assert(
+    activeKeyword({ ...filters, keyword: 'messi' }) === '',
+    'a keyword does not apply while the prediction facets are hidden',
+  );
+  console.assert(
+    buildRouteResults([messi, tesla], params, 1000, { ...filters, keyword: 'messi' }).filtered.length === 2,
+    'a keyword set outside the prediction class leaves the list alone',
+  );
+
+  // A named market that cannot reach the goal must still show: the user asked for it.
+  // The stake-rescorer derives the return from the contract price in `line`, not from
+  // expectedReturn, so "hopeless" has to be a genuinely expensive contract: 97¢ pays
+  // about +$31 on $1,000, well under the $100 goal and under the near-miss floor.
+  const hopeless: Route = {
+    ...reportedRoute,
+    id: 'pm-hopeless',
+    description: 'Buy Yes on “Messi plays in the next match” at 97¢',
+    line: 'Yes 97¢',
+    probability: 97,
+    meetsTarget: false,
+  };
+  const namedButShort = buildRouteResults([hopeless], params, 1000, { ...filters, category: 'Polymarket', keyword: 'messi' });
+  console.assert(
+    namedButShort.filtered.some((route) => route.id === 'pm-hopeless'),
+    'a searched market that misses the goal is still shown rather than filtered away',
+  );
+  console.assert(
+    buildRouteResults([hopeless], params, 1000, { ...filters, category: 'Polymarket' }).filtered.length === 0,
+    'without a keyword the same hopeless route is still dropped as irrelevant',
+  );
+  console.assert(
+    groupRoutesByChance([band('a', 92), band('b', 70)]).reduce((n, g) => n + g.routes.length, 0) === 2,
+    'grouping partitions the routes without dropping or duplicating any',
   );
 }
 

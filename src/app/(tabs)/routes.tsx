@@ -1,10 +1,11 @@
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useQuizAnswers } from '@/api/hooks/useQuizAnswers';
 import { useRoutes } from '@/api/hooks/useRoutes';
+import { usePredictionSearch } from '@/api/hooks/usePredictionSearch';
 import { useSavedRoutes } from '@/api/hooks/useSavedRoutes';
 import { useSavingsGoal } from '@/api/hooks/useSavingsGoal';
 import { useTrackedBets } from '@/api/hooks/useTrackedBets';
@@ -20,7 +21,7 @@ import { betOutcomeSide } from '@/lib/bet-monitor-match';
 import { scheduleWeeklyReminder } from '@/lib/notifications';
 import { parseEntryPrice } from '@/lib/parse-bet-line';
 import { openTradeDestination, preferredTradeDestination, tradeDestinationLabel } from '@/lib/route-actions';
-import { buildRouteResults, resolveInvestmentAmount } from '@/lib/route-results';
+import { activeKeyword, buildRouteResults, groupRoutesByChance, predictionFacetsActive, resolveInvestmentAmount } from '@/lib/route-results';
 import type { RouteFilters as Filters } from '@/lib/route-results';
 import { trackedPositionFields } from '@/lib/tracked-assets';
 import type { Route, RouteParams, SavedRoutesBatch } from '@/types/routes';
@@ -30,6 +31,10 @@ const DEFAULT_FILTERS: Filters = {
   lossProfile: null,
   minimumProbability: 0,
   sort: 'score',
+  predictionTopic: null,
+  maxDaysToResolve: null,
+  groupByChance: false,
+  keyword: '',
 };
 
 export default function RoutesScreen(): React.ReactElement {
@@ -63,7 +68,12 @@ export default function RoutesScreen(): React.ReactElement {
   const [recentRoutes, setRecentRoutes] = useState<Route[] | null>(null);
   const shouldFetch = sessionParams !== null && (isGenerating || manualRefresh);
   const { routes: fetchedRoutes, isLoading, isFetching, error, refresh } = useRoutes(sessionParams, { enabled: shouldFetch });
-  const routes = shouldFetch ? fetchedRoutes : viewedBatch?.routes ?? recentRoutes ?? latestBatch?.routes ?? [];
+  // Memoised because the keyword-search pool below derives from it: a fresh array
+  // every render would rebuild that pool every render.
+  const routes = useMemo(
+    () => (shouldFetch ? fetchedRoutes : viewedBatch?.routes ?? recentRoutes ?? latestBatch?.routes ?? []),
+    [shouldFetch, fetchedRoutes, viewedBatch?.routes, recentRoutes, latestBatch?.routes],
+  );
 
   const [trackingId, setTrackingId] = useState<string | null>(null);
   const [trackingAmount, setTrackingAmount] = useState('');
@@ -100,8 +110,18 @@ export default function RoutesScreen(): React.ReactElement {
     setVisibleCount(30);
   }
 
+  // Keyword search reaches past this goal's pool into all of Polymarket, so its hits
+  // are merged in before scoring. Ids already present win, so a market that is both
+  // searched and already a route is not duplicated.
+  const search = usePredictionSearch(activeKeyword(filters), sessionParams);
+  const searchPool = useMemo(() => {
+    if (search.routes.length === 0) return routes;
+    const known = new Set(routes.map((route) => route.id));
+    return [...routes, ...search.routes.filter((route) => !known.has(route.id))];
+  }, [routes, search.routes]);
+
   const results = sessionParams
-    ? buildRouteResults(routes, sessionParams, displayedInvestment, filters)
+    ? buildRouteResults(searchPool, sessionParams, displayedInvestment, filters)
     : null;
   const ranked = results?.ranked ?? [];
   const filtered = results?.filtered ?? [];
@@ -179,6 +199,33 @@ export default function RoutesScreen(): React.ReactElement {
   } : null;
   const visibleRoutes = filtered.slice(0, visibleCount);
 
+  const renderRoute = (route: Route): React.ReactElement | null => {
+    const destination = preferredTradeDestination(route, sessionParams?.preferredPlatforms);
+    return (
+      <View key={route.id} className="gap-0.5">
+        <RouteCard
+          route={route}
+          requiredInvestment={results?.requiredInvestmentById.get(route.id)}
+          currentInvestment={results?.selectedStake(route)}
+          onTrack={trackingId === null ? () => {
+            setTrackingId(route.id);
+            setTrackingAmount(String(results?.selectedStake(route) ?? referenceStake));
+          } : undefined}
+          onPress={() => router.push(`/route/${route.id}?stake=${results?.selectedStake(route) ?? referenceStake}&available=${displayedInvestment}`)}
+        />
+        {trackingId === route.id && (
+          <TrackRouteForm
+            amount={trackingAmount}
+            destinationLabel={tradeDestinationLabel(destination)}
+            onAmountChange={setTrackingAmount}
+            onConfirm={() => confirmAcquire(route)}
+            onCancel={() => setTrackingId(null)}
+          />
+        )}
+      </View>
+    );
+  };
+
   return (
     <Screen>
       <ScrollView
@@ -198,37 +245,24 @@ export default function RoutesScreen(): React.ReactElement {
             onBackToLatest={() => router.replace('/(tabs)/routes')}
           />
         )}
-        {ranked.length > 0 && <RouteFilters filters={filters} categories={ranked.map((route) => route.category)} onChange={setFiltersAndReset} />}
+        {ranked.length > 0 && (
+          <RouteFilters
+            filters={filters}
+            categories={ranked.map((route) => route.category)}
+            onChange={setFiltersAndReset}
+            isSearching={search.isSearching}
+            searchResultCount={search.routes.length}
+          />
+        )}
         {error && <RoutesError message={error} onRetry={refresh} />}
-        {visibleRoutes.map((route) => {
-          const scoreBreakdown = results?.scoreById.get(route.id);
-          if (!scoreBreakdown) return null;
-          const destination = preferredTradeDestination(route, sessionParams?.preferredPlatforms);
-          return (
-            <View key={route.id} className="gap-0.5">
-              <RouteCard
-                route={route}
-                requiredInvestment={results?.requiredInvestmentById.get(route.id)}
-                currentInvestment={results?.selectedStake(route)}
-                scoreBreakdown={scoreBreakdown}
-                onTrack={trackingId === null ? () => {
-                  setTrackingId(route.id);
-                  setTrackingAmount(String(results?.selectedStake(route) ?? referenceStake));
-                } : undefined}
-                onPress={() => router.push(`/route/${route.id}?stake=${results?.selectedStake(route) ?? referenceStake}&available=${displayedInvestment}`)}
-              />
-              {trackingId === route.id && (
-                <TrackRouteForm
-                  amount={trackingAmount}
-                  destinationLabel={tradeDestinationLabel(destination)}
-                  onAmountChange={setTrackingAmount}
-                  onConfirm={() => confirmAcquire(route)}
-                  onCancel={() => setTrackingId(null)}
-                />
-              )}
+        {filters.groupByChance && predictionFacetsActive(filters)
+          ? groupRoutesByChance(visibleRoutes).map((group) => (
+            <View key={group.floor} className="gap-3">
+              <ChanceGroupHeader label={group.label} routes={group.routes} />
+              {group.routes.map(renderRoute)}
             </View>
-          );
-        })}
+          ))
+          : visibleRoutes.map(renderRoute)}
         {visibleCount < filtered.length && (
           <Pressable onPress={() => setVisibleCount((count) => count + 30)} className="items-center active:opacity-70" style={{ borderRadius: Radius.md, paddingVertical: 12, borderWidth: 1, borderColor: theme.border, backgroundColor: theme.backgroundElement }}>
             <ThemedText style={{ fontSize: 13, fontWeight: '800', color: Brand[500] }}>Show 30 more · {filtered.length - visibleCount} remaining</ThemedText>
@@ -238,6 +272,34 @@ export default function RoutesScreen(): React.ReactElement {
         {routes.length > 0 && <ThemedText type="small" themeColor="textSecondary" className="text-center" style={{ opacity: 0.4 }}>{isHistorical ? 'Saved search · ' : ''}Pull down to refresh · AI-generated · For entertainment only</ThemedText>}
       </ScrollView>
     </Screen>
+  );
+}
+
+/**
+ * Header for a probability band. Reports the range actually present in the group
+ * rather than the band's nominal bounds — "58-64%" is true of these routes, where
+ * "35-64%" would only be true of the band.
+ */
+function ChanceGroupHeader({ label, routes }: { label: string; routes: Route[] }): React.ReactElement {
+  const theme = useTheme();
+  const chances = routes.map((route) => route.probability);
+  const low = Math.min(...chances);
+  const high = Math.max(...chances);
+  const range = low === high ? `${low}%` : `${low}-${high}%`;
+
+  return (
+    <View className="flex-row items-center" style={{ gap: 8, paddingHorizontal: 4, paddingTop: 4 }}>
+      <ThemedText style={{ fontSize: 11, fontWeight: '900', color: Brand[500], letterSpacing: 0.9 }}>
+        {label.toUpperCase()}
+      </ThemedText>
+      <ThemedText style={{ fontSize: 11, fontWeight: '700', color: theme.textSecondary, fontVariant: ['tabular-nums'] }}>
+        {range}
+      </ThemedText>
+      <View style={{ flex: 1, height: 1, backgroundColor: theme.border }} />
+      <ThemedText style={{ fontSize: 11, color: theme.textTertiary, fontVariant: ['tabular-nums'] }}>
+        {routes.length} route{routes.length === 1 ? '' : 's'}
+      </ThemedText>
+    </View>
   );
 }
 

@@ -100,7 +100,8 @@ export function isRoute(value: unknown): value is Route {
     && isOptional(value.maturesInDays, isFiniteNumber)
     && isOptional(value.marketQuality, isMarketQualityFacts)
     && isOptional(value.sourceSlug, isString)
-    && isOptional(value.sourceEndDate, isString);
+    && isOptional(value.sourceEndDate, isString)
+    && isOptional(value.predictionTopic, isString);
 }
 
 function isMarketQualityFacts(value: unknown): value is MarketQualityFacts {

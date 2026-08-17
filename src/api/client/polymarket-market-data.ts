@@ -3,6 +3,7 @@ import {
   TIMEFRAME_MATURITY_LIMITS,
   timeframeMaturityLimit,
 } from '@/lib/quiz-profile';
+import { meaningfulTagSlugs } from '@/lib/prediction-topics';
 import { isRecord, parseJson, responseJson } from '@/lib/runtime-validation';
 import type { RouteParams } from '@/types/routes';
 
@@ -20,6 +21,8 @@ interface RawMarket {
   oneMonthPriceChange?: number | null;
   slug?: string;
   endDate?: string | null;
+  /** Present only because we request include_tag=true; see fetchPolymarketRaw. */
+  tags?: { slug?: string }[] | null;
 }
 
 export interface PolymarketSnapshot {
@@ -101,6 +104,9 @@ async function fetchPolymarketRaw(): Promise<RawMarket[]> {
       ascending: 'false',
       end_date_min: new Date(now + minDays * DAY_MS).toISOString(),
       end_date_max: new Date(now + maxDays * DAY_MS).toISOString(),
+      // Topics come from tags, and tags are omitted unless asked for. Sampled
+      // across every maturity band, 100% of markets carry at least one.
+      include_tag: 'true',
     });
     const response = await fetch(`https://gamma-api.polymarket.com/markets?${query}`, { headers: { Accept: 'application/json' } });
     if (!response.ok) {
@@ -197,11 +203,77 @@ async function searchPolymarketMarkets(question: string): Promise<PolymarketEntr
     if (!isRecord(value) || !Array.isArray(value.events)) return [];
     return value.events.flatMap((event) => {
       if (!isRecord(event) || !Array.isArray(event.markets)) return [];
-      return event.markets.filter(isRawMarket).map(toPolymarketEntry);
+      const eventTags = eventTagSlugs(event);
+      return event.markets
+        .filter(isRawMarket)
+        .map((market) => withInheritedTags(toPolymarketEntry(market), eventTags));
     });
   } catch {
     return [];
   }
+}
+
+/**
+ * Keyword search for the route list: "Messi", "Tesla", "Fed".
+ *
+ * Two things the raw endpoint gets wrong for this use. It happily returns settled
+ * markets — every "Messi" hit is closed and priced 0/1 — which would otherwise be
+ * offered as a route to buy Yes at 100¢. And it puts tags on the *event* while
+ * leaving the markets bare, so a searched market would lose its topic. Both are
+ * fixed here rather than at the call site.
+ */
+export async function searchPolymarketByKeyword(keyword: string): Promise<PolymarketEntry[]> {
+  const trimmed = keyword.trim();
+  if (trimmed.length < 2) return [];
+  const query = new URLSearchParams({ q: trimmed, limit_per_type: '20' });
+  try {
+    const response = await fetch(`https://gamma-api.polymarket.com/public-search?${query}`, { headers: { Accept: 'application/json' } });
+    if (!response.ok) {
+      console.warn(`[market-data:polymarket] keyword search: ${response.status}`);
+      return [];
+    }
+    const value = await responseJson(response);
+    if (!isRecord(value) || !Array.isArray(value.events)) return [];
+
+    const entries = value.events.flatMap((event) => {
+      if (!isRecord(event) || !Array.isArray(event.markets)) return [];
+      // A settled event's markets are all history, whatever their own flags say.
+      if (event.closed === true) return [];
+      const eventTags = eventTagSlugs(event);
+      return event.markets
+        .filter((market): market is RawMarket => isRawMarket(market) && isTradeableRaw(market))
+        .map((market) => withInheritedTags(toPolymarketEntry(market), eventTags));
+    });
+
+    // Same sanity floor the goal-scoped universe uses: two-sided, and priced
+    // somewhere a position can actually be taken.
+    const tradeable = entries.filter((market) => market.prices.length === 2
+      && market.outcomes.length === 2
+      && polymarketMaturityDays(market.endDate) != null
+      && market.prices.every((price) => Number.isFinite(price) && price >= 0.02 && price <= 0.98));
+
+    return [...new Map(tradeable.map((market) => [market.slug ?? market.question, market])).values()];
+  } catch {
+    return [];
+  }
+}
+
+function isTradeableRaw(market: RawMarket): boolean {
+  const record = market as unknown as Record<string, unknown>;
+  return record.closed !== true && record.active !== false;
+}
+
+function eventTagSlugs(event: Record<string, unknown>): string[] {
+  if (!Array.isArray(event.tags)) return [];
+  return meaningfulTagSlugs(
+    event.tags.map((tag) => (isRecord(tag) && typeof tag.slug === 'string' ? tag.slug : '')),
+  );
+}
+
+/** Search results carry tags on the event, so a market with none borrows its event's. */
+function withInheritedTags(entry: PolymarketEntry, eventTags: string[]): PolymarketEntry {
+  if (entry.tagSlugs?.length || eventTags.length === 0) return entry;
+  return { ...entry, tagSlugs: eventTags };
 }
 
 export function polymarketMaturityDays(
@@ -274,7 +346,17 @@ function toPolymarketEntry(market: RawMarket): PolymarketEntry {
     oneMonthPriceChange: finiteOptional(market.oneMonthPriceChange),
     slug: market.slug,
     endDate: typeof market.endDate === 'string' ? market.endDate : undefined,
+    tagSlugs: tagSlugsOf(market),
   };
+}
+
+/** Tag slugs as plain strings, with Polymarket's bookkeeping tags dropped. */
+function tagSlugsOf(market: RawMarket): string[] | undefined {
+  if (!Array.isArray(market.tags)) return undefined;
+  const slugs = meaningfulTagSlugs(
+    market.tags.map((tag) => (typeof tag?.slug === 'string' ? tag.slug : '')),
+  );
+  return slugs.length > 0 ? slugs : undefined;
 }
 
 function finiteOptional(value: number | null | undefined): number | undefined {

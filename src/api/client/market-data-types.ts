@@ -12,6 +12,8 @@ export interface PolymarketEntry {
   oneMonthPriceChange?: number;
   slug?: string;
   endDate?: string;
+  /** Polymarket tag slugs, bookkeeping tags already stripped. Absent when untagged. */
+  tagSlugs?: string[];
 }
 
 export interface KalshiEntry {

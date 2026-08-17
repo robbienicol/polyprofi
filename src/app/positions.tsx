@@ -146,7 +146,7 @@ export default function PositionsScreen(): React.ReactElement {
               ))}
 
               <ThemedText type="small" themeColor="textSecondary" className="text-center" style={{ opacity: 0.4 }}>
-                Pull down for live prices & scores · Sell when your goal hits
+                Pull down for live prices · Sell when your goal hits
               </ThemedText>
             </>
           ) : (

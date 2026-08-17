@@ -4,7 +4,6 @@ import Svg, { Circle, Path } from 'react-native-svg';
 
 import {
   BREAKDOWN_FACTORS,
-  BREAKDOWN_SCORE,
   CLOSING_PROOF,
   COACH_SCRIPT,
   COACH_STARTERS,
@@ -14,7 +13,6 @@ import {
 import { ThemedText } from '@/components/themed-text';
 import { Accent, Brand, Radius, RiskScale, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { scoreColor, scoreLabel } from '@/lib/score';
 
 export { OnboardingGlow } from '@/components/onboarding/OnboardingGlow';
 
@@ -124,49 +122,6 @@ function FadeIn({ children, delay = 0 }: { children: React.ReactNode; delay?: nu
       }}>
       {children}
     </Animated.View>
-  );
-}
-
-/**
- * 0 → 1 driver for the score bars, restarted whenever the slide becomes active so the
- * fill happens in front of the user. Width animation, so JS driver by necessity.
- */
-function useReplayedGrow(active: boolean, duration: number): Animated.Value {
-  const [grow] = useState(() => new Animated.Value(0));
-
-  useEffect(() => {
-    if (!active) {
-      grow.setValue(0);
-      return;
-    }
-    const animation = Animated.timing(grow, {
-      toValue: 1,
-      duration,
-      delay: 180,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: false,
-    });
-    animation.start();
-    return () => animation.stop();
-  }, [active, duration, grow]);
-
-  return grow;
-}
-
-function Bar({
-  fraction,
-  color,
-  height = 4,
-}: {
-  fraction: Animated.AnimatedInterpolation<string>;
-  color: string;
-  height?: number;
-}) {
-  const theme = useTheme();
-  return (
-    <View style={{ height, borderRadius: 999, backgroundColor: theme.backgroundSelected, overflow: 'hidden' }}>
-      <Animated.View style={{ width: fraction, height, borderRadius: 999, backgroundColor: color }} />
-    </View>
   );
 }
 
@@ -310,15 +265,12 @@ function ScanHero({ active }: PreviewProps): React.ReactElement {
 function RankPreview({ active }: PreviewProps): React.ReactElement {
   const theme = useTheme();
   const compact = useCompact();
-  const grow = useReplayedGrow(active, 1100);
 
   return (
-    <View className="flex-1 justify-center">
-      <Panel title="RANKED FOR YOUR GOAL" chip="BY VALUE">
+    <View className="flex-1 justify-center" style={{ opacity: active ? 1 : 0.98 }}>
+      <Panel title="OPTIONS FOR YOUR GOAL" chip="SIDE BY SIDE">
         {RANKED_PREVIEW.map((row, index) => {
-          const sc = scoreColor(row.score);
           const rc = RiskScale[row.riskLevel - 1] ?? theme.textTertiary;
-          const top = index === 0;
           return (
             <View
               key={row.name}
@@ -326,16 +278,9 @@ function RankPreview({ active }: PreviewProps): React.ReactElement {
                 paddingHorizontal: 10,
                 paddingVertical: compact ? 7 : 9,
                 borderRadius: Radius.md,
-                gap: 7,
-                backgroundColor: top ? Brand[500] + '12' : 'transparent',
-                borderWidth: 1,
-                borderColor: top ? Brand[500] + '3D' : 'transparent',
+                backgroundColor: index % 2 === 0 ? theme.backgroundElement : 'transparent',
               }}>
               <View className="flex-row items-center" style={{ gap: 9 }}>
-                <ThemedText
-                  style={{ fontSize: 11, fontWeight: '900', color: top ? Brand[500] : theme.textTertiary, width: 18, ...MONO }}>
-                  {index + 1}
-                </ThemedText>
                 <ThemedText style={{ fontSize: 14 }}>{row.emoji}</ThemedText>
                 <View className="flex-1">
                   <ThemedText style={{ fontSize: 12.5, fontWeight: '700', color: theme.text }} numberOfLines={1}>
@@ -348,24 +293,13 @@ function RankPreview({ active }: PreviewProps): React.ReactElement {
                     </ThemedText>
                   </View>
                 </View>
-                <View className="items-end">
-                  <ThemedText style={{ fontSize: 15, fontWeight: '900', color: sc, ...MONO }}>{row.score}</ThemedText>
-                  <ThemedText style={{ fontSize: 8.5, fontWeight: '800', color: sc, letterSpacing: 0.2 }}>
-                    {scoreLabel(row.score).toUpperCase()}
-                  </ThemedText>
-                </View>
               </View>
-              <Bar
-                fraction={grow.interpolate({ inputRange: [0, 1], outputRange: ['0%', `${row.score}%`] })}
-                color={sc}
-                height={3}
-              />
             </View>
           );
         })}
       </Panel>
       <ThemedText style={{ fontSize: 10.5, color: theme.textTertiary, textAlign: 'center', marginTop: 10 }}>
-        Chance 35% · safety 25% · cash 30% · time 10%
+        Chance · downside · cash required · time to payout
       </ThemedText>
     </View>
   );
@@ -376,65 +310,32 @@ function RankPreview({ active }: PreviewProps): React.ReactElement {
 function BreakdownPreview({ active }: PreviewProps): React.ReactElement {
   const theme = useTheme();
   const compact = useCompact();
-  const sc = scoreColor(BREAKDOWN_SCORE);
-  const grow = useReplayedGrow(active, 900);
-
-  const formula = BREAKDOWN_FACTORS.map((factor) => factor.points.toFixed(1)).join(' + ');
 
   return (
-    <View className="flex-1 justify-center">
-      <Panel title="SCORE MATH · VOO" chip="AUDITABLE">
-        <View className="flex-row items-end justify-between" style={{ paddingHorizontal: 10, paddingBottom: 2 }}>
+    <View className="flex-1 justify-center" style={{ opacity: active ? 1 : 0.98 }}>
+      <Panel title="ROUTE FACTS · VOO" chip="SOURCE-LINKED">
+        <View className="flex-row items-center justify-between" style={{ paddingHorizontal: 10, paddingBottom: 2 }}>
           <View>
-            <ThemedText style={{ fontSize: 11, color: theme.textSecondary }}>Value score</ThemedText>
-            <View className="flex-row items-baseline" style={{ gap: 3 }}>
-              <ThemedText style={{ fontSize: 30, fontWeight: '900', color: sc, letterSpacing: -1, ...MONO }}>
-                {BREAKDOWN_SCORE}
-              </ThemedText>
-              <ThemedText style={{ fontSize: 12, fontWeight: '700', color: theme.textTertiary, ...MONO }}>/100</ThemedText>
-            </View>
+            <ThemedText style={{ fontSize: 11, color: theme.textSecondary }}>S&P 500 ETF</ThemedText>
+            <ThemedText style={{ fontSize: 18, fontWeight: '900', color: theme.text }}>VOO</ThemedText>
           </View>
-          <View
-            style={{
-              paddingHorizontal: 9,
-              paddingVertical: 4,
-              borderRadius: Radius.pill,
-              backgroundColor: sc + '18',
-              borderWidth: 1,
-              borderColor: sc + '3D',
-            }}>
-            <ThemedText style={{ fontSize: 10, fontWeight: '800', color: sc }}>{scoreLabel(BREAKDOWN_SCORE)}</ThemedText>
-          </View>
+          <ThemedText style={{ fontSize: 10, fontWeight: '800', color: Brand[500] }}>LIVE QUOTE</ThemedText>
         </View>
 
         <View style={{ height: 1, backgroundColor: theme.border, marginHorizontal: 2 }} />
 
         {BREAKDOWN_FACTORS.map((factor) => (
-          <View key={factor.label} style={{ paddingHorizontal: 10, gap: 5, paddingVertical: 2 }}>
+          <View key={factor.label} style={{ paddingHorizontal: 10, paddingVertical: 5 }}>
             <View className="flex-row items-center justify-between">
-              <View className="flex-row items-center" style={{ gap: 6 }}>
-                <ThemedText style={{ fontSize: 11.5, fontWeight: '600', color: theme.text }}>{factor.label}</ThemedText>
-                <ThemedText style={{ fontSize: 9.5, fontWeight: '800', color: theme.textTertiary, ...MONO }}>
-                  {factor.weight}
-                </ThemedText>
-              </View>
-              <ThemedText style={{ fontSize: 11.5, fontWeight: '800', color: theme.text, ...MONO }}>
-                +{factor.points.toFixed(1)}
+              <ThemedText style={{ fontSize: 11.5, fontWeight: '600', color: theme.textSecondary }}>{factor.label}</ThemedText>
+              <ThemedText style={{ fontSize: 11.5, fontWeight: '800', color: theme.text }}>
+                {factor.value}
               </ThemedText>
             </View>
-            <Bar
-              fraction={grow.interpolate({ inputRange: [0, 1], outputRange: ['0%', `${factor.raw}%`] })}
-              color={Brand[500]}
-              height={3}
-            />
           </View>
         ))}
 
         <View style={{ height: 1, backgroundColor: theme.border, marginHorizontal: 2 }} />
-
-        <ThemedText style={{ fontSize: 11.5, fontWeight: '800', color: theme.text, paddingHorizontal: 10, ...MONO }}>
-          {formula} = {BREAKDOWN_SCORE}
-        </ThemedText>
 
         {compact ? null : (
           <View
@@ -634,7 +535,6 @@ function ClosePreview(): React.ReactElement {
   // Static by design: the closing slide should read as a finished plan, not an animation.
   const theme = useTheme();
   const compact = useCompact();
-  const sc = scoreColor(BREAKDOWN_SCORE);
 
   return (
     <View className="flex-1 justify-center" style={{ gap: 10 }}>
@@ -681,13 +581,13 @@ function ClosePreview(): React.ReactElement {
           <ThemedText style={{ fontSize: 16 }}>📈</ThemedText>
           <View className="flex-1">
             <ThemedText style={{ fontSize: 10, fontWeight: '800', letterSpacing: 0.5, color: Brand[500] }}>
-              #1 BEST VALUE
+              EXAMPLE OPTION
             </ThemedText>
             <ThemedText style={{ fontSize: 12, fontWeight: '700', color: theme.text }} numberOfLines={1}>
-              VOO · capital preserved
+              VOO · S&P 500 ETF
             </ThemedText>
           </View>
-          <ThemedText style={{ fontSize: 16, fontWeight: '900', color: sc, ...MONO }}>{BREAKDOWN_SCORE}</ThemedText>
+          <ThemedText style={{ fontSize: 12, fontWeight: '900', color: Brand[500] }}>View →</ThemedText>
         </View>
       </Panel>
 

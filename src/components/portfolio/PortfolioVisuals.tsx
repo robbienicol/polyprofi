@@ -20,7 +20,8 @@ const CLASS_COLORS = {
 
 type PortfolioClass = keyof typeof CLASS_COLORS;
 export type AllocationRow = ReturnType<typeof buildAllocationRows>[number];
-export type EquityPoint = ReturnType<typeof buildEquitySeries>[number];
+/** One recorded observation of portfolio value. */
+export type EquityPoint = { time: number; value: number };
 
 export function compactAssetClass(category: string): string {
   return category === 'Stocks & ETFs' ? 'Stocks' : assetClassFor(category);
@@ -45,21 +46,6 @@ export function buildAllocationRows(bets: TrackedBet[], fallbackCash: number, co
     pct: total > 0 ? (row.staked / total) * 100 : 0,
     evPct: total > 0 ? (row.ev / total) * 100 : 0,
   })).sort((a, b) => b.staked - a.staked);
-}
-
-export function buildEquitySeries(bets: TrackedBet[], fallbackCash: number, conservative: boolean) {
-  const sorted = [...bets].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-  const activeStake = bets.filter((bet) => bet.status === 'active').reduce((sum, bet) => sum + bet.amountWagered, 0);
-  const startingValue = fallbackCash || activeStake || 0;
-  const firstTime = sorted[0] ? new Date(sorted[0].createdAt).getTime() : Date.now();
-  const points = [{ time: firstTime - 3_600_000, value: startingValue }];
-  let value = startingValue;
-  for (const bet of sorted) {
-    value += bet.status === 'won' ? bet.expectedReturn : bet.status === 'lost' ? -bet.amountWagered : betEv(bet, conservative);
-    points.push({ time: new Date(bet.createdAt).getTime(), value });
-  }
-  points.push({ time: Date.now(), value });
-  return points;
 }
 
 /**
