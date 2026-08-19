@@ -93,7 +93,9 @@ function selectPolymarketUniverse(raw: RawMarket[], limit: number): PolymarketEn
 
 async function fetchPolymarketRaw(): Promise<RawMarket[]> {
   const now = Date.now();
-  const pages = await Promise.all(HORIZON_LIMITS.map(async (maxDays, index) => {
+  // allSettled, not all: one horizon band failing its request must not take the
+  // whole snapshot — and with it the whole route search — down with it.
+  const settled = await Promise.allSettled(HORIZON_LIMITS.map(async (maxDays, index) => {
     const minDays = index === 0 ? 0 : HORIZON_LIMITS[index - 1];
     const query = new URLSearchParams({
       active: 'true',
@@ -116,6 +118,11 @@ async function fetchPolymarketRaw(): Promise<RawMarket[]> {
     const value = await responseJson(response);
     return Array.isArray(value) ? value.filter(isRawMarket) : [];
   }));
+  const pages = settled.map((result) => {
+    if (result.status === 'fulfilled') return result.value;
+    console.warn(`[market-data:polymarket] page failed: ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`);
+    return [] as RawMarket[];
+  });
   return [...new Map(
     pages.flat().map((market) => [
       market.slug ?? `${market.question}|${market.endDate ?? ''}`,

@@ -24,6 +24,7 @@ import { enforceRouteIntegrity, filterRoutesForQuiz } from '@/lib/quiz-profile';
 import { buildEtfRoutes } from '@/lib/etf-routes';
 import { isDebtRoute } from '@/lib/route-investment-metrics';
 import { isRecord, isRoute, parseJson, responseJson } from '@/lib/runtime-validation';
+import { withTimeout } from '@/lib/with-timeout';
 import { buildSavingsAccountRoute, buildTreasuryRoutes } from '@/lib/savings-treasury-routes';
 import { sortByPatheyScore } from '@/lib/score';
 import { stakeNeededForReturn } from '@/lib/stake-rescore';
@@ -38,6 +39,11 @@ const TIMEFRAME_LABELS: Record<RouteParams['timeframe'], string> = {
   '1year': 'the next 12 months',
   '5years': 'the next 5 years',
 };
+// Ceilings on the two halves of a search. Nothing here is load-bearing on its own —
+// the deterministic builders alone produce a full result set — so a slow upstream
+// costs freshness, never the whole screen.
+const MARKET_DATA_TIMEOUT_MS = 20_000;
+const AI_TIMEOUT_MS = 45_000;
 const inflightRoutes = new Map<string, Promise<Route[]>>();
 
 type TokenProvider = () => Promise<string | null>;
@@ -67,11 +73,26 @@ async function generateRoutes(params: RouteParams, getToken?: TokenProvider): Pr
   const { balance, target, timeframe } = params;
   const returnPct = balance > 0 ? (target / balance) * 100 : 0;
   const fallbackMaturity = timeframeCalendarDays(timeframe);
-  const polymarketSnapshotRequest = fetchPolymarketSnapshot();
+  const polymarketSnapshotRequest = withTimeout(
+    fetchPolymarketSnapshot(),
+    MARKET_DATA_TIMEOUT_MS,
+    { context: [], universe: [] },
+    'routes:polymarket-snapshot',
+  );
   const [marketContext, polymarketSnapshot, polymarketPicks] = await Promise.all([
-    fetchMarketContext({ polymarket: polymarketSnapshotRequest.then((snapshot) => snapshot.context) }),
+    withTimeout(
+      fetchMarketContext({ polymarket: polymarketSnapshotRequest.then((snapshot) => snapshot.context) }),
+      MARKET_DATA_TIMEOUT_MS,
+      { polymarket: [], stocks: [], metaculus: [], treasuryBillYields: [], fetchedAt: new Date().toISOString() },
+      'routes:market-context',
+    ),
     polymarketSnapshotRequest,
-    fetchPolymarketPickBundle(),
+    withTimeout(
+      fetchPolymarketPickBundle(),
+      MARKET_DATA_TIMEOUT_MS,
+      { taggedEvents: [], commentPicks: [], edges: [], whaleTrades: [] },
+      'routes:polymarket-picks',
+    ),
   ]);
   const polymarketUniverse = polymarketSnapshot.universe;
   const rawPicks: RawPick[] = [
@@ -113,11 +134,14 @@ async function requestAiRoutes(
   try {
     const token = await getToken();
     if (!token) return [];
+    const abort = new AbortController();
+    const abortTimer = setTimeout(() => abort.abort(), AI_TIMEOUT_MS);
     const response = await fetch(`${apiBaseUrl()}/api/ai-routes`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ systemPrompt, userPrompt }),
-    });
+      signal: abort.signal,
+    }).finally(() => clearTimeout(abortTimer));
     if (!response.ok) {
       console.warn(`[routes:ai] server error ${response.status}`);
       return [];

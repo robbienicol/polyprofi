@@ -66,14 +66,22 @@ export function useQuizAnswers() {
 
   const { mutate: saveAnswers } = useMutation({
     mutationFn: async (answers: QuizAnswers): Promise<QuizAnswers> => {
+      // The on-device write is the one that matters — it's what the routes screen
+      // reads. Backend sync is best effort: a flaky /api/quiz must not strand the
+      // caller (the quiz button waits on onSuccess to navigate, so a throw here
+      // used to leave it stuck on "Finding routes…" forever).
       await setQuizAnswers(answers, signedIn ? userId : undefined);
       if (signedIn) {
-        const response = await request({
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(answers),
-        });
-        if (!response.ok) throw new Error(`Failed to save quiz answers (${response.status})`);
+        try {
+          const response = await request({
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(answers),
+          });
+          if (!response.ok) console.warn(`[quiz] sync failed (${response.status})`);
+        } catch (error) {
+          console.warn(`[quiz] sync failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
       }
       return answers;
     },

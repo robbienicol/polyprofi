@@ -1,4 +1,4 @@
-import type { LegacySavingsGoalState, SavingsGoal, SavingsGoalState, TrackedBet } from '@/types/bets';
+import type { LegacySavingsGoalState, QuizAnswers, SavingsGoal, SavingsGoalState, TrackedBet } from '@/types/bets';
 
 export const GOAL_ACCOUNTING_VERSION = 6;
 
@@ -89,6 +89,24 @@ export function goalProgressFraction(netGain: number, goal: SavingsGoal): number
 export function goalRemaining(netGain: number, goal: SavingsGoal): number {
   if (isOpenEnded(goal)) return 0;
   return Math.max(0, (goal.targetAmount as number) - netGain);
+}
+
+/**
+ * The search timeframe a goal implies, from how long its deadline has left. Used
+ * when a goal starts a search directly (the Goals tab) instead of going through
+ * the quiz, where the user picks it by hand. Rounds up to the nearest bucket so a
+ * goal with 10 days left searches "this month" rather than a week it can't make.
+ */
+export function goalTimeframe(goal: SavingsGoal, now: number = Date.now()): QuizAnswers['timeframe'] {
+  const deadline = goal.deadline ? Date.parse(goal.deadline) : NaN;
+  if (!Number.isFinite(deadline)) return 'month';
+  const days = (deadline - now) / 86_400_000;
+  if (days <= 1) return 'today';
+  if (days <= 7) return 'week';
+  if (days <= 30) return 'month';
+  if (days <= 90) return '3months';
+  if (days <= 365) return '1year';
+  return '5years';
 }
 
 /** Positions working toward one goal. */
