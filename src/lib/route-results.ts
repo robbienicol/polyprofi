@@ -35,6 +35,11 @@ export interface RouteResults {
   requiredInvestmentById: Map<string, number | null>;
   scoreById: Map<string, GoalScoreBreakdown>;
   selectedStake: (route: Route) => number;
+  /**
+   * Smallest amount the user would have to be willing to invest for a route at or above
+   * `minimumProbability` to reappear, or null if raising it would not help.
+   */
+  unlockInvestmentFor: (minimumProbability: number) => number | null;
 }
 
 /** A run of routes that share a probability band, in descending order of chance. */
@@ -212,7 +217,23 @@ export function buildRouteResults(
   }
   if (filters.sort !== 'score') filtered = [...filtered].sort(sortComparator(filters.sort));
 
-  return { ranked, filtered, requiredInvestmentById, scoreById, selectedStake };
+  // A high chance of hitting the goal is the property of safe, low-yield routes, and those
+  // need real capital: a T-bill clears a $300 goal only at a few thousand dollars. So they
+  // are the first to be dropped as unreachable near-misses when the intended amount is
+  // small, and "no routes with ≥ 90% chance" is usually a budget message rather than a
+  // market one. This is the number that answers it. Null when more money would not help —
+  // no such route exists, or one is already affordable and another filter is hiding it.
+  const unlockInvestmentFor = (minimumProbability: number): number | null => {
+    const needed = routes
+      .filter((route) => route.probability >= minimumProbability)
+      .filter((route) => !filters.category || route.category === filters.category)
+      .filter((route) => !filters.lossProfile || route.lossProfile === filters.lossProfile)
+      .map((route) => requiredInvestmentById.get(route.id))
+      .filter((amount): amount is number => amount != null && amount > intendedInvestment);
+    return needed.length > 0 ? Math.min(...needed) : null;
+  };
+
+  return { ranked, filtered, requiredInvestmentById, scoreById, selectedStake, unlockInvestmentFor };
 }
 
 // ── self-check ──────────────────────────────────────────────────────────────

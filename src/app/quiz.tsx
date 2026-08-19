@@ -8,6 +8,7 @@ import { useGoalsProgress } from '@/api/hooks/useGoalProgress';
 import { usePreferences } from '@/api/hooks/usePreferences';
 import { useQuizAnswers } from '@/api/hooks/useQuizAnswers';
 import { useSavedRoutes } from '@/api/hooks/useSavedRoutes';
+import { useUserProfile } from '@/api/hooks/useUserProfile';
 import { useSavingsGoal, type SavingsGoalInput } from '@/api/hooks/useSavingsGoal';
 import { OnboardingGlow } from '@/components/onboarding/OnboardingPreviews';
 import { ThemedText } from '@/components/themed-text';
@@ -15,7 +16,7 @@ import { Brand, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { requestAppRating } from '@/lib/app-rating';
 import { ACQUISITION_PLATFORMS } from '@/lib/preferences';
-import { buildRouteParams } from '@/lib/quiz-profile';
+import { buildRouteParams, referenceStakeFor, surveyAmountCeiling } from '@/lib/quiz-profile';
 import { defaultQuizGoal, goalByLabel, goalRemaining, isOpenEnded } from '@/lib/savings-goal';
 import type { AcquisitionPlatform, QuizAnswers, SavingsGoal } from '@/types/bets';
 
@@ -70,10 +71,14 @@ const DEFAULT_RISK_TOLERANCE: QuizAnswers['riskTolerance'] = 'balanced';
 /** Widest goal the hero number can show without running off a small phone. */
 const MAX_TARGET_DIGITS = 7;
 
-// Invest amount is no longer asked up front — it's a live slider on the results
-// screen. We still need a reference stake to generate the avenue pool; pick one
-// generous enough that the pool spans treasuries → longshots for any target.
-const genStakeFor = (target: number) => Math.max(1000, (target || 100) * 10);
+/**
+ * Capital the user has on hand, offered as a ceiling. A different question from the goal
+ * above and both are load-bearing: the goal is the profit wanted, this is the money
+ * available to earn it, and the same $300 goal is a T-bill or a long shot depending
+ * entirely on this number. Asked per search because it changes between searches — the
+ * profile survey's answer is only the starting suggestion.
+ */
+const INVEST_AMOUNTS = [500, 1_000, 5_000, 25_000, 100_000] as const;
 
 /** How many thousands separators toLocaleString will add to this many digits. */
 function groupingCommas(digits: string): number {
@@ -104,6 +109,9 @@ export default function QuizScreen(): React.ReactElement {
   // continue that draft rather than stack a second one beside it.
   const { allGoals, addGoalAsync, isLoading: goalsLoading } = useSavingsGoal();
   const goalsProgress = useGoalsProgress(allGoals);
+  // What the user said they can put in, from the profile survey. Null when they
+  // skipped it, which leaves the stake goal-derived exactly as before.
+  const { profile } = useUserProfile();
 
   const prefill = quizAnswers ?? history[0]?.quizSnapshot;
   // The goal of the last search, so returning to the quiz resumes what you were
@@ -121,6 +129,7 @@ export default function QuizScreen(): React.ReactElement {
       startingGoalId={startingGoal?.id ?? null}
       remainingFor={(goal) => goalRemaining(goalsProgress.progressFor(goal.id).netGain, goal)}
       preferredPlatforms={preferences.preferredPlatforms}
+      investmentCeiling={surveyAmountCeiling(profile?.investmentAmount)}
       saveAnswers={saveAnswers}
       addGoalAsync={addGoalAsync}
     />
@@ -133,6 +142,7 @@ function QuizForm({
   startingGoalId,
   remainingFor,
   preferredPlatforms,
+  investmentCeiling,
   saveAnswers,
   addGoalAsync,
 }: {
@@ -142,6 +152,8 @@ function QuizForm({
   /** What is left to earn on a goal, which is what a search for it should target. */
   remainingFor: (goal: SavingsGoal) => number;
   preferredPlatforms: AcquisitionPlatform[];
+  /** Top of the survey's amount range, or null if it was skipped. */
+  investmentCeiling: number | null;
   saveAnswers: ReturnType<typeof useQuizAnswers>['saveAnswers'];
   addGoalAsync: (input: SavingsGoalInput) => Promise<{ goal: SavingsGoal }>;
 }): React.ReactElement {
@@ -163,8 +175,14 @@ function QuizForm({
   const [timeframe, setTimeframe] = useState<QuizAnswers['timeframe']>(prefill?.timeframe ?? 'week');
   const [categories, setCategories] = useState<string[]>(prefill?.categories ?? []);
   const [isSaving, setIsSaving] = useState(false);
+  // Seeded from the last search, else from the signup survey, else blank. Blank is fine:
+  // it falls back to the goal-derived stake, which is what the app did before this asked.
+  const [invest, setInvest] = useState(String(prefill?.investmentCeiling ?? investmentCeiling ?? ''));
+  const [investFocused, setInvestFocused] = useState(false);
 
   const targetValue = Number(target.replace(/[^0-9]/g, '')) || 0;
+  const investValue = Number(invest.replace(/[^0-9]/g, '')) || 0;
+  const investCeiling = investValue || investmentCeiling;
   const selectedTimeframe = TIMEFRAMES.find((tf) => tf.value === timeframe) ?? TIMEFRAMES[1];
   const timeWord = selectedTimeframe.word;
   const marketWord = marketsWord(categories);
@@ -210,7 +228,8 @@ function QuizForm({
 
       saveAnswers(
         buildRouteParams({
-          balance: genStakeFor(targetValue),
+          balance: referenceStakeFor(targetValue, investCeiling),
+          investmentCeiling: investCeiling ?? undefined,
           target: targetValue,
           timeframe,
           riskTolerance: prefill?.riskTolerance ?? DEFAULT_RISK_TOLERANCE,
@@ -222,12 +241,14 @@ function QuizForm({
           // The goal rides along as a parameter, so the routes screen can stamp it
           // onto the search it saves and onto every position taken from it.
           onSuccess: () => router.replace(`/(tabs)/routes?generate=1&goalId=${searchGoalId}` as Href),
+          // Never latch on "Finding routes…" — if the save fails, hand the button back.
+          onError: () => setIsSaving(false),
         }
       );
     };
 
     void run().catch(() => setIsSaving(false));
-  }, [targetValue, isSaving, existingGoal, addGoalAsync, trimmedName, goalEmoji, selectedTimeframe.deadlineWord, timeframe, saveAnswers, prefill?.riskTolerance, categories, preferredPlatforms, router]);
+  }, [targetValue, isSaving, existingGoal, addGoalAsync, trimmedName, goalEmoji, selectedTimeframe.deadlineWord, timeframe, saveAnswers, prefill?.riskTolerance, categories, preferredPlatforms, investCeiling, router]);
 
   return (
     <View className="flex-1" style={{ backgroundColor: theme.background }}>
@@ -328,6 +349,49 @@ function QuizForm({
             {/* Spare height goes here, so the pickers stay within thumb reach on a tall
                 phone and simply collapse to nothing on a short one. */}
             <View style={{ flexGrow: 1, minHeight: 4 }} />
+
+            <Group label="Willing to invest" hint="Your ceiling — a route never uses more">
+              <View
+                className="flex-row items-center"
+                style={{
+                  gap: 6,
+                  paddingHorizontal: 14,
+                  borderWidth: 1.5,
+                  borderRadius: Radius.md,
+                  borderColor: investFocused ? Brand[500] : theme.borderStrong,
+                  backgroundColor: theme.backgroundElement,
+                }}>
+                <ThemedText style={{ fontSize: 15, fontWeight: '800', color: Brand[500] }}>$</ThemedText>
+                <TextInput
+                  value={investValue > 0 ? investValue.toLocaleString() : invest}
+                  onChangeText={(text) => setInvest(text.replace(/[^0-9]/g, '').slice(0, MAX_TARGET_DIGITS))}
+                  onFocus={() => setInvestFocused(true)}
+                  onBlur={() => setInvestFocused(false)}
+                  keyboardType="number-pad"
+                  inputMode="numeric"
+                  selectTextOnFocus
+                  returnKeyType="done"
+                  placeholder="How much can you put in?"
+                  placeholderTextColor={theme.textTertiary}
+                  accessibilityLabel="Amount you are willing to invest, in dollars"
+                  style={{ flex: 1, color: theme.text, fontSize: 15, fontWeight: '700', fontVariant: ['tabular-nums'], paddingVertical: 13 }}
+                />
+              </View>
+              <View className="flex-row flex-wrap" style={{ gap: 8 }}>
+                {INVEST_AMOUNTS.map((amount) => (
+                  <Chip
+                    key={amount}
+                    label={`$${amount >= 1000 ? `${amount / 1000}k` : amount}`}
+                    selected={investValue === amount}
+                    role="radio"
+                    onPress={() => {
+                      Keyboard.dismiss();
+                      setInvest(String(amount));
+                    }}
+                  />
+                ))}
+              </View>
+            </Group>
 
             <Group label="What for" hint="Optional">
               <View

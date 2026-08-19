@@ -15,7 +15,7 @@ interface RoutesHeaderProps {
   historical: boolean;
   batchLabel: string | null;
   amount: number;
-  referenceStake: number;
+  investmentMaximum: number;
   routeCount: number;
   onAmountChange: (amount: number) => void;
   onNewSearch: () => void;
@@ -32,7 +32,7 @@ export function RoutesHeader({
   historical,
   batchLabel,
   amount,
-  referenceStake,
+  investmentMaximum,
   routeCount,
   onAmountChange,
   onNewSearch,
@@ -79,7 +79,7 @@ export function RoutesHeader({
         )}
       </View>
 
-      <InvestmentAmountControl amount={amount} referenceStake={referenceStake} onAmountChange={onAmountChange} />
+      <InvestmentAmountControl amount={amount} maximum={investmentMaximum} onAmountChange={onAmountChange} />
     </>
   );
 }

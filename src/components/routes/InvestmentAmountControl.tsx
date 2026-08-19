@@ -7,7 +7,12 @@ import { useTheme } from '@/hooks/use-theme';
 
 interface InvestmentAmountControlProps {
   amount: number;
-  referenceStake: number;
+  /**
+   * Top of the track. Deliberately not the same number as the default amount: the
+   * caller sizes this above what it expects the user to invest so the thumb has
+   * somewhere to go. See investmentSliderMaximum in `@/lib/quiz-profile`.
+   */
+  maximum: number;
   onAmountChange: (amount: number) => void;
 }
 
@@ -15,11 +20,11 @@ interface InvestmentAmountControlProps {
  * Round increments that keep the slider's stops readable at any budget — 24-ish
  * steps across the range, landing on numbers a person would actually type.
  */
-function stepFor(referenceStake: number): number {
-  if (referenceStake <= 500) return 10;
-  if (referenceStake <= 2_000) return 50;
-  if (referenceStake <= 10_000) return 100;
-  if (referenceStake <= 50_000) return 500;
+function stepFor(maximum: number): number {
+  if (maximum <= 500) return 10;
+  if (maximum <= 2_000) return 50;
+  if (maximum <= 10_000) return 100;
+  if (maximum <= 50_000) return 500;
   return 1_000;
 }
 
@@ -31,14 +36,14 @@ function stepFor(referenceStake: number): number {
  */
 export function InvestmentAmountControl({
   amount,
-  referenceStake,
+  maximum,
   onAmountChange,
 }: InvestmentAmountControlProps): React.ReactElement {
   const theme = useTheme();
-  const step = stepFor(referenceStake);
+  const step = stepFor(maximum);
   // Typing can exceed the slider's range, so the track ends at whichever is
   // larger rather than snapping a deliberately bigger number back down.
-  const maximum = Math.max(step, Math.round(referenceStake), amount);
+  const trackMaximum = Math.max(step, Math.round(maximum), amount);
 
   return (
     <View style={{ borderRadius: Radius.xl, backgroundColor: theme.backgroundElevated, borderWidth: 1, borderColor: theme.border, paddingHorizontal: 16, paddingVertical: 14, gap: 8, ...Shadow.card }}>
@@ -70,9 +75,9 @@ export function InvestmentAmountControl({
       <Slider
         style={{ width: '100%', height: 32 }}
         minimumValue={step}
-        maximumValue={maximum}
+        maximumValue={trackMaximum}
         step={step}
-        value={Math.min(Math.max(amount, step), maximum)}
+        value={Math.min(Math.max(amount, step), trackMaximum)}
         onValueChange={(value) => onAmountChange(Math.round(value))}
         accessibilityLabel="Amount you are willing to invest"
         minimumTrackTintColor={Brand[500]}

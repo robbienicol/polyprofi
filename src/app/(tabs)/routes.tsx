@@ -15,11 +15,13 @@ import { TrackRouteForm } from '@/components/routes/TrackRouteForm';
 import { RouteCard } from '@/components/molecules/RouteCard';
 import { ThemedText } from '@/components/themed-text';
 import { AnalyzingLoader, BrandLoader } from '@/components/ui/loaders';
+import { KEYBOARD_AWARE_SCROLL_PROPS } from '@/constants/keyboard';
 import { Accent, Brand, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { betOutcomeSide } from '@/lib/bet-monitor-match';
 import { scheduleWeeklyReminder } from '@/lib/notifications';
 import { parseEntryPrice } from '@/lib/parse-bet-line';
+import { investmentSliderMaximum } from '@/lib/quiz-profile';
 import { openTradeDestination, preferredTradeDestination, tradeDestinationLabel } from '@/lib/route-actions';
 import { activeKeyword, buildRouteResults, groupRoutesByChance, predictionFacetsActive, resolveInvestmentAmount } from '@/lib/route-results';
 import type { RouteFilters as Filters } from '@/lib/route-results';
@@ -99,7 +101,11 @@ export default function RoutesScreen(): React.ReactElement {
   }, [goalId, fetchedRoutes, isFetching, isGenerating, isLoading, quizAnswers, router, saveGeneratedRoutes]);
 
   const referenceStake = sessionParams?.balance ?? 1_000;
-  const displayedInvestment = resolveInvestmentAmount(investment, referenceStake);
+  // What the user told the profile survey they can put in beats a stake inferred from
+  // the goal — a $100 goal derives $1,000 no matter how much they actually have.
+  const investmentDefault = sessionParams?.investmentCeiling ?? referenceStake;
+  const displayedInvestment = resolveInvestmentAmount(investment, investmentDefault);
+  const investmentMaximum = investmentSliderMaximum(referenceStake, sessionParams?.investmentCeiling);
 
   function setInvestmentAndReset(amount: number): void {
     setInvestment(Math.max(0, Math.round(amount)));
@@ -231,6 +237,7 @@ export default function RoutesScreen(): React.ReactElement {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerClassName="px-4 pt-6 pb-16 gap-3"
+        {...KEYBOARD_AWARE_SCROLL_PROPS}
         refreshControl={<RefreshControl refreshing={(isFetching && !isLoading) || manualRefresh} onRefresh={handleRefresh} tintColor={Brand[500]} />}>
         {goal && (
           <RoutesHeader
@@ -238,7 +245,7 @@ export default function RoutesScreen(): React.ReactElement {
             historical={isHistorical}
             batchLabel={isHistorical && viewedBatch ? formatBatchLabel(viewedBatch) : null}
             amount={displayedInvestment}
-            referenceStake={referenceStake}
+            investmentMaximum={investmentMaximum}
             routeCount={filtered.length}
             onAmountChange={setInvestmentAndReset}
             onNewSearch={() => router.push('/quiz')}
@@ -268,7 +275,14 @@ export default function RoutesScreen(): React.ReactElement {
             <ThemedText style={{ fontSize: 13, fontWeight: '800', color: Brand[500] }}>Show 30 more · {filtered.length - visibleCount} remaining</ThemedText>
           </Pressable>
         )}
-        {filtered.length === 0 && !isLoading && routes.length > 0 && <EmptyFiltered filters={filters} onClear={() => setFiltersAndReset(DEFAULT_FILTERS)} />}
+        {filtered.length === 0 && !isLoading && routes.length > 0 && (
+          <EmptyFiltered
+            filters={filters}
+            unlockAmount={results?.unlockInvestmentFor(filters.minimumProbability) ?? null}
+            onRaiseInvestment={setInvestmentAndReset}
+            onClear={() => setFiltersAndReset(DEFAULT_FILTERS)}
+          />
+        )}
         {routes.length > 0 && <ThemedText type="small" themeColor="textSecondary" className="text-center" style={{ opacity: 0.4 }}>{isHistorical ? 'Saved search · ' : ''}Pull down to refresh · AI-generated · For entertainment only</ThemedText>}
       </ScrollView>
     </Screen>
@@ -318,8 +332,44 @@ function RoutesError({ message, onRetry }: { message: string; onRetry: () => voi
   return <View className="items-center gap-2 py-10 px-6" style={{ borderRadius: Radius.lg, backgroundColor: Accent.red + '12', borderWidth: 1, borderColor: Accent.red + '30' }}><ThemedText style={{ fontSize: 24 }}>⚠️</ThemedText><ThemedText style={{ fontSize: 14, fontWeight: '700', color: theme.text }}>Couldn&apos;t load routes</ThemedText><ThemedText className="text-center" style={{ fontSize: 13, color: theme.textSecondary }}>{message}</ThemedText><Pressable onPress={onRetry} className="active:opacity-70 mt-1" style={{ borderRadius: Radius.md, paddingHorizontal: 16, paddingVertical: 9, backgroundColor: Brand[500] }}><ThemedText style={{ fontSize: 13, fontWeight: '700', color: '#06140C' }}>Try again</ThemedText></Pressable></View>;
 }
 
-function EmptyFiltered({ filters, onClear }: { filters: Filters; onClear: () => void }): React.ReactElement {
-  return <View className="items-center gap-2 py-8"><ThemedText type="smallBold">{filters.minimumProbability > 0 ? `No routes with ≥ ${filters.minimumProbability}% chance` : `No ${filters.category ?? ''} routes`}</ThemedText><Pressable onPress={onClear} className="active:opacity-60"><ThemedText type="small" style={{ color: Brand[500], fontWeight: '700' }}>Clear filters</ThemedText></Pressable></View>;
+/**
+ * Empty results. When the chance filter is what emptied the list, the honest advice is
+ * rarely "clear your filters" — the high-chance routes are real, they just need more
+ * capital than the user said they would put in. Offer the amount that brings one back.
+ */
+function EmptyFiltered({ filters, unlockAmount, onRaiseInvestment, onClear }: {
+  filters: Filters;
+  unlockAmount: number | null;
+  onRaiseInvestment: (amount: number) => void;
+  onClear: () => void;
+}): React.ReactElement {
+  const title = filters.minimumProbability > 0
+    ? `No routes with ≥ ${filters.minimumProbability}% chance`
+    : `No ${filters.category ?? ''} routes`;
+  return (
+    <View className="items-center gap-2 py-8 px-6">
+      <ThemedText type="smallBold">{title}</ThemedText>
+      {unlockAmount != null && (
+        <>
+          <ThemedText type="small" themeColor="textSecondary" className="text-center" style={{ lineHeight: 19 }}>
+            A high chance of hitting the goal comes from safe, low-yield routes, and those need
+            more capital. Raising what you&apos;re willing to invest to ${unlockAmount.toLocaleString()} brings one back.
+          </ThemedText>
+          <Pressable
+            onPress={() => onRaiseInvestment(unlockAmount)}
+            className="active:opacity-85 mt-1"
+            style={{ borderRadius: Radius.md, paddingHorizontal: 16, paddingVertical: 9, backgroundColor: Brand[500] }}>
+            <ThemedText style={{ fontSize: 13, fontWeight: '800', color: '#06140C' }}>
+              Invest up to ${unlockAmount.toLocaleString()}
+            </ThemedText>
+          </Pressable>
+        </>
+      )}
+      <Pressable onPress={onClear} className="active:opacity-60">
+        <ThemedText type="small" style={{ color: Brand[500], fontWeight: '700' }}>Clear filters</ThemedText>
+      </Pressable>
+    </View>
+  );
 }
 
 function timeframeLabel(timeframe: RouteParams['timeframe']): string {

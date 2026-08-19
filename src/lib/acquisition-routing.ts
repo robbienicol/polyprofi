@@ -2,7 +2,13 @@ import { inferAssetSymbol } from '@/lib/tracked-assets';
 import type { AcquisitionPlatform } from '@/types/bets';
 import type { Route } from '@/types/routes';
 
-export type TradeDestination = AcquisitionPlatform;
+/**
+ * Where a route is actually acquired. A superset of AcquisitionPlatform on purpose:
+ * the preference list in Settings is only the apps a person trades in, but a cash
+ * instrument is bought somewhere no preference can name. Those extra venues are forced
+ * by the instrument, never chosen, so they never appear as a Settings toggle.
+ */
+export type TradeDestination = AcquisitionPlatform | 'treasurydirect' | 'bank';
 
 export interface TradeDestinationOptions {
   kalshiEventTicker?: string;
@@ -25,16 +31,57 @@ function routeAssetSymbol(route: Route): string | undefined {
   return cryptoTicker ?? inferAssetSymbol(route.description, route.strategy, route.line);
 }
 
+/** Reads after the word "Open", which is how every call site renders it. */
 export function tradeDestinationLabel(destination: TradeDestination): string {
-  return ({ robinhood: 'Robinhood', polymarket: 'Polymarket', kalshi: 'Kalshi' })[destination];
+  return ({
+    robinhood: 'Robinhood',
+    polymarket: 'Polymarket',
+    kalshi: 'Kalshi',
+    treasurydirect: 'TreasuryDirect',
+    bank: 'a savings account',
+  })[destination];
+}
+
+/**
+ * The venue that actually lists this instrument, when the route itself says so.
+ * Only `@/lib/polymarket-routes` sets a sourceSlug, so carrying one is proof the
+ * contract is a Polymarket market — and a Polymarket contract is fillable nowhere
+ * else. A route whose venue is genuinely open (a stock, an ETF, a generic bet)
+ * returns null and lets the user's preference decide.
+ */
+function nativeVenue(route: Route): TradeDestination | null {
+  if (route.sourceSlug) return 'polymarket';
+  const venue = `${route.platform} ${route.category}`;
+  if (/kalshi/i.test(venue)) return 'kalshi';
+  if (/polymarket/i.test(venue)) return 'polymarket';
+  // Cash instruments. No broker in the preference list sells these: a T-bill comes from
+  // the Treasury, an HYSA is a bank account you open. Routing either to a Robinhood
+  // search is the same bug as sending a Polymarket contract there. A bond *ETF* is
+  // excluded — that genuinely is a brokerage order despite the category.
+  if (/savings|treasur/i.test(venue) && !/\betf\b/i.test(`${route.description} ${route.strategy}`)) {
+    return /\bbanks?\b|savings account|hysa/i.test(`${route.platform} ${route.description}`)
+      ? 'bank'
+      : 'treasurydirect';
+  }
+  return null;
 }
 
 export function preferredTradeDestination(
   route: Route,
   preferredPlatforms: AcquisitionPlatform[] | undefined,
 ): TradeDestination {
+  // Where the contract lives outranks where the user likes to trade. A platform
+  // preference is a tiebreak between venues that can each fill the order, never a
+  // licence to send a Polymarket market to a broker that does not list it — doing
+  // so also throws away the exact market URL we already resolved.
+  const native = nativeVenue(route);
+  if (native) return native;
+
   const preferences = new Set(preferredPlatforms ?? []);
-  const compatible: TradeDestination[] = isPredictionMarketRoute(route)
+  // Narrower than TradeDestination on purpose: this branch is the preference tiebreak,
+  // and only venues a user can actually express a preference for belong in it. Anything
+  // forced by the instrument has already returned above.
+  const compatible: AcquisitionPlatform[] = isPredictionMarketRoute(route)
     ? ['polymarket', 'kalshi', 'robinhood']
     : ['robinhood'];
   return compatible.find((destination) => preferences.has(destination)) ?? compatible[0];
@@ -81,6 +128,16 @@ export function tradeUrlsFor(
     ];
   }
 
+  if (destination === 'treasurydirect') {
+    return ['https://www.treasurydirect.gov/marketable-securities/treasury-bills/'];
+  }
+
+  if (destination === 'bank') {
+    // The FDIC's own institution finder — neutral and authoritative. Deliberately not a
+    // rate-comparison site: those are affiliate-funded and the app does not rank banks.
+    return ['https://banks.data.fdic.gov/bankfind-suite/bankfind'];
+  }
+
   if (destination === 'kalshi') {
     const exactMarket = options.kalshiSeriesTicker && options.kalshiEventTicker
       ? `https://kalshi.com/markets/${options.kalshiSeriesTicker.toLowerCase()}/${options.kalshiEventTicker.toLowerCase()}`
@@ -102,8 +159,22 @@ export function __selfCheck(): void {
     platform: 'Brokerage', lossProfile: 'partial', sourceSlug: undefined,
   };
   console.assert(
-    preferredTradeDestination(prediction, ['robinhood']) === 'robinhood',
-    'Robinhood-only preference applies to prediction routes',
+    preferredTradeDestination(prediction, ['robinhood']) === 'polymarket',
+    'a Polymarket contract ignores a Robinhood preference — no other venue can fill it',
+  );
+  const kalshiRoute: Route = {
+    ...prediction, id: 'kalshi-1', platform: 'Kalshi', category: 'Kalshi', sourceSlug: undefined,
+  };
+  console.assert(
+    preferredTradeDestination(kalshiRoute, ['polymarket']) === 'kalshi',
+    'a Kalshi market is not sent to Polymarket just because Polymarket is preferred',
+  );
+  const genericBet: Route = {
+    ...prediction, id: 'sports-1', platform: 'Sportsbook', category: 'Sports Betting', sourceSlug: undefined,
+  };
+  console.assert(
+    preferredTradeDestination(genericBet, ['kalshi']) === 'kalshi',
+    'a route with no native venue still follows the user preference',
   );
   console.assert(
     preferredTradeDestination(prediction, ['robinhood', 'polymarket']) === 'polymarket',
@@ -120,5 +191,50 @@ export function __selfCheck(): void {
   console.assert(
     tradeUrlsFor(stock, 'robinhood')[0].includes('/stocks/VOO'),
     'stock routes open the exact Robinhood symbol',
+  );
+
+  // ── cash instruments ──────────────────────────────────────────────────────
+  // These are the routes @/lib/savings-treasury-routes actually emits, verbatim.
+  const tbill: Route = {
+    ...stock, id: 'treasury-91d', category: 'Savings & Treasuries',
+    description: 'Buy a 13-week T-bill — 4.20% sourced yield projects +$10 in 3mo.',
+    platform: 'TreasuryDirect / brokerage',
+  };
+  const hysa: Route = {
+    ...stock, id: 'savings-account-hysa', category: 'Savings & Treasuries',
+    description: 'Park your $1,000 in a high-yield online savings account — withdrawable anytime.',
+    platform: 'Online bank (e.g. Marcus, Ally, Discover)',
+  };
+  console.assert(
+    preferredTradeDestination(tbill, ['robinhood']) === 'treasurydirect',
+    'a T-bill is bought from the Treasury, not searched for on Robinhood',
+  );
+  console.assert(
+    preferredTradeDestination(hysa, ['robinhood']) === 'bank',
+    'a high-yield savings account is a bank account, not a Robinhood order',
+  );
+  console.assert(
+    tradeUrlsFor(tbill, 'treasurydirect')[0].startsWith('https://www.treasurydirect.gov/'),
+    'the T-bill route opens TreasuryDirect',
+  );
+  console.assert(
+    tradeUrlsFor(hysa, 'bank')[0].includes('fdic.gov'),
+    'the savings route opens the FDIC bank finder, not an affiliate rate table',
+  );
+  console.assert(
+    tradeDestinationLabel('bank') === 'a savings account'
+      && tradeDestinationLabel('treasurydirect') === 'TreasuryDirect',
+    'labels read correctly after the word "Open"',
+  );
+
+  // A bond ETF sits in the same category but is a genuine brokerage order.
+  const bondEtf: Route = {
+    ...stock, id: 'etf-bil', category: 'Savings & Treasuries',
+    description: 'Put your $1,000 in BIL (SPDR 1-3 Month T-Bill ETF) — an ETF tracking short bills.',
+    platform: 'Brokerage',
+  };
+  console.assert(
+    preferredTradeDestination(bondEtf, ['robinhood']) === 'robinhood',
+    'a bond ETF is still a brokerage order despite the treasury category',
   );
 }

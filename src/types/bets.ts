@@ -58,6 +58,12 @@ export interface QuizAnswers {
   riskTolerance: 'conservative' | 'balanced' | 'aggressive';
   /** Apps the user already uses. Optional so quizzes saved before this field still load. */
   preferredPlatforms?: AcquisitionPlatform[];
+  /**
+   * Top of the amount range the user gave in the profile survey. Drives the default and
+   * the ceiling of the invest slider on the results screen. Optional: the survey is
+   * skippable, and searches saved before this field still load without it.
+   */
+  investmentCeiling?: number;
   maxRiskLevel: number; // 1–5: max riskLevel the user is willing to see
   minProbability: number; // 0–100: minimum win probability the user wants
 }

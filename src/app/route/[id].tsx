@@ -14,6 +14,7 @@ import { RouteCoach } from "@/components/routes/RouteCoach";
 import { RouteOpportunityCard } from "@/components/routes/RouteOpportunityCard";
 import { TrackRouteForm } from "@/components/routes/TrackRouteForm";
 import { ThemedText } from "@/components/themed-text";
+import { KEYBOARD_AWARE_SCROLL_PROPS } from "@/constants/keyboard";
 import { Brand, Radius } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 import { betOutcomeSide } from "@/lib/bet-monitor-match";
@@ -191,6 +192,7 @@ export default function RouteDetailScreen(): React.ReactElement {
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerClassName="px-4 pt-3 pb-16 gap-4"
+          {...KEYBOARD_AWARE_SCROLL_PROPS}
         >
           <View
             className="flex-row items-center justify-between"
@@ -280,7 +282,7 @@ export default function RouteDetailScreen(): React.ReactElement {
 
           <View className="flex-row gap-2">
             <TradeLink
-              label={`Open in ${tradeDestinationLabel(destination)} ↗`}
+              label={`Open ${tradeDestinationLabel(destination)} ↗`}
               onPress={() => openTradeDestination(route, destination, destinationOptions)}
             />
           </View>

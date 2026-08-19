@@ -139,6 +139,57 @@ function applyRiskTolerance(
   return bounds;
 }
 
+/**
+ * The profile survey's amount buckets, as the top of each range in dollars — what the
+ * user told us they are willing to put in. "$100,000+" is open-ended, so it is held at
+ * its floor rather than invented upward. Keep the keys in sync with AMOUNTS in
+ * `@/app/profile-survey`; an unrecognised answer (or "Prefer not to say") yields null
+ * and the goal-derived stake is used instead.
+ */
+const SURVEY_AMOUNT_CEILING: Record<string, number> = {
+  'Under $1,000': 1_000,
+  '$1,000 - $5,000': 5_000,
+  '$5,000 - $25,000': 25_000,
+  '$25,000 - $100,000': 100_000,
+  '$100,000+': 100_000,
+};
+
+export function surveyAmountCeiling(investmentAmount: string | null | undefined): number | null {
+  if (!investmentAmount) return null;
+  return SURVEY_AMOUNT_CEILING[investmentAmount] ?? null;
+}
+
+/**
+ * Reference stake used to generate the route pool. The invest amount isn't asked
+ * up front any more — it's a live slider on the results screen — so pick one
+ * generous enough that the pool spans treasuries → longshots for any target.
+ *
+ * The survey ceiling raises it because the pool has to contain routes that are
+ * actually sized for the user's capital: a $100 goal alone caps this at $1,000, which
+ * is why someone with $25,000 to deploy used to find the slider pinned at $1,000.
+ */
+export function referenceStakeFor(target: number, investmentCeiling?: number | null): number {
+  const goalDerived = Math.max(1000, (target || 100) * 10);
+  return investmentCeiling && investmentCeiling > 0
+    ? Math.max(goalDerived, investmentCeiling)
+    : goalDerived;
+}
+
+/**
+ * Top of the invest slider. Doubling the expected amount is the point: a track that ends
+ * exactly at the default leaves the thumb pinned to the right with nowhere to drag, and
+ * raising the amount is the one move that brings safe, high-probability routes into
+ * range — they need capital, not luck. Someone who said "up to $10,000" can still reach
+ * $20,000 without typing.
+ */
+export function investmentSliderMaximum(
+  referenceStake: number,
+  investmentCeiling?: number | null,
+): number {
+  const base = investmentCeiling && investmentCeiling > 0 ? investmentCeiling : referenceStake;
+  return Math.max(1, base) * 2;
+}
+
 export function buildRouteParams(answers: Omit<QuizAnswers, 'maxRiskLevel' | 'minProbability'>): QuizAnswers {
   const returnPct = answers.balance > 0 ? (answers.target / answers.balance) * 100 : 0;
   const bounds = deriveRiskBounds(answers.timeframe, returnPct);
@@ -251,6 +302,28 @@ export function __selfCheck(): void {
   const [partialResult] = enforceRouteIntegrity([partialCoinflip], 300);
   console.assert(partialResult.riskLevel === 2, 'binary floor does not apply to capital-preserved (partial) routes');
   console.assert(partialResult.meetsTarget === true, 'expectedReturn $400 >= $300 target → meetsTarget true');
+
+  // The reported bug: a small profit goal pinned the slider at $1,000 no matter how much
+  // the user said they had. The survey answer has to raise it.
+  console.assert(referenceStakeFor(100) === 1000, 'a $100 goal alone still derives $1,000');
+  console.assert(
+    referenceStakeFor(100, surveyAmountCeiling('$5,000 - $25,000')) === 25_000,
+    'the survey ceiling raises a small goal\'s reference stake to what the user actually has',
+  );
+  console.assert(
+    referenceStakeFor(50_000, surveyAmountCeiling('Under $1,000')) === 500_000,
+    'a large goal is not dragged down below the pool it needs',
+  );
+  console.assert(surveyAmountCeiling('Prefer not to say') === null, 'a skipped answer sets no ceiling');
+  console.assert(surveyAmountCeiling(null) === null, 'a missing answer sets no ceiling');
+  console.assert(
+    investmentSliderMaximum(1000, 10_000) === 20_000,
+    'the slider doubles the stated amount — "up to $10k" can be dragged to $20k',
+  );
+  console.assert(
+    investmentSliderMaximum(1000, null) === 2000,
+    'with no survey answer the slider still doubles the goal-derived stake',
+  );
 
   const weekParams: RouteParams = {
     balance: 1000,

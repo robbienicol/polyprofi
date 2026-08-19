@@ -4,14 +4,18 @@ import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useGoalProgress } from '@/api/hooks/useGoalProgress';
-import { useMoney } from '@/api/hooks/usePreferences';
+import { useMoney, usePreferences } from '@/api/hooks/usePreferences';
+import { useQuizAnswers } from '@/api/hooks/useQuizAnswers';
+import { useSavedRoutes } from '@/api/hooks/useSavedRoutes';
 import { useSavingsGoal } from '@/api/hooks/useSavingsGoal';
 import { useTrackedBets } from '@/api/hooks/useTrackedBets';
+import { useUserProfile } from '@/api/hooks/useUserProfile';
 import { PortfolioOverview } from '@/components/portfolio/PortfolioOverview';
 import { ThemedText } from '@/components/themed-text';
 import { Accent, Brand, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { betsForGoal, goalProgressFraction, isOpenEnded } from '@/lib/savings-goal';
+import { buildRouteParams, referenceStakeFor, surveyAmountCeiling } from '@/lib/quiz-profile';
+import { betsForGoal, goalProgressFraction, goalRemaining, goalTimeframe, isOpenEnded } from '@/lib/savings-goal';
 
 const MONO = { fontVariant: ['tabular-nums' as const] };
 
@@ -22,8 +26,14 @@ export default function GoalDetailScreen(): React.ReactElement {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { goals, allGoals, isLoading, removeGoal } = useSavingsGoal();
   const { bets, reassignBets } = useTrackedBets();
+  const { quizAnswers, saveAnswers } = useQuizAnswers();
+  const { history } = useSavedRoutes();
+  const { preferences } = usePreferences();
+  const { profile } = useUserProfile();
+  const investmentCeiling = surveyAmountCeiling(profile?.investmentAmount);
   const progress = useGoalProgress(id ?? null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [searching, setSearching] = useState(false);
 
   const goal = allGoals.find((candidate) => candidate.id === id) ?? null;
   const goalBets = useMemo(() => (id ? betsForGoal(bets, id) : []), [bets, id]);
@@ -41,9 +51,40 @@ export default function GoalDetailScreen(): React.ReactElement {
     .filter((bet) => bet.status === 'active')
     .reduce((sum, bet) => sum + bet.amountWagered, 0);
 
-  // The goal travels into the quiz as an argument, which targets the search at
-  // what this goal still needs and stamps it onto anything taken from it.
-  const findRoutes = (): void => router.push(`/quiz?goalId=${goal.id}` as Href);
+  // A goal already knows everything a search needs — what's left to earn and how
+  // long it has — so searching from here skips the quiz and goes straight to the
+  // routes screen, which shows the analysing loader while it works. Risk appetite
+  // and markets come from the last search; Settings owns where you can trade.
+  const findRoutes = (): void => {
+    if (searching) return;
+    setSearching(true);
+    const prefill = quizAnswers ?? history[0]?.quizSnapshot;
+    const remaining = goalRemaining(netGain, goal);
+    // What this goal was last searched with wins over the signup survey — the quiz asks
+    // per search now, so the newer answer is the truer one.
+    const ceiling = prefill?.investmentCeiling ?? investmentCeiling;
+    // An open-ended goal has no remainder to aim at, so search for what the last
+    // one did — failing that, a round starter figure.
+    const target = openEnded ? prefill?.target || 100 : Math.max(1, Math.round(remaining));
+    saveAnswers(
+      buildRouteParams({
+        balance: referenceStakeFor(target, ceiling),
+        investmentCeiling: ceiling ?? undefined,
+        target,
+        timeframe: goalTimeframe(goal),
+        riskTolerance: prefill?.riskTolerance ?? 'balanced',
+        categories: prefill?.categories ?? [],
+        preferredPlatforms: preferences.preferredPlatforms,
+      }),
+      {
+        onSuccess: () => router.push(`/(tabs)/routes?generate=1&goalId=${goal.id}` as Href),
+        onSettled: () => setSearching(false),
+      },
+    );
+  };
+
+  /** Escape hatch to the full quiz when the derived search isn't what you wanted. */
+  const openQuiz = (): void => router.push(`/quiz?goalId=${goal.id}` as Href);
 
   const deleteGoal = (): void => {
     const fallback = goals.find((candidate) => candidate.id !== goal.id)?.id;
@@ -161,15 +202,26 @@ export default function GoalDetailScreen(): React.ReactElement {
               </View>
             )}
 
-            <Pressable
-              onPress={findRoutes}
-              accessibilityRole="button"
-              className="py-3.5 items-center active:opacity-85"
-              style={{ borderRadius: Radius.lg, backgroundColor: Brand[500] }}>
-              <ThemedText style={{ fontSize: 15, fontWeight: '900', color: '#06140C' }}>
-                {progress.activeCount > 0 ? 'Find another route →' : 'Find routes for this goal →'}
-              </ThemedText>
-            </Pressable>
+            <View style={{ gap: 8 }}>
+              <Pressable
+                onPress={findRoutes}
+                disabled={searching}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: searching }}
+                className="py-3.5 items-center active:opacity-85"
+                style={{ borderRadius: Radius.lg, backgroundColor: Brand[500], opacity: searching ? 0.5 : 1 }}>
+                <ThemedText style={{ fontSize: 15, fontWeight: '900', color: '#06140C' }}>
+                  {searching
+                    ? 'Finding routes…'
+                    : progress.activeCount > 0 ? 'Find another route →' : 'Find routes for this goal →'}
+                </ThemedText>
+              </Pressable>
+              <Pressable onPress={openQuiz} accessibilityRole="button" hitSlop={8} className="items-center active:opacity-60 py-1">
+                <ThemedText style={{ fontSize: 12, fontWeight: '700', color: theme.textTertiary }}>
+                  Change amount or timeframe
+                </ThemedText>
+              </Pressable>
+            </View>
           </View>
 
           <PortfolioOverview

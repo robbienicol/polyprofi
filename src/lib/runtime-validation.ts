@@ -52,6 +52,9 @@ export function isQuizAnswers(value: unknown): value is QuizAnswers {
     && isStringArray(value.categories)
     && isOneOf(value.riskTolerance, ['conservative', 'balanced', 'aggressive'])
     && isOptional(value.preferredPlatforms, isAcquisitionPlatformArray)
+    // Optional: searches saved before the quiz asked this still load, and a garbage
+    // value is rejected rather than being handed to the stake and slider maths.
+    && isOptional(value.investmentCeiling, isFiniteNumber)
     && isFiniteNumber(value.maxRiskLevel)
     && isFiniteNumber(value.minProbability);
 }
