@@ -23,11 +23,11 @@ export default function AppTabs() {
           <TabTrigger name="home" href="/(tabs)" asChild>
             <TabButton icon="house">Home</TabButton>
           </TabTrigger>
-          <TabTrigger name="routes" href="/(tabs)/routes" asChild>
-            <TabButton icon="list.bullet.rectangle">Routes</TabButton>
-          </TabTrigger>
           <TabTrigger name="goals" href="/(tabs)/goals" asChild>
             <TabButton icon="target">Goals</TabButton>
+          </TabTrigger>
+          <TabTrigger name="routes" href="/(tabs)/routes" asChild>
+            <TabButton icon="list.bullet.rectangle">Routes</TabButton>
           </TabTrigger>
           <TabTrigger name="portfolio" href="/(tabs)/portfolio" asChild>
             <TabButton icon="briefcase">Portfolio</TabButton>

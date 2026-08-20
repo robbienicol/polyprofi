@@ -9,7 +9,7 @@ import { BrandLoader } from '@/components/ui/loaders';
 export default function Index(): React.ReactElement {
   const { isLoaded, isSignedIn } = useAuth();
   const { hasCompletedOnboarding, isLoading: onboardingLoading } = useOnboarding();
-  const { hasCompletedProfile, isLoading: profileLoading } = useUserProfile();
+  const { hasCompletedProfile, checkFailed: profileCheckFailed, isLoading: profileLoading } = useUserProfile();
   const { hasGoal, isLoading: goalLoading } = useSavingsGoal();
 
   if (onboardingLoading) {
@@ -35,9 +35,14 @@ export default function Index(): React.ReactElement {
 
   // Once, right after sign-in: a short profile survey (age/experience/goals) for the team's
   // own analytics — before goal-setup, since that's the next one-time step in the funnel.
+  // Skipped when the profile check itself failed: an unreachable API is not
+  // evidence the survey is outstanding, and forcing it on that made returning
+  // users retake it every launch.
   if (!bypassAuth) {
     if (profileLoading) return <BrandLoader subtitle="Loading your profile…" />;
-    if (!hasCompletedProfile) return <Redirect href={'/profile-survey' as Href} />;
+    if (!hasCompletedProfile && !profileCheckFailed) {
+      return <Redirect href={'/profile-survey' as Href} />;
+    }
   }
 
   // First real step after sign-in: what are you saving for? (one-time until a goal exists)
