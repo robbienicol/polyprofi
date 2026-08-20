@@ -2,10 +2,11 @@ import { timeframeCalendarDays } from '@/api/client/playbook';
 import { isPredictionCategory } from '@/lib/prediction-topics';
 import { goalEffectivenessScore, sortByPatheyScore } from '@/lib/score';
 import type { GoalScoreBreakdown, GoalScoreContext } from '@/lib/score';
+import { expectedValue } from '@/lib/route-expected-value';
 import { rescoreForStake, stakeNeededForReturn } from '@/lib/stake-rescore';
 import type { Route, RouteParams } from '@/types/routes';
 
-export type RouteSort = 'score' | 'chance' | 'payout' | 'soonest' | 'type';
+export type RouteSort = 'score' | 'chance' | 'payout' | 'value' | 'soonest' | 'type';
 
 export interface RouteFilters {
   category: string | null;
@@ -210,7 +211,7 @@ export function buildRouteResults(
       filtered = filtered.filter((route) => (route.maturesInDays ?? Infinity) <= limit);
     }
   }
-  if (filters.sort !== 'score') filtered = [...filtered].sort(sortComparator(filters.sort));
+  if (filters.sort !== 'score') filtered = [...filtered].sort(sortComparator(filters.sort, selectedStake));
 
   return { ranked, filtered, requiredInvestmentById, scoreById, selectedStake };
 }
@@ -443,10 +444,16 @@ export function __selfCheck(): void {
   );
 }
 
-function sortComparator(sort: Exclude<RouteSort, 'score'>): (a: Route, b: Route) => number {
+function sortComparator(
+  sort: Exclude<RouteSort, 'score'>,
+  stakeFor: (route: Route) => number,
+): (a: Route, b: Route) => number {
   switch (sort) {
     case 'chance': return (a, b) => b.probability - a.probability;
+    // 'payout' is the headline win-only figure, honest to its label. 'value' weights
+    // that payout by the odds, so a longshot stops outranking a T-bill by default.
     case 'payout': return (a, b) => b.expectedReturn - a.expectedReturn;
+    case 'value': return (a, b) => expectedValue(b, stakeFor(b)) - expectedValue(a, stakeFor(a));
     case 'soonest': return (a, b) => (a.maturesInDays ?? Number.MAX_SAFE_INTEGER) - (b.maturesInDays ?? Number.MAX_SAFE_INTEGER);
     case 'type': return (a, b) => a.category.localeCompare(b.category);
   }

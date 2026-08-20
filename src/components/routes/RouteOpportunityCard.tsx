@@ -14,6 +14,7 @@ import {
   pricePositionLabel,
   routeDisplayTitle,
 } from "@/lib/route-detail";
+import { downsideAtStake, expectedValue } from "@/lib/route-expected-value";
 import {
   deadlineFitLabel,
   debtLiquidityLabel,
@@ -48,6 +49,7 @@ export function RouteOpportunityCard({
   const color = riskColor(route.riskLevel);
   const binary = route.lossProfile === "binary";
   const returnPct = stake > 0 ? (route.expectedReturn / stake) * 100 : 0;
+  const routeExpectedValue = expectedValue(route, stake);
   const liquidity = liquidityLabel(route);
   const marketQuality = route.marketQuality;
   const liquidityPercent =
@@ -455,43 +457,35 @@ export function RouteOpportunityCard({
       )}
 
       <Section title="Potential Outcome">
+        <Outcome
+          color={Brand[500]}
+          label="Target hit"
+          chance={`${route.probability}% chance`}
+          value={`+$${route.expectedReturn}`}
+        />
         {binary ? (
-          <>
-            <Outcome
-              color={Brand[500]}
-              label="Target hit"
-              chance={`${route.probability}% chance`}
-              value={`+$${route.expectedReturn}`}
-            />
-            <Outcome
-              color={Accent.red}
-              label="Target missed — stake gone"
-              chance={`${100 - route.probability}% chance`}
-              value={`−$${stake}`}
-            />
-          </>
+          <Outcome
+            color={Accent.red}
+            label="Target missed — stake gone"
+            chance={`${100 - route.probability}% chance`}
+            value={`−$${stake}`}
+          />
         ) : (
-          <>
-            <Outcome
-              color={Brand[500]}
-              label="Target hit"
-              chance={`${route.probability}% chance`}
-              value={`+$${route.expectedReturn}`}
-            />
-            <Outcome
-              color={Accent.gold}
-              label="Probability-weighted average"
-              chance="what this is worth on average"
-              value={`+$${Math.round((route.probability / 100) * route.expectedReturn)}`}
-            />
-            <Outcome
-              color={Accent.red}
-              label="Rough downside if it goes wrong"
-              chance={`~${route.riskLevel * 8}% drawdown`}
-              value={`−$${Math.round(stake * route.riskLevel * 0.08)}`}
-            />
-          </>
+          <Outcome
+            color={Accent.red}
+            label="Rough downside if it goes wrong"
+            chance={`~${route.riskLevel * 8}% drawdown`}
+            value={`−$${Math.round(downsideAtStake(route, stake))}`}
+          />
         )}
+        {/* Both legs weighted by the odds. Shown for every route, binaries most of
+            all: an all-or-nothing payout is the one that looks best unweighted. */}
+        <Outcome
+          color={routeExpectedValue >= 0 ? Accent.gold : Accent.red}
+          label="Probability-weighted average"
+          chance="what this is worth on average"
+          value={`${routeExpectedValue >= 0 ? '+' : '−'}$${Math.abs(Math.round(routeExpectedValue))}`}
+        />
       </Section>
 
       <Pressable
