@@ -1,6 +1,14 @@
 import type { PortfolioProgressPoint } from '@/api/client/storage';
-import type { QuizAnswers, TrackedBet } from '@/types/bets';
-import type { Route, SavedRoutesBatch } from '@/types/routes';
+import type { SportsMatch } from '@/lib/sports-market-match';
+import type {
+  AcquisitionPlatform,
+  LegacySavingsGoalState,
+  QuizAnswers,
+  SavingsGoal,
+  SavingsGoalState,
+  TrackedBet,
+} from '@/types/bets';
+import type { MarketQualityFacts, Route, SavedRoutesBatch } from '@/types/routes';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -31,6 +39,11 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === 'string');
 }
 
+function isAcquisitionPlatformArray(value: unknown): value is AcquisitionPlatform[] {
+  return Array.isArray(value)
+    && value.every((item) => isOneOf(item, ['robinhood', 'polymarket', 'kalshi']));
+}
+
 export function isQuizAnswers(value: unknown): value is QuizAnswers {
   if (!isRecord(value)) return false;
   return isFiniteNumber(value.balance)
@@ -38,8 +51,36 @@ export function isQuizAnswers(value: unknown): value is QuizAnswers {
     && isOneOf(value.timeframe, ['today', 'week', 'month', '3months', '1year', '5years'])
     && isStringArray(value.categories)
     && isOneOf(value.riskTolerance, ['conservative', 'balanced', 'aggressive'])
+    && isOptional(value.preferredPlatforms, isAcquisitionPlatformArray)
     && isFiniteNumber(value.maxRiskLevel)
     && isFiniteNumber(value.minProbability);
+}
+
+export function isSavingsGoal(value: unknown): value is SavingsGoal {
+  if (!isRecord(value)) return false;
+  return typeof value.id === 'string'
+    && typeof value.label === 'string'
+    && typeof value.emoji === 'string'
+    // Absent for an open-ended goal, which has no target to reach.
+    && isOptional(value.targetAmount, isFiniteNumber)
+    && typeof value.createdAt === 'string'
+    && isOptional(value.draft, isBoolean)
+    && isOptional(value.deadline, isString)
+    && isOptional(value.achievedAt, isString)
+    && isOptional(value.celebratedAt, isString);
+}
+
+/**
+ * Accepts both the multi-goal shape and the single-`current` shape written before
+ * version 6 — payloads are validated on the way in, before the migration that
+ * converts them, so rejecting the old shape would discard the user's goal.
+ */
+export function isSavingsGoalState(value: unknown): value is SavingsGoalState | LegacySavingsGoalState {
+  if (!isRecord(value)) return false;
+  if (!isFiniteNumber(value.achievedCount) || !isOptional(value.accountingVersion, isFiniteNumber)) return false;
+
+  if (Array.isArray(value.goals)) return value.goals.every(isSavingsGoal);
+  return value.current === null || isSavingsGoal(value.current);
 }
 
 export function isRoute(value: unknown): value is Route {
@@ -56,7 +97,27 @@ export function isRoute(value: unknown): value is Route {
     && isOneOf(value.lossProfile, ['binary', 'partial'])
     && typeof value.meetsTarget === 'boolean'
     && isOptional(value.line, isString)
-    && isOptional(value.maturesInDays, isFiniteNumber);
+    && isOptional(value.maturesInDays, isFiniteNumber)
+    && isOptional(value.marketQuality, isMarketQualityFacts)
+    && isOptional(value.sourceSlug, isString)
+    && isOptional(value.sourceEndDate, isString)
+    && isOptional(value.predictionTopic, isString);
+}
+
+function isMarketQualityFacts(value: unknown): value is MarketQualityFacts {
+  if (!isRecord(value)) return false;
+  return isFiniteNumber(value.executionScore)
+    && isOptional(value.stabilityScore, isFiniteNumber)
+    && isFiniteNumber(value.liquidityUsd)
+    && isOptional(value.spreadCents, isFiniteNumber)
+    && isOptional(value.bestBidCents, isFiniteNumber)
+    && isOptional(value.bestAskCents, isFiniteNumber)
+    && isOptional(value.recentRangePts, isFiniteNumber)
+    && isOptional(value.pricePositionPct, isFiniteNumber)
+    && isOneOf(value.pricePosition, ['steady', 'near_recent_low', 'middle', 'near_recent_high', 'unavailable'])
+    && isOptional(value.oneDayMovePts, isFiniteNumber)
+    && isOptional(value.oneWeekMovePts, isFiniteNumber)
+    && isOptional(value.oneMonthMovePts, isFiniteNumber);
 }
 
 export function isTrackedBet(value: unknown): value is TrackedBet {
@@ -71,14 +132,16 @@ export function isTrackedBet(value: unknown): value is TrackedBet {
     && isFiniteNumber(value.probability)
     && isFiniteNumber(value.expectedReturn)
     && isFiniteNumber(value.amountWagered)
-    && isOneOf(value.status, ['active', 'won', 'lost'])
-    && typeof value.createdAt === 'string';
+    && isOneOf(value.status, ['active', 'won', 'lost', 'watching'])
+    && typeof value.createdAt === 'string'
+    && isOptional(value.goalId, isString);
 }
 
 export function isPortfolioProgressPoint(value: unknown): value is PortfolioProgressPoint {
   if (!isRecord(value)) return false;
   return isFiniteNumber(value.time)
     && isFiniteNumber(value.value)
+    && isFiniteNumber(value.basisValue)
     && isFiniteNumber(value.livePnl)
     && isFiniteNumber(value.projectedPnl);
 }
@@ -89,7 +152,16 @@ export function isSavedRoutesBatch(value: unknown): value is SavedRoutesBatch {
     && typeof value.generatedAt === 'string'
     && isQuizAnswers(value.quizSnapshot)
     && Array.isArray(value.routes)
-    && value.routes.every(isRoute);
+    && value.routes.every(isRoute)
+    && isOptional(value.goalId, isString);
+}
+
+export function isSportsMatch(value: unknown): value is SportsMatch {
+  if (!isRecord(value)) return false;
+  return typeof value.polymarketSlug === 'string'
+    && isOneOf(value.league, ['NBA', 'WNBA', 'NFL', 'MLB', 'NHL'])
+    && typeof value.kalshiYesTicker === 'string'
+    && typeof value.kalshiNoTicker === 'string';
 }
 
 export function isArrayOf<T>(validator: Validator<T>): Validator<T[]> {
@@ -108,6 +180,10 @@ function isFiniteNumber(value: unknown): value is number {
 
 function isString(value: unknown): value is string {
   return typeof value === 'string';
+}
+
+function isBoolean(value: unknown): value is boolean {
+  return typeof value === 'boolean';
 }
 
 function isOptional<T>(value: unknown, validator: Validator<T>): value is T | undefined {

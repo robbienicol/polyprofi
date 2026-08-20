@@ -122,7 +122,7 @@ export function PortfolioLineChart({
         ) : (
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
             <ThemedText style={{ color: theme.textTertiary, fontSize: 13 }}>
-              Track a route to start your curve
+              Acquire a route to start your curve
             </ThemedText>
           </View>
         )}

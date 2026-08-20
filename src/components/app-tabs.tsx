@@ -20,6 +20,14 @@ export default function AppTabs() {
         />
       </NativeTabs.Trigger>
 
+      <NativeTabs.Trigger name="goals">
+        <NativeTabs.Trigger.Label>Goals</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon
+          sf={{ default: 'target', selected: 'target' }}
+          md={{ default: 'flag', selected: 'flag' }}
+        />
+      </NativeTabs.Trigger>
+
       <NativeTabs.Trigger name="routes">
         <NativeTabs.Trigger.Label>Routes</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
@@ -37,10 +45,10 @@ export default function AppTabs() {
       </NativeTabs.Trigger>
 
       <NativeTabs.Trigger name="profile">
-        <NativeTabs.Trigger.Label>Profile</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Label>Settings</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
-          sf={{ default: 'person', selected: 'person.fill' }}
-          md={{ default: 'person_outline', selected: 'person' }}
+          sf={{ default: 'gearshape', selected: 'gearshape.fill' }}
+          md={{ default: 'settings', selected: 'settings' }}
         />
       </NativeTabs.Trigger>
     </NativeTabs>

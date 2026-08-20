@@ -33,6 +33,13 @@ yarn-error.*
 # local env files
 .env
 .env*.local
+.env.bak
+
+# build outputs (ipa/apk artifacts, build logs) — not source, regenerate via eas build
+build-artifacts/
+
+# generated App Store / marketing screenshots — regenerate via store-screenshots tooling
+store-screenshots/
 
 # typescript
 *.tsbuildinfo
@@ -43,3 +50,11 @@ example
 /ios
 /android
 .gstack/
+
+# generated pitch-deck build/edit workspaces — regenerate via deck tooling
+.deck-build/
+.deck-edit/
+*.inspect.ndjson
+
+# signed app binaries — regenerate via eas build
+*.ipa

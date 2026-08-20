@@ -8,7 +8,7 @@ import { useTheme } from '@/hooks/use-theme';
 const CATEGORIES = [
   { emoji: '📈', name: 'Stocks & Options', desc: 'ETFs, covered calls, and low-risk options on blue-chip stocks.', color: '#22c55e' },
   { emoji: '₿', name: 'Crypto', desc: 'Spot trades and momentum plays on BTC, ETH, and top altcoins.', color: '#f59e0b' },
-  { emoji: '⚽', name: 'Sports Betting', desc: 'Moneyline favorites, spread bets, and same-game parlays.', color: '#22c55e' },
+  { emoji: '⚽', name: 'Sports Predictions', desc: 'Moneyline, spread, and prop markets on major sports.', color: '#22c55e' },
   { emoji: '🔮', name: 'Polymarket', desc: 'Prediction markets on politics, sports outcomes, and world events.', color: '#a855f7' },
   { emoji: '💱', name: 'Forex', desc: 'Major currency pairs with tight spreads and high liquidity.', color: '#f97316' },
 ] as const;
@@ -24,7 +24,7 @@ export default function LearnScreen(): React.ReactElement {
           <View className="items-center gap-2 pb-2">
             <ThemedText type="subtitle">How it works</ThemedText>
             <ThemedText type="small" themeColor="textSecondary" className="text-center" style={{ maxWidth: 300 }}>
-              Set a profit goal. PolyProfit uses AI to find the best routes across every market — sorted safest to riskiest.
+              Set a profit goal. Pathey uses AI to find the best routes across every market — sorted safest to riskiest.
             </ThemedText>
           </View>
 
@@ -54,7 +54,7 @@ export default function LearnScreen(): React.ReactElement {
           ))}
 
           <ThemedText type="small" themeColor="textSecondary" className="text-center" style={{ opacity: 0.5 }}>
-            PolyProfit is for entertainment purposes only. Always research before investing or betting real money.
+            Pathey is for entertainment purposes only. Always research before investing or betting real money.
           </ThemedText>
         </ScrollView>
       </SafeAreaView>

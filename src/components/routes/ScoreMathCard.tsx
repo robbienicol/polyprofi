@@ -52,6 +52,29 @@ export function ScoreMathCard({ scoreBreakdown, requiredInvestment, availableInv
       <ThemedText style={{ fontSize: 12, color: theme.text, fontWeight: '800', ...MONO }}>
         {formatScoreNumber(scoreBreakdown.contributions.reliability)} + {formatScoreNumber(scoreBreakdown.contributions.principalProtection)} + {formatScoreNumber(scoreBreakdown.contributions.capitalEfficiency)} + {formatScoreNumber(scoreBreakdown.contributions.timeEfficiency)} = {formatScoreNumber(scoreBreakdown.rawScore)}{scoreBreakdown.rawScore !== score ? ` → ${score}` : ''}
       </ThemedText>
+      {scoreBreakdown.capitalSurvivalFactor != null && scoreBreakdown.capitalSurvivalFactor < 1 ? (
+        <ThemedText style={{ fontSize: 11, color: Accent.gold, fontWeight: '700', ...MONO }}>
+          Capital at risk: ×{scoreBreakdown.capitalSurvivalFactor.toFixed(2)} — a miss
+          {scoreBreakdown.lossFraction != null && scoreBreakdown.lossFraction < 1
+            ? ` costs about ${Math.round(scoreBreakdown.lossFraction * 100)}% of your stake`
+            : ' loses your full stake'}
+          {' '}({Math.round(100 - scoreBreakdown.reliability)}% chance)
+        </ThemedText>
+      ) : null}
+      {scoreBreakdown.marketQualityAdjustment ? (
+        <ThemedText style={{ fontSize: 11, color: Accent.gold, fontWeight: '700', ...MONO }}>
+          Market quality: ×{scoreBreakdown.marketQualityAdjustment.factor.toFixed(3)}
+          {scoreBreakdown.marketQualityAdjustment.executionScore != null
+            ? ` · execution ${formatScoreNumber(scoreBreakdown.marketQualityAdjustment.executionScore)}/100`
+            : ''}
+          {scoreBreakdown.marketQualityAdjustment.stabilityScore != null
+            ? ` · stability ${formatScoreNumber(scoreBreakdown.marketQualityAdjustment.stabilityScore)}/100`
+            : ''}
+          {scoreBreakdown.marketQualityAdjustment.deduction > 0
+            ? ` · −${formatScoreNumber(scoreBreakdown.marketQualityAdjustment.deduction)} pts`
+            : ''}
+        </ThemedText>
+      ) : null}
       {scoreBreakdown.capReason ? (
         <ThemedText style={{ fontSize: 11, color: Accent.red, fontWeight: '700' }}>
           {scoreBreakdown.capReason === 'over_budget'

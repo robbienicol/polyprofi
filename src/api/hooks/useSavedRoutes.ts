@@ -22,13 +22,14 @@ export function useSavedRoutes() {
     onSettled: () => queryClient.invalidateQueries({ queryKey: savedRoutesQueryKey() }),
   });
 
-  const saveGeneratedRoutes = useCallback((quizSnapshot: QuizAnswers, routes: Route[]) => {
+  const saveGeneratedRoutes = useCallback((quizSnapshot: QuizAnswers, routes: Route[], goalId?: string) => {
     if (routes.length === 0) return;
     saveBatch({
       id: `${Date.now()}`,
       generatedAt: new Date().toISOString(),
       quizSnapshot,
       routes,
+      ...(goalId ? { goalId } : null),
     });
   }, [saveBatch]);
 

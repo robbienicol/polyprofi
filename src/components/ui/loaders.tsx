@@ -93,7 +93,7 @@ export function AnalyzingLoader(): React.ReactElement {
 
 /** Branded full-screen loader with a pulsing logo mark. Used at boot + route generation. */
 export function BrandLoader({
-  title = 'PolyProfit',
+  title = 'Pathey',
   subtitle,
 }: {
   title?: string;

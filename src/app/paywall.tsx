@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter, type Href } from 'expo-router';
 import React, { useCallback } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -8,11 +8,12 @@ import { useSubscription } from '@/api/hooks/useSubscription';
 import { ThemedText } from '@/components/themed-text';
 import { Accent, Brand, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { FEATURE_FLAGS } from '@/lib/feature-flags';
 
 const FEATURES = [
-  { emoji: '🧠', text: 'Edge-scored plays from our real-time market engine', color: Brand[500] },
-  { emoji: '📊', text: 'Risk-scored plays from safe to risky', color: '#84CC16' },
-  { emoji: '📍', text: 'Track every bet and see your P&L in real time', color: Accent.gold },
+  { emoji: '🧠', text: 'Live opportunities from our real-time market engine', color: Brand[500] },
+  { emoji: '📊', text: 'Compare risk from conservative to aggressive', color: '#84CC16' },
+  { emoji: '📍', text: 'Monitor every position and see your P&L in real time', color: Accent.gold },
   { emoji: '🔄', text: 'Refresh routes anytime, as many times as you want', color: Accent.violet },
 ] as const;
 
@@ -35,6 +36,10 @@ export default function PaywallScreen(): React.ReactElement {
     if (router.canGoBack()) router.back();
     else router.replace('/(tabs)');
   }, [router]);
+
+  // Paywall is disabled — there's no real payment behind it yet (see
+  // FEATURE_FLAGS.paywallEnabled). Bounce out instead of rendering it.
+  if (!FEATURE_FLAGS.paywallEnabled) return <Redirect href="/(tabs)" />;
 
   return (
     <View className="flex-1" style={{ backgroundColor: theme.background }}>
@@ -101,7 +106,15 @@ export default function PaywallScreen(): React.ReactElement {
           </Pressable>
 
           <ThemedText type="small" themeColor="textSecondary" className="text-center" style={{ opacity: 0.5 }}>
-            By subscribing you agree to our Terms of Service. Not financial advice.
+            By subscribing you agree to our{' '}
+            <ThemedText type="small" style={{ opacity: 1, textDecorationLine: 'underline' }} onPress={() => router.push('/terms' as Href)}>
+              Terms of Service
+            </ThemedText>{' '}
+            and{' '}
+            <ThemedText type="small" style={{ opacity: 1, textDecorationLine: 'underline' }} onPress={() => router.push('/privacy' as Href)}>
+              Privacy Policy
+            </ThemedText>
+            . AI-generated · Not financial advice.
           </ThemedText>
         </ScrollView>
       </SafeAreaView>

@@ -23,6 +23,9 @@ export default function AppTabs() {
           <TabTrigger name="home" href="/(tabs)" asChild>
             <TabButton icon="house">Home</TabButton>
           </TabTrigger>
+          <TabTrigger name="goals" href="/(tabs)/goals" asChild>
+            <TabButton icon="target">Goals</TabButton>
+          </TabTrigger>
           <TabTrigger name="routes" href="/(tabs)/routes" asChild>
             <TabButton icon="list.bullet.rectangle">Routes</TabButton>
           </TabTrigger>
@@ -30,7 +33,7 @@ export default function AppTabs() {
             <TabButton icon="briefcase">Portfolio</TabButton>
           </TabTrigger>
           <TabTrigger name="profile" href="/(tabs)/profile" asChild>
-            <TabButton icon="person">Profile</TabButton>
+            <TabButton icon="gearshape">Settings</TabButton>
           </TabTrigger>
         </CustomTabList>
       </TabList>
@@ -68,7 +71,7 @@ export function CustomTabList(props: TabListProps) {
       <ThemedView type="backgroundElement" style={[styles.innerContainer, compact && styles.compactInnerContainer]}>
         {!compact ? (
           <ThemedText type="smallBold" style={styles.brandText}>
-            PolyProfit
+            Pathey
           </ThemedText>
         ) : null}
 

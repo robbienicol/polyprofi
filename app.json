@@ -1,12 +1,13 @@
 {
   "expo": {
-    "name": "polyprofit",
+    "name": "Pathey",
+    "description": "Provisions for your financial journey.",
     "slug": "polyprofit",
     "owner": "robbiehey",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "polyprofit",
+    "scheme": ["pathey", "polyprofit"],
     "userInterfaceStyle": "automatic",
     "ios": {
       "bundleIdentifier": "com.robbiehey.polyprofit",
@@ -25,7 +26,7 @@
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "output": "static",
+      "output": "server",
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
@@ -41,7 +42,13 @@
         }
       ],
       "expo-secure-store",
-      "expo-notifications"
+      "expo-notifications",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Use Face ID to quickly and securely unlock Pathey."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

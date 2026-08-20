@@ -9,49 +9,21 @@ import {
 } from '@/api/client/storage';
 import { useBetMonitoring } from '@/api/hooks/useBetMonitoring';
 import { useTrackedBets } from '@/api/hooks/useTrackedBets';
-import { isPredictionMarketBet } from '@/lib/parse-bet-line';
-import {
-  inferAssetEntryPrice,
-  inferAssetSymbol,
-  inferAnnualYieldPct,
-  inferMaturityDays,
-  isSavingsOrTreasuryCategory,
-  isStockOrEtfCategory,
-} from '@/lib/tracked-assets';
-import { TrackedBet } from '@/types/bets';
+import { calculatePortfolioProgress, stockIdentity } from '@/lib/portfolio-progress';
+import { isStockOrEtfCategory } from '@/lib/tracked-assets';
+import type { TrackedBet } from '@/types/bets';
 
 const PROGRESS_QUERY_KEY = ['PORTFOLIO_PROGRESS'] as const;
-const YEAR_MS = 365 * 24 * 60 * 60 * 1_000;
 
-function projectedAccrual(bet: TrackedBet, now: number): number {
-  const elapsedMs = Math.max(0, now - new Date(bet.createdAt).getTime());
-  const maturityDays = bet.maturesInDays ?? inferMaturityDays(bet.description, bet.strategy);
-  const annualYieldPct = bet.annualYieldPct ?? inferAnnualYieldPct(bet.description, bet.strategy);
-  const cappedMs = maturityDays
-    ? Math.min(elapsedMs, maturityDays * 24 * 60 * 60 * 1_000)
-    : elapsedMs;
-
-  if (annualYieldPct != null) {
-    return bet.amountWagered * (annualYieldPct / 100) * (cappedMs / YEAR_MS);
-  }
-  if (maturityDays && maturityDays > 0) {
-    return bet.expectedReturn * Math.min(1, cappedMs / (maturityDays * 24 * 60 * 60 * 1_000));
-  }
-  return 0;
-}
-
-function stockIdentity(bet: TrackedBet): { symbol?: string; entryPrice?: number } {
-  return {
-    symbol: bet.assetSymbol ?? inferAssetSymbol(bet.description, bet.strategy, bet.line),
-    entryPrice: bet.assetEntryPrice ?? inferAssetEntryPrice(bet.description, bet.strategy),
-  };
-}
-
-export function usePortfolioProgress(fallbackBalance: number) {
-  const queryClient = useQueryClient();
+/**
+ * Live inputs every progress calculation needs: the monitoring feed, refreshed
+ * asset quotes and a ticking clock. Shared so that valuing one goal, all goals,
+ * or the whole portfolio costs exactly one set of fetches.
+ */
+export function usePortfolioMarketInputs() {
   const { bets, isLoading: betsLoading } = useTrackedBets();
-  const active = useMemo(() => bets.filter((bet) => bet.status === 'active'), [bets]);
-  const monitoring = useBetMonitoring(active.length > 0);
+  const allActive = useMemo(() => bets.filter((bet) => bet.status === 'active'), [bets]);
+  const monitoring = useBetMonitoring(allActive.length > 0);
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -60,11 +32,11 @@ export function usePortfolioProgress(fallbackBalance: number) {
   }, []);
 
   const symbols = useMemo(
-    () => [...new Set(active
+    () => [...new Set(allActive
       .filter((bet) => isStockOrEtfCategory(bet.category))
       .map((bet) => stockIdentity(bet).symbol)
       .filter((symbol): symbol is string => Boolean(symbol)))],
-    [active]
+    [allActive]
   );
 
   const quotesQuery = useQuery({
@@ -75,81 +47,6 @@ export function usePortfolioProgress(fallbackBalance: number) {
     refetchInterval: symbols.length > 0 ? 60_000 : false,
   });
 
-  const historyQuery = useQuery({
-    queryKey: PROGRESS_QUERY_KEY,
-    queryFn: getPortfolioProgress,
-  });
-
-  const snapshot = useMemo(() => {
-    const quoteBySymbol = new Map((quotesQuery.data ?? []).map((quote) => [quote.symbol, quote]));
-    const activeStake = active.reduce((sum, bet) => sum + bet.amountWagered, 0);
-    const basisValue = Math.max(fallbackBalance, activeStake);
-    const cash = Math.max(0, basisValue - activeStake);
-    let investedValue = 0;
-    let livePnl = 0;
-    let projectedPnl = 0;
-    let livePositions = 0;
-    let projectedPositions = 0;
-
-    for (const bet of active) {
-      let pnl = 0;
-
-      if (isPredictionMarketBet(bet)) {
-        const status = monitoring.statusById[bet.id];
-        if (status?.currentPrice != null) {
-          pnl = status.unrealizedPnl;
-          livePnl += pnl;
-          livePositions += 1;
-        }
-      } else if (isStockOrEtfCategory(bet.category)) {
-        const { symbol, entryPrice } = stockIdentity(bet);
-        const quote = symbol ? quoteBySymbol.get(symbol) : undefined;
-        if (quote && entryPrice && entryPrice > 0) {
-          pnl = (bet.amountWagered / entryPrice) * (quote.price - entryPrice);
-          livePnl += pnl;
-          livePositions += 1;
-        }
-      } else if (isSavingsOrTreasuryCategory(bet.category)) {
-        pnl = projectedAccrual(bet, now);
-        projectedPnl += pnl;
-        projectedPositions += 1;
-      }
-
-      investedValue += bet.amountWagered + pnl;
-    }
-
-    return {
-      value: cash + investedValue,
-      basisValue,
-      activeStake,
-      livePnl,
-      projectedPnl,
-      livePositions,
-      projectedPositions,
-    };
-  }, [active, fallbackBalance, monitoring.statusById, now, quotesQuery.data]);
-
-  useEffect(() => {
-    if (betsLoading || historyQuery.isLoading || snapshot.basisValue <= 0) return;
-
-    const point: PortfolioProgressPoint = {
-      time: now,
-      value: snapshot.value,
-      livePnl: snapshot.livePnl,
-      projectedPnl: snapshot.projectedPnl,
-    };
-    const basis: PortfolioProgressPoint = {
-      time: now - 60_000,
-      value: snapshot.value,
-      livePnl: snapshot.livePnl,
-      projectedPnl: snapshot.projectedPnl,
-    };
-
-    recordPortfolioProgress(point, basis).then((points) => {
-      queryClient.setQueryData(PROGRESS_QUERY_KEY, points);
-    }).catch(() => {});
-  }, [active, betsLoading, historyQuery.isLoading, now, queryClient, snapshot]);
-
   const refresh = useCallback(async () => {
     setNow(Date.now());
     await Promise.all([
@@ -158,9 +55,82 @@ export function usePortfolioProgress(fallbackBalance: number) {
     ]);
   }, [monitoring, quotesQuery, symbols.length]);
 
+  return {
+    allActive,
+    betsLoading,
+    now,
+    quotes: quotesQuery.data ?? [],
+    quotesUpdatedAt: quotesQuery.dataUpdatedAt,
+    statusById: monitoring.statusById,
+    sellAlerts: monitoring.sellAlerts,
+    monitoringUpdatedAt: monitoring.lastUpdated?.getTime() ?? 0,
+    isRefreshing: monitoring.isFetching || quotesQuery.isFetching,
+    refresh,
+  };
+}
+
+export interface PortfolioProgressOptions {
+  /**
+   * Restrict the snapshot to one goal's positions. Live prices and the monitoring
+   * feed are still requested for every position, so a scoped call reuses the same
+   * query cache as the whole-portfolio call rather than starting its own fetches.
+   */
+  scopeToBets?: (bets: TrackedBet[]) => TrackedBet[];
+  /**
+   * Whether to append to the stored portfolio history. Only the whole-portfolio
+   * call may — a scoped snapshot would write a smaller value into the same series.
+   */
+  recordHistory?: boolean;
+}
+
+export function usePortfolioProgress(fallbackBalance: number, options: PortfolioProgressOptions = {}) {
+  const { scopeToBets, recordHistory = true } = options;
+  const queryClient = useQueryClient();
+  const market = usePortfolioMarketInputs();
+  const { allActive, betsLoading, now, quotes, statusById } = market;
+  const active = useMemo(() => (scopeToBets ? scopeToBets(allActive) : allActive), [allActive, scopeToBets]);
+
+  const historyQuery = useQuery({
+    queryKey: PROGRESS_QUERY_KEY,
+    queryFn: getPortfolioProgress,
+  });
+
+  const snapshot = useMemo(() => {
+    return calculatePortfolioProgress({
+      active,
+      fallbackBalance,
+      statusesById: statusById,
+      quotes,
+      now,
+    });
+  }, [active, fallbackBalance, statusById, now, quotes]);
+
+  useEffect(() => {
+    if (!recordHistory || betsLoading || historyQuery.isLoading || snapshot.basisValue <= 0) return;
+
+    const point: PortfolioProgressPoint = {
+      time: now,
+      value: snapshot.value,
+      basisValue: snapshot.basisValue,
+      livePnl: snapshot.livePnl,
+      projectedPnl: snapshot.projectedPnl,
+    };
+    const basis: PortfolioProgressPoint = {
+      time: now - 60_000,
+      value: snapshot.basisValue,
+      basisValue: snapshot.basisValue,
+      livePnl: 0,
+      projectedPnl: 0,
+    };
+
+    recordPortfolioProgress(point, basis).then((points) => {
+      queryClient.setQueryData(PROGRESS_QUERY_KEY, points);
+    }).catch(() => {});
+  }, [active, betsLoading, historyQuery.isLoading, now, queryClient, recordHistory, snapshot]);
+
   const updatedAt = Math.max(
-    monitoring.lastUpdated?.getTime() ?? 0,
-    quotesQuery.dataUpdatedAt,
+    market.monitoringUpdatedAt,
+    market.quotesUpdatedAt,
     snapshot.projectedPositions > 0 ? now : 0
   );
 
@@ -169,9 +139,11 @@ export function usePortfolioProgress(fallbackBalance: number) {
     points: historyQuery.data ?? [],
     activeCount: active.length,
     isLoading: betsLoading || historyQuery.isLoading,
-    isRefreshing: monitoring.isFetching || quotesQuery.isFetching,
+    isRefreshing: market.isRefreshing,
     updatedAt: updatedAt > 0 ? new Date(updatedAt) : null,
     observedAt: now,
-    refresh,
+    statusById,
+    sellAlerts: market.sellAlerts,
+    refresh: market.refresh,
   };
 }

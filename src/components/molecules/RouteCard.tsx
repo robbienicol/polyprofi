@@ -5,8 +5,6 @@ import { ThemedText } from '@/components/themed-text';
 import { Accent, Radius, RiskScale, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { debtLiquidityLabel, debtYieldLabel, isDebtRoute } from '@/lib/route-investment-metrics';
-import { scoreColor, scoreLabel } from '@/lib/score';
-import type { GoalScoreBreakdown } from '@/lib/score';
 import { Route } from '@/types/routes';
 
 const RISK_LABELS = ['Very Safe', 'Safe', 'Moderate', 'Aggressive', 'Very Aggressive'] as const;
@@ -31,7 +29,6 @@ interface RouteCardProps {
   route: Route;
   requiredInvestment?: number | null;
   currentInvestment?: number | null;
-  scoreBreakdown: GoalScoreBreakdown;
   onTrack?: () => void;
   onPress?: () => void;
 }
@@ -40,13 +37,11 @@ function formatMoney(amount: number): string {
   return amount.toLocaleString(undefined, { maximumFractionDigits: 0 });
 }
 
-function RouteCardInner({ route, requiredInvestment, currentInvestment, scoreBreakdown, onTrack, onPress }: RouteCardProps) {
+function RouteCardInner({ route, requiredInvestment, currentInvestment, onTrack, onPress }: RouteCardProps) {
   const theme = useTheme();
   const rc = riskColor(route.riskLevel);
   const pc = probColor(route.probability);
   const binary = route.lossProfile === 'binary';
-  const score = scoreBreakdown.score;
-  const sc = scoreColor(score);
   const debt = isDebtRoute(route);
   const debtYield = debtYieldLabel(route, requiredInvestment);
   const debtLiquidity = debtLiquidityLabel(route);
@@ -95,17 +90,7 @@ function RouteCardInner({ route, requiredInvestment, currentInvestment, scoreBre
               </ThemedText>
             </View>
           </View>
-          <View style={{ alignItems: 'flex-end', gap: 5 }}>
-            <View
-              style={{
-                flexDirection: 'row', alignItems: 'baseline', gap: 4,
-                paddingHorizontal: 9, paddingVertical: 5,
-                borderRadius: Radius.md, backgroundColor: sc + '18',
-                borderWidth: 1, borderColor: sc + '35',
-              }}>
-              <ThemedText style={{ fontSize: 16, color: sc, fontWeight: '900', ...MONO }}>{score}</ThemedText>
-              <ThemedText style={{ fontSize: 9, color: sc, fontWeight: '700' }}>{scoreLabel(score)}</ThemedText>
-            </View>
+          <View style={{ alignItems: 'flex-end' }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
               <View style={{ width: 6, height: 6, borderRadius: 999, backgroundColor: rc }} />
               <ThemedText style={{ fontSize: 10, color: rc, fontWeight: '700' }}>
@@ -174,7 +159,7 @@ function RouteCardInner({ route, requiredInvestment, currentInvestment, scoreBre
               <DebtFact label="MATURITY" value={route.maturesInDays ? formatMaturity(route.maturesInDays) : 'Flexible'} />
             </View>
             <View className="flex-row justify-between gap-2">
-              <DebtFact label="DOWNSIDE" value={route.lossProfile === 'partial' ? 'Capital safer' : 'Can lose stake'} />
+              <DebtFact label="DOWNSIDE" value={route.lossProfile === 'partial' ? 'Capital preservation' : 'Can lose stake'} />
               <DebtFact label="LIQUIDITY" value={debtLiquidity ?? 'Check terms'} />
             </View>
             {route.investmentFacts?.yieldSource ? (
@@ -185,7 +170,7 @@ function RouteCardInner({ route, requiredInvestment, currentInvestment, scoreBre
           </View>
         ) : null}
 
-        {/* Footer: return + loss profile + track */}
+        {/* Footer: return + loss profile + acquire */}
         <View className="flex-row justify-between items-end">
           <View>
             <View className="flex-row items-center gap-1.5">
@@ -198,7 +183,7 @@ function RouteCardInner({ route, requiredInvestment, currentInvestment, scoreBre
                   backgroundColor: binary ? Accent.red + '15' : '#22C55E15',
                 }}>
                 <ThemedText style={{ fontSize: 9.5, fontWeight: '700', color: binary ? Accent.red : '#22C55E', letterSpacing: 0.2 }}>
-                  {binary ? 'ALL-OR-NOTHING' : 'CAPITAL SAFE'}
+                  {binary ? 'ALL-OR-NOTHING' : 'CAPITAL PRESERVATION'}
                 </ThemedText>
               </View>
             </View>
@@ -214,7 +199,7 @@ function RouteCardInner({ route, requiredInvestment, currentInvestment, scoreBre
                 backgroundColor: '#22C55E', ...Shadow.card,
               }}
               className="active:opacity-80">
-              <ThemedText style={{ fontSize: 13, fontWeight: '800', color: '#06140C' }}>Track</ThemedText>
+              <ThemedText style={{ fontSize: 13, fontWeight: '800', color: '#06140C' }}>Acquire</ThemedText>
             </Pressable>
           )}
         </View>

@@ -1,339 +1,638 @@
 import React, { useEffect, useState } from 'react';
-import { Animated, Dimensions, Easing, View } from 'react-native';
+import { Animated, Easing, useWindowDimensions, View } from 'react-native';
+import Svg, { Circle, Path } from 'react-native-svg';
 
-import { RouteCard, riskColor, riskLabel } from '@/components/molecules/RouteCard';
+import {
+  BREAKDOWN_FACTORS,
+  CLOSING_PROOF,
+  COACH_SCRIPT,
+  COACH_STARTERS,
+  OnboardingSlide,
+  RANKED_PREVIEW,
+} from '@/components/onboarding/onboarding-data';
 import { ThemedText } from '@/components/themed-text';
-import { DEMO_ROUTES, DEMO_TRACKED_BETS, OnboardingSlide } from '@/components/onboarding/onboarding-data';
-import { Accent, Brand, Radius, Shadow } from '@/constants/theme';
+import { Accent, Brand, Radius, RiskScale, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { goalEffectivenessScore } from '@/lib/score';
-import { TrackedBet } from '@/types/bets';
 
 export { OnboardingGlow } from '@/components/onboarding/OnboardingGlow';
 
 const MONO = { fontVariant: ['tabular-nums' as const] };
 
-function WelcomePreview(): React.ReactElement {
+/**
+ * `active` is true only for the slide currently on screen. Previews use it to replay
+ * their reveal when the user lands on them — an animation that already finished while
+ * the user was three slides back is a wasted one — and to idle when off screen.
+ */
+interface PreviewProps {
+  active: boolean;
+}
+
+/** Small phones (SE-class) tighten rows and drop the optional ones rather than squeezing. */
+function useCompact(): boolean {
+  const { height } = useWindowDimensions();
+  return height > 0 && height < 740;
+}
+
+/* ------------------------------------------------------------------ primitives */
+
+/**
+ * Every preview lives in the same framed panel — a titlebar plus body. Consistent
+ * framing is what stops five different illustrations from looking like five different
+ * apps, and it reads as a slice of the real product rather than marketing art.
+ */
+function Panel({
+  title,
+  chip,
+  chipColor,
+  children,
+}: {
+  title: string;
+  chip?: string;
+  chipColor?: string;
+  children: React.ReactNode;
+}): React.ReactElement {
   const theme = useTheme();
-  const [pulse] = useState(() => new Animated.Value(0));
+  const accent = chipColor ?? Brand[500];
+
+  return (
+    <View
+      style={{
+        borderRadius: Radius.xl,
+        overflow: 'hidden',
+        backgroundColor: theme.backgroundElevated,
+        borderWidth: 1,
+        borderColor: theme.border,
+        ...Shadow.card,
+      }}>
+      <View
+        className="flex-row items-center justify-between"
+        style={{
+          paddingHorizontal: 14,
+          paddingVertical: 10,
+          backgroundColor: theme.backgroundElement,
+          borderBottomWidth: 1,
+          borderBottomColor: theme.border,
+        }}>
+        <ThemedText style={{ fontSize: 10, fontWeight: '800', letterSpacing: 0.8, color: theme.textTertiary }}>
+          {title}
+        </ThemedText>
+        {chip ? (
+          <View
+            className="flex-row items-center"
+            style={{
+              gap: 5,
+              paddingHorizontal: 8,
+              paddingVertical: 3,
+              borderRadius: Radius.pill,
+              backgroundColor: accent + '18',
+              borderWidth: 1,
+              borderColor: accent + '3D',
+            }}>
+            <View style={{ width: 5, height: 5, borderRadius: 999, backgroundColor: accent }} />
+            <ThemedText style={{ fontSize: 9, fontWeight: '800', letterSpacing: 0.4, color: accent }}>{chip}</ThemedText>
+          </View>
+        ) : null}
+      </View>
+      <View style={{ padding: 12, gap: 8 }}>{children}</View>
+    </View>
+  );
+}
+
+/** Fades + lifts its children in once on mount. Used for the scripted coach exchange. */
+function FadeIn({ children, delay = 0 }: { children: React.ReactNode; delay?: number }): React.ReactElement {
+  const [progress] = useState(() => new Animated.Value(0));
+
+  useEffect(() => {
+    const animation = Animated.timing(progress, {
+      toValue: 1,
+      duration: 320,
+      delay,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    });
+    animation.start();
+    return () => animation.stop();
+  }, [delay, progress]);
+
+  return (
+    <Animated.View
+      style={{
+        opacity: progress,
+        transform: [{ translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }],
+      }}>
+      {children}
+    </Animated.View>
+  );
+}
+
+/* ------------------------------------------------------------------ slide 1: scan */
+
+/** A four-point sparkle that twinkles — scale, opacity and a slight tilt on a loop. */
+function Sparkle({
+  style,
+  size = 20,
+  color,
+  delay = 0,
+  duration = 1400,
+}: {
+  style: object;
+  size?: number;
+  color: string;
+  delay?: number;
+  duration?: number;
+}): React.ReactElement {
+  const [progress] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(pulse, { toValue: 1, duration: 2200, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 0, duration: 2200, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(progress, { toValue: 1, duration, delay, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(progress, { toValue: 0, duration, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
       ])
     );
     loop.start();
     return () => loop.stop();
-  }, [pulse]);
+  }, [progress, delay, duration]);
 
-  const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.06] });
-  const glowOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0.7] });
+  const scale = progress.interpolate({ inputRange: [0, 1], outputRange: [0.65, 1.15] });
+  const opacity = progress.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] });
+  const rotate = progress.interpolate({ inputRange: [0, 1], outputRange: ['-10deg', '10deg'] });
 
   return (
-    <View className="items-center justify-center flex-1 px-2">
-      <Animated.View style={{ transform: [{ scale }] }}>
-        <View style={{ width: 96, height: 96, borderRadius: Radius.xl, backgroundColor: Brand[500], alignItems: 'center', justifyContent: 'center', ...Shadow.float }}>
-          <ThemedText style={{ fontSize: 48, fontWeight: '900', color: '#06140C' }}>$</ThemedText>
-        </View>
+    <Animated.View style={[style, { opacity, transform: [{ scale }, { rotate }] }]}>
+      <Svg width={size} height={size} viewBox="0 0 24 24">
+        <Path d="M12 0 L14.5 9.5 L24 12 L14.5 14.5 L12 24 L9.5 14.5 L0 12 L9.5 9.5 Z" fill={color} />
+      </Svg>
+    </Animated.View>
+  );
+}
+
+/**
+ * The tagline slide: a hero mark that breathes and bobs, ringed by twinkling sparkles,
+ * rather than a product panel — this is the pitch, not a screenshot of the app yet.
+ */
+function ScanHero({ active }: PreviewProps): React.ReactElement {
+  const [bob] = useState(() => new Animated.Value(0));
+  const [glow] = useState(() => new Animated.Value(0));
+
+  useEffect(() => {
+    if (!active) return;
+    const bobLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(bob, { toValue: 1, duration: 1700, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(bob, { toValue: 0, duration: 1700, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ])
+    );
+    const glowLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(glow, { toValue: 1, duration: 1900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(glow, { toValue: 0, duration: 1900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ])
+    );
+    bobLoop.start();
+    glowLoop.start();
+    return () => {
+      bobLoop.stop();
+      glowLoop.stop();
+    };
+  }, [active, bob, glow]);
+
+  const translateY = bob.interpolate({ inputRange: [0, 1], outputRange: [0, -12] });
+  const glowScale = glow.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1.08] });
+  const glowOpacity = glow.interpolate({ inputRange: [0, 1], outputRange: [0.5, 0.95] });
+
+  return (
+    <View className="flex-1 items-center justify-center">
+      <View style={{ width: 240, height: 240, alignItems: 'center', justifyContent: 'center' }}>
         <Animated.View
           style={{
             position: 'absolute',
-            inset: -12,
-            borderRadius: Radius.xl + 12,
-            borderWidth: 2,
-            borderColor: Brand[500],
+            width: 220,
+            height: 220,
+            borderRadius: 110,
+            backgroundColor: Brand[500] + '26',
             opacity: glowOpacity,
+            transform: [{ scale: glowScale }],
           }}
         />
-      </Animated.View>
 
-      <View className="mt-8 gap-3 w-full">
-        {[
-          { emoji: '🎯', label: 'Goal + deadline in, routes out' },
-          { emoji: '📊', label: 'Honest probability on every play' },
-          { emoji: '🛡', label: 'Safest route first — always' },
-        ].map(({ emoji, label }) => (
-          <View
-            key={label}
-            className="flex-row items-center gap-3 px-4 py-3"
-            style={{ borderRadius: Radius.lg, backgroundColor: theme.backgroundElevated, borderWidth: 1, borderColor: theme.border }}>
-            <ThemedText style={{ fontSize: 18 }}>{emoji}</ThemedText>
-            <ThemedText style={{ fontSize: 14, fontWeight: '600', color: theme.text }}>{label}</ThemedText>
-          </View>
-        ))}
+        <Sparkle style={{ position: 'absolute', top: 14, left: 4 }} color={Brand[300]} size={22} delay={0} duration={1300} />
+        <Sparkle
+          style={{ position: 'absolute', top: 34, right: 0 }}
+          color={Accent.gold}
+          size={15}
+          delay={260}
+          duration={1250}
+        />
+        <Sparkle
+          style={{ position: 'absolute', bottom: 28, left: 20 }}
+          color={Brand[600]}
+          size={17}
+          delay={480}
+          duration={1500}
+        />
+
+        <Animated.View
+          style={{
+            transform: [{ translateY }],
+            width: 112,
+            height: 112,
+            borderRadius: Radius.xl,
+            backgroundColor: Brand[500],
+            alignItems: 'center',
+            justifyContent: 'center',
+            ...Shadow.card,
+          }}>
+          <Svg width={62} height={62} viewBox="0 0 62 62">
+            <Circle cx={22} cy={26} r={5} fill="#06140C" />
+            <Circle cx={40} cy={26} r={5} fill="#06140C" />
+            <Path
+              d="M17 36 Q31 50 45 36"
+              stroke="#06140C"
+              strokeWidth={5.5}
+              strokeLinecap="round"
+              fill="none"
+            />
+          </Svg>
+        </Animated.View>
       </View>
     </View>
   );
 }
 
-function GoalPreview(): React.ReactElement {
+/* ------------------------------------------------------------------ slide 2: rank */
+
+function RankPreview({ active }: PreviewProps): React.ReactElement {
   const theme = useTheme();
+  const compact = useCompact();
 
   return (
-    <View className="flex-1 justify-center gap-3 px-1">
-      {[
-        { emoji: '📅', when: '1 Year', from: 300, to: 330, lead: 'VOO · T-bills', color: Brand[500] },
-        { emoji: '⚡', when: 'This Week', from: 300, to: 330, lead: 'Polymarket · PM sports', color: Accent.gold },
-      ].map((row) => (
-        <View
-          key={row.when}
-          style={{
-            borderRadius: Radius.lg,
-            backgroundColor: theme.backgroundElevated,
-            borderWidth: 1,
-            borderColor: theme.border,
-            padding: 14,
-            gap: 6,
-            ...Shadow.card,
-          }}>
-          <View className="flex-row items-center justify-between">
-            <View className="flex-row items-center gap-2">
-              <ThemedText style={{ fontSize: 18 }}>{row.emoji}</ThemedText>
-              <ThemedText style={{ fontSize: 14, fontWeight: '700', color: theme.text }}>{row.when}</ThemedText>
+    <View className="flex-1 justify-center" style={{ opacity: active ? 1 : 0.98 }}>
+      <Panel title="OPTIONS FOR YOUR GOAL" chip="SIDE BY SIDE">
+        {RANKED_PREVIEW.map((row, index) => {
+          const rc = RiskScale[row.riskLevel - 1] ?? theme.textTertiary;
+          return (
+            <View
+              key={row.name}
+              style={{
+                paddingHorizontal: 10,
+                paddingVertical: compact ? 7 : 9,
+                borderRadius: Radius.md,
+                backgroundColor: index % 2 === 0 ? theme.backgroundElement : 'transparent',
+              }}>
+              <View className="flex-row items-center" style={{ gap: 9 }}>
+                <ThemedText style={{ fontSize: 14 }}>{row.emoji}</ThemedText>
+                <View className="flex-1">
+                  <ThemedText style={{ fontSize: 12.5, fontWeight: '700', color: theme.text }} numberOfLines={1}>
+                    {row.name}
+                  </ThemedText>
+                  <View className="flex-row items-center" style={{ gap: 5 }}>
+                    <View style={{ width: 5, height: 5, borderRadius: 999, backgroundColor: rc }} />
+                    <ThemedText style={{ fontSize: 10, color: theme.textTertiary }} numberOfLines={1}>
+                      {row.platform} · {row.note}
+                    </ThemedText>
+                  </View>
+                </View>
+              </View>
             </View>
-            <ThemedText style={{ fontSize: 13, fontWeight: '800', color: row.color, fontVariant: ['tabular-nums'] }}>
-              ${row.from} → ${row.to}
-            </ThemedText>
-          </View>
-          <ThemedText style={{ fontSize: 12, color: theme.textSecondary }}>Top routes: {row.lead}</ThemedText>
-        </View>
-      ))}
-      <ThemedText style={{ fontSize: 11, color: theme.textTertiary, textAlign: 'center', marginTop: 4 }}>
-        Same goal · different deadline · different safest path
+          );
+        })}
+      </Panel>
+      <ThemedText style={{ fontSize: 10.5, color: theme.textTertiary, textAlign: 'center', marginTop: 10 }}>
+        Chance · downside · cash required · time to payout
       </ThemedText>
     </View>
   );
 }
 
-function SafetyPreview(): React.ReactElement {
+/* ------------------------------------------------------------------ slide 3: breakdown */
+
+function BreakdownPreview({ active }: PreviewProps): React.ReactElement {
   const theme = useTheme();
+  const compact = useCompact();
 
   return (
-    <View className="flex-1 justify-center gap-3 px-1">
-      <View
-        style={{
-          borderRadius: Radius.lg,
-          borderWidth: 1.5,
-          borderColor: Brand[500] + '55',
-          backgroundColor: Brand[500] + '10',
-          padding: 14,
-          gap: 8,
-        }}>
-        <View className="flex-row items-center gap-2">
-          <ThemedText style={{ fontSize: 20 }}>📈</ThemedText>
-          <ThemedText style={{ fontSize: 13, fontWeight: '800', color: Brand[500] }}>VOO · Very Safe</ThemedText>
+    <View className="flex-1 justify-center" style={{ opacity: active ? 1 : 0.98 }}>
+      <Panel title="ROUTE FACTS · VOO" chip="SOURCE-LINKED">
+        <View className="flex-row items-center justify-between" style={{ paddingHorizontal: 10, paddingBottom: 2 }}>
+          <View>
+            <ThemedText style={{ fontSize: 11, color: theme.textSecondary }}>S&P 500 ETF</ThemedText>
+            <ThemedText style={{ fontSize: 18, fontWeight: '900', color: theme.text }}>VOO</ThemedText>
+          </View>
+          <ThemedText style={{ fontSize: 10, fontWeight: '800', color: Brand[500] }}>LIVE QUOTE</ThemedText>
         </View>
-        <ThemedText style={{ fontSize: 12, color: theme.textSecondary, lineHeight: 18 }}>
-          ~10% historical avg · capital preserved · 62% chance of hitting a modest year goal
-        </ThemedText>
-      </View>
 
-      <View
-        style={{
-          borderRadius: Radius.lg,
-          borderWidth: 1,
-          borderColor: theme.border,
-          backgroundColor: theme.backgroundElement,
-          padding: 14,
-          gap: 8,
-          opacity: 0.85,
-        }}>
-        <View className="flex-row items-center gap-2">
-          <ThemedText style={{ fontSize: 20 }}>🎲</ThemedText>
-          <ThemedText style={{ fontSize: 13, fontWeight: '800', color: Accent.red }}>Longshot parlay · Very Aggressive</ThemedText>
-        </View>
-        <ThemedText style={{ fontSize: 12, color: theme.textSecondary, lineHeight: 18 }}>
-          All-or-nothing · low true odds · still listed — ranked last, not hidden
-        </ThemedText>
-      </View>
+        <View style={{ height: 1, backgroundColor: theme.border, marginHorizontal: 2 }} />
 
-      <View className="flex-row items-center gap-2 px-1">
-        <ThemedText style={{ fontSize: 11, fontWeight: '700', color: Brand[500] }}>↑</ThemedText>
-        <ThemedText style={{ fontSize: 11, color: theme.textTertiary, flex: 1 }}>
-          We sort every route like this — safest first, hype last
-        </ThemedText>
-      </View>
-    </View>
-  );
-}
-
-function RoutesPreview(): React.ReactElement {
-  const screenHeight = Dimensions.get('window').height;
-  const scale = screenHeight < 700 ? 0.78 : screenHeight < 780 ? 0.84 : 0.88;
-  const route = DEMO_ROUTES[0];
-  const requiredInvestment = 300;
-  const scoreBreakdown = goalEffectivenessScore(route, {
-    target: 30,
-    requiredInvestment,
-    availableInvestment: 300,
-    deadlineDays: 365,
-  });
-
-  return (
-    <View className="flex-1 justify-center px-0" style={{ overflow: 'hidden' }}>
-      <View style={{ transform: [{ scale }] }}>
-        <ThemedText style={{ fontSize: 10, fontWeight: '700', color: Brand[500], letterSpacing: 0.6, marginBottom: 8, marginLeft: 4 }}>
-          #1 BEST VALUE FOR YOUR GOAL
-        </ThemedText>
-        <RouteCard
-          route={route}
-          requiredInvestment={requiredInvestment}
-          currentInvestment={300}
-          scoreBreakdown={scoreBreakdown}
-        />
-      </View>
-    </View>
-  );
-}
-
-function PreviewBetCard({ bet }: { bet: TrackedBet }): React.ReactElement {
-  const theme = useTheme();
-  const rc = riskColor(bet.riskLevel);
-  const statusMap = {
-    active: { color: Accent.gold, label: 'Active' },
-    won: { color: Brand[500], label: 'Won ✓' },
-    lost: { color: Accent.red, label: 'Lost ✗' },
-  };
-  const { color, label } = statusMap[bet.status];
-
-  return (
-    <View
-      style={{
-        borderRadius: Radius.lg,
-        overflow: 'hidden',
-        backgroundColor: theme.backgroundElement,
-        borderWidth: 1,
-        borderColor: theme.border,
-        ...Shadow.card,
-      }}>
-      <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, backgroundColor: rc }} />
-      <View style={{ paddingLeft: 18, paddingRight: 14, paddingVertical: 12, gap: 8 }}>
-        <View className="flex-row justify-between items-center">
-          <View className="flex-row items-center gap-2">
-            <ThemedText style={{ fontSize: 18 }}>{bet.emoji}</ThemedText>
-            <View>
-              <ThemedText style={{ fontSize: 13, fontWeight: '700', color: theme.text }}>{bet.category}</ThemedText>
-              <ThemedText style={{ fontSize: 10, color: theme.textTertiary }}>{bet.platform} · {riskLabel(bet.riskLevel)}</ThemedText>
+        {BREAKDOWN_FACTORS.map((factor) => (
+          <View key={factor.label} style={{ paddingHorizontal: 10, paddingVertical: 5 }}>
+            <View className="flex-row items-center justify-between">
+              <ThemedText style={{ fontSize: 11.5, fontWeight: '600', color: theme.textSecondary }}>{factor.label}</ThemedText>
+              <ThemedText style={{ fontSize: 11.5, fontWeight: '800', color: theme.text }}>
+                {factor.value}
+              </ThemedText>
             </View>
           </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 8, paddingVertical: 3, borderRadius: Radius.pill, backgroundColor: color + '1A' }}>
-            <View style={{ width: 5, height: 5, borderRadius: 999, backgroundColor: color }} />
-            <ThemedText style={{ fontSize: 10, fontWeight: '700', color }}>{label}</ThemedText>
+        ))}
+
+        <View style={{ height: 1, backgroundColor: theme.border, marginHorizontal: 2 }} />
+
+        {compact ? null : (
+          <View
+            style={{
+              marginHorizontal: 6,
+              padding: 10,
+              borderRadius: Radius.md,
+              backgroundColor: Accent.gold + '12',
+              borderWidth: 1,
+              borderColor: Accent.gold + '33',
+              gap: 3,
+            }}>
+            <ThemedText style={{ fontSize: 9.5, fontWeight: '800', color: Accent.gold, letterSpacing: 0.4 }}>
+              IF IT GOES AGAINST YOU
+            </ThemedText>
+            <ThemedText style={{ fontSize: 11, color: theme.textSecondary, lineHeight: 16 }}>
+              Capital preserved — a drawdown, not a wipeout. All-or-nothing routes say so, right here.
+            </ThemedText>
           </View>
-        </View>
-        <View className="flex-row items-baseline gap-1">
-          <ThemedText style={{ fontSize: 16, fontWeight: '800', color: theme.text, ...MONO }}>${bet.amountWagered}</ThemedText>
-          <ThemedText style={{ fontSize: 11, color: theme.textTertiary }}>staked → </ThemedText>
-          <ThemedText style={{ fontSize: 12, fontWeight: '700', color: Brand[500], ...MONO }}>+${bet.expectedReturn}</ThemedText>
-        </View>
-      </View>
+        )}
+
+        <ThemedText style={{ fontSize: 10, color: theme.textTertiary, paddingHorizontal: 10 }}>
+          Live quote · source and timestamp shown on every route
+        </ThemedText>
+      </Panel>
     </View>
   );
 }
 
-function TrackedPreview(): React.ReactElement {
+/* ------------------------------------------------------------------ slide 4: coach */
+
+function TypingDots(): React.ReactElement {
   const theme = useTheme();
-  const [pull] = useState(() => new Animated.Value(0));
-  const [spin] = useState(() => new Animated.Value(0));
+  const [progress] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
     const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pull, { toValue: 1, duration: 900, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-        Animated.delay(400),
-        Animated.timing(pull, { toValue: 0, duration: 600, easing: Easing.in(Easing.cubic), useNativeDriver: true }),
-        Animated.delay(1200),
-      ])
-    );
-    const spinner = Animated.loop(
-      Animated.timing(spin, { toValue: 1, duration: 900, easing: Easing.linear, useNativeDriver: true })
+      Animated.timing(progress, { toValue: 1, duration: 1050, easing: Easing.linear, useNativeDriver: true })
     );
     loop.start();
-    spinner.start();
-    return () => {
-      loop.stop();
-      spinner.stop();
-    };
-  }, [pull, spin]);
-
-  const translateY = pull.interpolate({ inputRange: [0, 1], outputRange: [0, 28] });
-  const refreshOpacity = pull.interpolate({ inputRange: [0, 0.4, 1], outputRange: [0, 1, 1] });
-  const rotate = spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
-
-  const won = DEMO_TRACKED_BETS.filter((b) => b.status === 'won').reduce((s, b) => s + b.expectedReturn, 0);
-  const wagered = DEMO_TRACKED_BETS.reduce((s, b) => s + b.amountWagered, 0);
+    return () => loop.stop();
+  }, [progress]);
 
   return (
-    <View className="flex-1 justify-center gap-3">
-      <Animated.View style={{ transform: [{ translateY }] }} className="gap-3">
-        <Animated.View style={{ opacity: refreshOpacity, alignItems: 'center', marginBottom: -8 }}>
-          <Animated.View style={{ transform: [{ rotate }] }}>
-            <ThemedText style={{ fontSize: 22, color: Brand[500] }}>↻</ThemedText>
-          </Animated.View>
-          <ThemedText style={{ fontSize: 11, fontWeight: '700', color: Brand[500], letterSpacing: 0.3 }}>
-            PULL TO REFRESH
-          </ThemedText>
-        </Animated.View>
-
-        <View
+    <View
+      className="flex-row items-center"
+      style={{
+        alignSelf: 'flex-start',
+        gap: 4,
+        paddingHorizontal: 12,
+        paddingVertical: 11,
+        borderRadius: Radius.lg,
+        backgroundColor: theme.backgroundElement,
+        borderWidth: 1,
+        borderColor: theme.border,
+      }}>
+      {[0, 1, 2].map((index) => (
+        <Animated.View
+          key={index}
           style={{
-            borderRadius: Radius.xl,
-            backgroundColor: theme.backgroundElevated,
-            borderWidth: 1,
-            borderColor: theme.border,
-            padding: 16,
-            gap: 4,
-            ...Shadow.card,
-          }}>
-          <ThemedText style={{ fontSize: 10, fontWeight: '700', color: theme.textTertiary, letterSpacing: 0.8 }}>
-            TOTAL P&L
-          </ThemedText>
-          <ThemedText style={{ fontSize: 34, fontWeight: '800', letterSpacing: -0.8, color: Brand[500], ...MONO }}>
-            +${won.toFixed(0)}
-          </ThemedText>
-          <ThemedText style={{ fontSize: 11, color: theme.textTertiary, ...MONO }}>
-            ${wagered.toFixed(0)} wagered · 1 active
-          </ThemedText>
-        </View>
-
-        {DEMO_TRACKED_BETS.map((bet) => (
-          <PreviewBetCard key={bet.id} bet={bet} />
-        ))}
-
-        <View
-          style={{
-            borderRadius: Radius.md,
-            backgroundColor: Accent.gold + '18',
-            borderWidth: 1,
-            borderColor: Accent.gold + '44',
-            padding: 10,
-            gap: 4,
-          }}>
-          <ThemedText style={{ fontSize: 10, fontWeight: '800', color: Accent.gold, letterSpacing: 0.4 }}>
-            SELL NOW · GOAL HIT
-          </ThemedText>
-          <ThemedText style={{ fontSize: 11, color: theme.textSecondary }}>
-            Heat up 20 at half · +$30 locked — sell before final
-          </ThemedText>
-        </View>
-      </Animated.View>
+            width: 5,
+            height: 5,
+            borderRadius: 999,
+            backgroundColor: Brand[500],
+            opacity: progress.interpolate({
+              inputRange: [0, index / 3, (index + 1) / 3, 1],
+              outputRange: [0.3, 1, 0.3, 0.3],
+            }),
+          }}
+        />
+      ))}
     </View>
   );
 }
 
-export function renderOnboardingPreview(kind: OnboardingSlide['kind']): React.ReactElement {
+function CoachPreview({ active }: PreviewProps): React.ReactElement {
+  const theme = useTheme();
+  const compact = useCompact();
+  // 0: starters only · 1: question sent · 2: coach typing · 3: answer (rests here)
+  const [stage, setStage] = useState(0);
+
+  useEffect(() => {
+    if (!active || stage >= 3) return;
+    const timer = setTimeout(() => setStage(stage + 1), [700, 600, 1300][stage]);
+    return () => clearTimeout(timer);
+  }, [active, stage]);
+
+  const [question, answer] = COACH_SCRIPT;
+
+  return (
+    <View className="flex-1 justify-center">
+      <Panel title="AI COACH" chip="ON CALL">
+        <View
+          className="flex-row items-center justify-between"
+          style={{
+            paddingHorizontal: 10,
+            paddingVertical: 8,
+            borderRadius: Radius.md,
+            backgroundColor: theme.backgroundElement,
+            borderWidth: 1,
+            borderColor: theme.border,
+          }}>
+          <ThemedText style={{ fontSize: 10.5, color: theme.textTertiary }}>Reading this route</ThemedText>
+          <ThemedText style={{ fontSize: 10.5, fontWeight: '800', color: Brand[500], ...MONO }}>VOO · 82/100</ThemedText>
+        </View>
+
+        {/* Starter prompts double as filler while the scripted exchange plays in. */}
+        <View className="flex-row flex-wrap" style={{ gap: 5 }}>
+          {COACH_STARTERS.map((starter, index) => (
+            <View
+              key={starter}
+              style={{
+                paddingHorizontal: 9,
+                paddingVertical: 5,
+                borderRadius: Radius.pill,
+                backgroundColor: index === 0 && stage >= 1 ? Brand[500] + '1F' : theme.backgroundElement,
+                borderWidth: 1,
+                borderColor: index === 0 && stage >= 1 ? Brand[500] + '3D' : theme.border,
+              }}>
+              <ThemedText
+                style={{
+                  fontSize: 10.5,
+                  fontWeight: '700',
+                  color: index === 0 && stage >= 1 ? Brand[500] : theme.textSecondary,
+                }}>
+                {starter}
+              </ThemedText>
+            </View>
+          ))}
+        </View>
+
+        <View style={{ gap: 7, minHeight: compact ? 128 : 150, justifyContent: 'flex-end' }}>
+          {stage >= 1 ? (
+            <FadeIn>
+              <View
+                style={{
+                  alignSelf: 'flex-end',
+                  maxWidth: '86%',
+                  paddingHorizontal: 12,
+                  paddingVertical: 9,
+                  borderRadius: Radius.lg,
+                  backgroundColor: Brand[500],
+                }}>
+                <ThemedText style={{ fontSize: 12.5, fontWeight: '700', color: '#06140C', lineHeight: 18 }}>
+                  {question.text}
+                </ThemedText>
+              </View>
+            </FadeIn>
+          ) : null}
+
+          {stage === 2 ? <TypingDots /> : null}
+
+          {stage >= 3 ? (
+            <FadeIn>
+              <View
+                style={{
+                  alignSelf: 'flex-start',
+                  maxWidth: '92%',
+                  paddingHorizontal: 12,
+                  paddingVertical: 10,
+                  borderRadius: Radius.lg,
+                  backgroundColor: theme.backgroundElement,
+                  borderWidth: 1,
+                  borderColor: theme.border,
+                }}>
+                <ThemedText style={{ fontSize: 12.5, color: theme.text, lineHeight: 18 }}>{answer.text}</ThemedText>
+              </View>
+            </FadeIn>
+          ) : null}
+        </View>
+
+        <View
+          className="flex-row items-center"
+          style={{
+            gap: 8,
+            paddingLeft: 12,
+            paddingRight: 6,
+            paddingVertical: 6,
+            borderRadius: Radius.lg,
+            backgroundColor: theme.backgroundElement,
+            borderWidth: 1,
+            borderColor: theme.border,
+          }}>
+          <ThemedText style={{ fontSize: 12, color: theme.textTertiary, flex: 1 }}>Ask why, risk, sizing…</ThemedText>
+          <View style={{ paddingHorizontal: 11, paddingVertical: 7, borderRadius: Radius.md, backgroundColor: Brand[500] }}>
+            <ThemedText style={{ fontSize: 11, fontWeight: '800', color: '#06140C' }}>Send</ThemedText>
+          </View>
+        </View>
+      </Panel>
+    </View>
+  );
+}
+
+/* ------------------------------------------------------------------ slide 5: close */
+
+function ClosePreview(): React.ReactElement {
+  // Static by design: the closing slide should read as a finished plan, not an animation.
+  const theme = useTheme();
+  const compact = useCompact();
+
+  return (
+    <View className="flex-1 justify-center" style={{ gap: 10 }}>
+      <Panel title="YOUR GOAL" chip="1 MIN SETUP">
+        <View className="flex-row items-center justify-between" style={{ paddingHorizontal: 10, paddingVertical: 2 }}>
+          <View>
+            <ThemedText style={{ fontSize: 10, fontWeight: '800', letterSpacing: 0.6, color: theme.textTertiary }}>
+              TARGET
+            </ThemedText>
+            <View className="flex-row items-baseline" style={{ gap: 6 }}>
+              <ThemedText style={{ fontSize: 22, fontWeight: '900', color: theme.text, letterSpacing: -0.7, ...MONO }}>
+                $300
+              </ThemedText>
+              <ThemedText style={{ fontSize: 14, color: theme.textTertiary }}>→</ThemedText>
+              <ThemedText style={{ fontSize: 22, fontWeight: '900', color: Brand[500], letterSpacing: -0.7, ...MONO }}>
+                $330
+              </ThemedText>
+            </View>
+          </View>
+          <View
+            style={{
+              paddingHorizontal: 10,
+              paddingVertical: 5,
+              borderRadius: Radius.pill,
+              backgroundColor: theme.backgroundSelected,
+            }}>
+            <ThemedText style={{ fontSize: 10.5, fontWeight: '800', color: theme.textSecondary }}>by Dec 31</ThemedText>
+          </View>
+        </View>
+
+        <View style={{ height: 1, backgroundColor: theme.border, marginHorizontal: 2 }} />
+
+        <View
+          className="flex-row items-center"
+          style={{
+            gap: 10,
+            paddingHorizontal: 10,
+            paddingVertical: 8,
+            borderRadius: Radius.md,
+            backgroundColor: Brand[500] + '12',
+            borderWidth: 1,
+            borderColor: Brand[500] + '3D',
+          }}>
+          <ThemedText style={{ fontSize: 16 }}>📈</ThemedText>
+          <View className="flex-1">
+            <ThemedText style={{ fontSize: 10, fontWeight: '800', letterSpacing: 0.5, color: Brand[500] }}>
+              EXAMPLE OPTION
+            </ThemedText>
+            <ThemedText style={{ fontSize: 12, fontWeight: '700', color: theme.text }} numberOfLines={1}>
+              VOO · S&P 500 ETF
+            </ThemedText>
+          </View>
+          <ThemedText style={{ fontSize: 12, fontWeight: '900', color: Brand[500] }}>View →</ThemedText>
+        </View>
+      </Panel>
+
+      <View style={{ gap: 6 }}>
+        {CLOSING_PROOF.map((proof) => (
+          <View
+            key={proof.label}
+            className="flex-row items-center"
+            style={{
+              gap: 10,
+              paddingHorizontal: 12,
+              paddingVertical: compact ? 8 : 10,
+              borderRadius: Radius.lg,
+              backgroundColor: theme.backgroundElevated,
+              borderWidth: 1,
+              borderColor: theme.border,
+            }}>
+            <ThemedText style={{ fontSize: 14 }}>{proof.emoji}</ThemedText>
+            <ThemedText style={{ fontSize: 12.5, fontWeight: '600', color: theme.text, flex: 1 }}>{proof.label}</ThemedText>
+            <ThemedText style={{ fontSize: 12, fontWeight: '900', color: Brand[500] }}>✓</ThemedText>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+
+/**
+ * The `key` swap is deliberate: flipping active remounts the preview, which restarts its
+ * reveal from a clean state without any reset-in-effect gymnastics.
+ */
+export function renderOnboardingPreview(kind: OnboardingSlide['kind'], active: boolean): React.ReactElement {
+  const key = active ? 'active' : 'idle';
   switch (kind) {
-    case 'welcome':
-      return <WelcomePreview />;
-    case 'goal':
-      return <GoalPreview />;
-    case 'safety':
-      return <SafetyPreview />;
-    case 'routes':
-      return <RoutesPreview />;
-    case 'tracked':
-      return <TrackedPreview />;
+    case 'scan':
+      return <ScanHero key={key} active={active} />;
+    case 'rank':
+      return <RankPreview key={key} active={active} />;
+    case 'breakdown':
+      return <BreakdownPreview key={key} active={active} />;
+    case 'coach':
+      return <CoachPreview key={key} active={active} />;
+    case 'close':
+      return <ClosePreview />;
   }
 }
