@@ -5,7 +5,7 @@ import type { GoalScoreBreakdown, GoalScoreContext } from '@/lib/score';
 import { rescoreForStake, stakeNeededForReturn } from '@/lib/stake-rescore';
 import type { Route, RouteParams } from '@/types/routes';
 
-export type RouteSort = 'score' | 'safest' | 'chance' | 'payout' | 'soonest' | 'type';
+export type RouteSort = 'score' | 'chance' | 'payout' | 'soonest' | 'type';
 
 export interface RouteFilters {
   category: string | null;
@@ -445,12 +445,6 @@ export function __selfCheck(): void {
 
 function sortComparator(sort: Exclude<RouteSort, 'score'>): (a: Route, b: Route) => number {
   switch (sort) {
-    case 'safest':
-      return (a, b) => {
-        const risk = a.riskLevel - b.riskLevel;
-        const lossShape = Number(a.lossProfile === 'binary') - Number(b.lossProfile === 'binary');
-        return risk || lossShape || b.probability - a.probability;
-      };
     case 'chance': return (a, b) => b.probability - a.probability;
     case 'payout': return (a, b) => b.expectedReturn - a.expectedReturn;
     case 'soonest': return (a, b) => (a.maturesInDays ?? Number.MAX_SAFE_INTEGER) - (b.maturesInDays ?? Number.MAX_SAFE_INTEGER);

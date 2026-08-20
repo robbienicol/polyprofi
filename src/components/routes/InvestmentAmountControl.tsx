@@ -53,7 +53,7 @@ export function InvestmentAmountControl({
         style={{ borderRadius: Radius.md, borderWidth: 1.5, borderColor: theme.borderStrong, backgroundColor: theme.background, paddingHorizontal: 14 }}>
         <ThemedText style={{ fontSize: 20, fontWeight: '800', color: Brand[500], marginRight: 4 }}>$</ThemedText>
         <TextInput
-          value={amount > 0 ? String(amount) : ''}
+          value={amount > 0 ? amount.toLocaleString('en-US') : ''}
           onChangeText={(text) => onAmountChange(Number(text.replace(/[^0-9]/g, '')) || 0)}
           onBlur={() => amount < 1 && onAmountChange(1)}
           keyboardType="number-pad"

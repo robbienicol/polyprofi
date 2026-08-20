@@ -193,9 +193,13 @@ export default function RoutesScreen(): React.ReactElement {
     />;
   }
 
+  // The goal these routes serve, so the header can name what the user is choosing for.
+  const activeGoal = sessionGoalId ? allGoals.find((entry) => entry.id === sessionGoalId) ?? null : null;
   const goal = sessionParams ? {
     target: sessionParams.target,
     when: timeframeLabel(sessionParams.timeframe),
+    label: activeGoal?.label ?? null,
+    emoji: activeGoal?.emoji ?? null,
   } : null;
   const visibleRoutes = filtered.slice(0, visibleCount);
 
