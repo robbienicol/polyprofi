@@ -132,7 +132,7 @@ export function isTrackedBet(value: unknown): value is TrackedBet {
     && isFiniteNumber(value.probability)
     && isFiniteNumber(value.expectedReturn)
     && isFiniteNumber(value.amountWagered)
-    && isOneOf(value.status, ['active', 'won', 'lost'])
+    && isOneOf(value.status, ['active', 'won', 'lost', 'watching'])
     && typeof value.createdAt === 'string'
     && isOptional(value.goalId, isString);
 }

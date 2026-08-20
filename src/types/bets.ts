@@ -79,7 +79,12 @@ export interface TrackedBet {
   probability: number;
   expectedReturn: number;
   amountWagered: number;
-  status: 'active' | 'won' | 'lost';
+  /**
+   * `watching` means the user is following this route without putting money in.
+   * Every money calculation filters on `active`, so a watched position stays out
+   * of staked, expected value, and P&L while remaining visible in the list.
+   */
+  status: 'active' | 'won' | 'lost' | 'watching';
   createdAt: string;
   /** User's $ profit goal from the quiz (e.g. 30). Used for sell alerts. */
   profitGoal?: number;
