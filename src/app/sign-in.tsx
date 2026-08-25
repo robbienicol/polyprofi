@@ -13,6 +13,7 @@ import {
 import { AuthTextInput } from '@/components/auth/AuthTextInput';
 import { ThemedText } from '@/components/themed-text';
 import { useDevLogin } from '@/hooks/use-dev-login';
+import { useDevResetOnboarding } from '@/hooks/use-dev-reset-onboarding';
 import { clerkErrorMessage } from '@/lib/clerk-errors';
 
 /** Second factor we can collect in-app, in preference order. */
@@ -29,6 +30,7 @@ export default function SignInScreen(): React.ReactElement {
   const router = useRouter();
   const passwordRef = useRef<TextInput>(null);
   const { available: devAvailable, loading: devLoading, run: runDevLogin } = useDevLogin();
+  const { available: replayAvailable, loading: replayLoading, run: runReplayOnboarding } = useDevResetOnboarding();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -220,13 +222,22 @@ export default function SignInScreen(): React.ReactElement {
           We keep you signed in — you won’t have to do this again on this device.
         </ThemedText>
 
-        {devAvailable && (
+        {(devAvailable || replayAvailable) && (
           <View className="gap-1 mt-2">
-            <AuthTextButton
-              label={devLoading ? 'Signing in…' : '⚡ Dev sign-in'}
-              onPress={handleDevLogin}
-              disabled={devLoading || loading}
-            />
+            {devAvailable && (
+              <AuthTextButton
+                label={devLoading ? 'Signing in…' : '⚡ Dev sign-in'}
+                onPress={handleDevLogin}
+                disabled={devLoading || loading}
+              />
+            )}
+            {replayAvailable && (
+              <AuthTextButton
+                label={replayLoading ? 'Resetting…' : '↻ Replay onboarding'}
+                onPress={() => void runReplayOnboarding()}
+                disabled={replayLoading || devLoading || loading}
+              />
+            )}
             <ThemedText
               type="small"
               themeColor="textSecondary"

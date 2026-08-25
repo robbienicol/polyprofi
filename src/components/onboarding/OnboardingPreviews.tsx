@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { Animated, Easing, useWindowDimensions, View } from 'react-native';
-import Svg, { Circle, Path } from 'react-native-svg';
 
 import {
   BREAKDOWN_FACTORS,
@@ -9,6 +8,7 @@ import {
   COACH_STARTERS,
   OnboardingSlide,
   RANKED_PREVIEW,
+  SWEEP_MARKETS,
 } from '@/components/onboarding/onboarding-data';
 import { ThemedText } from '@/components/themed-text';
 import { Accent, Brand, Radius, RiskScale, Shadow } from '@/constants/theme';
@@ -127,135 +127,165 @@ function FadeIn({ children, delay = 0 }: { children: React.ReactNode; delay?: nu
 
 /* ------------------------------------------------------------------ slide 1: scan */
 
-/** A four-point sparkle that twinkles — scale, opacity and a slight tilt on a loop. */
-function Sparkle({
-  style,
-  size = 20,
-  color,
-  delay = 0,
-  duration = 1400,
-}: {
-  style: object;
-  size?: number;
-  color: string;
-  delay?: number;
-  duration?: number;
-}): React.ReactElement {
-  const [progress] = useState(() => new Animated.Value(0));
+/* ------------------------------------------------------------------ slide 1: sweep */
 
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(progress, { toValue: 1, duration, delay, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.timing(progress, { toValue: 0, duration, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-      ])
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [progress, delay, duration]);
-
-  const scale = progress.interpolate({ inputRange: [0, 1], outputRange: [0.65, 1.15] });
-  const opacity = progress.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] });
-  const rotate = progress.interpolate({ inputRange: [0, 1], outputRange: ['-10deg', '10deg'] });
-
-  return (
-    <Animated.View style={[style, { opacity, transform: [{ scale }, { rotate }] }]}>
-      <Svg width={size} height={size} viewBox="0 0 24 24">
-        <Path d="M12 0 L14.5 9.5 L24 12 L14.5 14.5 L12 24 L9.5 14.5 L0 12 L9.5 9.5 Z" fill={color} />
-      </Svg>
-    </Animated.View>
-  );
-}
+/** How long the beam takes to travel from one market to the next. */
+const SWEEP_STEP_MS = 520;
+/** Extra steps spent on the finished list before the beam starts over. */
+const SWEEP_HOLD_STEPS = 4;
 
 /**
- * The tagline slide: a hero mark that breathes and bobs, ringed by twinkling sparkles,
- * rather than a product panel — this is the pitch, not a screenshot of the app yet.
+ * The sweep, shown rather than described.
+ *
+ * A beam travels down a list of every market Pathey prices, and each row lights
+ * up and gets a tick as the beam reaches it — so "we check every way to grow
+ * your money" is a thing you watch happen instead of a claim you read. It loops,
+ * because the first pass is over before most people have finished the headline.
+ *
+ * Driven by a plain interval over an integer step rather than by Animated's own
+ * looping. Three different Animated loop shapes each ran exactly one pass here
+ * and then parked — `resetBeforeIteration` does not reach a timing nested in a
+ * sequence, a zero-duration rewind ends the loop instead of restarting it, and
+ * rescheduling from the `start()` callback never fired a second time. A counter
+ * that wraps cannot get stuck, and the beam just follows wherever it points.
+ *
+ * No prices or counts anywhere in it: a number here would read as a claim about
+ * what the app found today, and nothing on this screen is live.
  */
-function ScanHero({ active }: PreviewProps): React.ReactElement {
-  const [bob] = useState(() => new Animated.Value(0));
-  const [glow] = useState(() => new Animated.Value(0));
+function SweepPreview({ active }: PreviewProps): React.ReactElement {
+  const theme = useTheme();
+  const compact = useCompact();
+  const total = SWEEP_MARKETS.length + SWEEP_HOLD_STEPS;
+  const [step, setStep] = useState(0);
+  // Follows `step`, so the beam glides between rows instead of jumping.
+  const [beam] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
     if (!active) return;
-    const bobLoop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(bob, { toValue: 1, duration: 1700, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.timing(bob, { toValue: 0, duration: 1700, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-      ])
-    );
-    const glowLoop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(glow, { toValue: 1, duration: 1900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.timing(glow, { toValue: 0, duration: 1900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-      ])
-    );
-    bobLoop.start();
-    glowLoop.start();
-    return () => {
-      bobLoop.stop();
-      glowLoop.stop();
-    };
-  }, [active, bob, glow]);
+    const id = setInterval(() => setStep((current) => (current + 1) % total), SWEEP_STEP_MS);
+    return () => clearInterval(id);
+  }, [active, total]);
 
-  const translateY = bob.interpolate({ inputRange: [0, 1], outputRange: [0, -12] });
-  const glowScale = glow.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1.08] });
-  const glowOpacity = glow.interpolate({ inputRange: [0, 1], outputRange: [0.5, 0.95] });
+  const beamRow = Math.min(step, SWEEP_MARKETS.length);
+  useEffect(() => {
+    // The wrap back to the top is instant; every other move is a glide, so the
+    // beam never appears to travel back up through the list it just checked.
+    Animated.timing(beam, {
+      toValue: beamRow,
+      duration: beamRow === 0 ? 0 : SWEEP_STEP_MS,
+      easing: Easing.inOut(Easing.quad),
+      // Row heights are laid out, not transformed, so this drives a translate
+      // measured in laid-out pixels and cannot run on the native driver.
+      useNativeDriver: false,
+    }).start();
+  }, [beam, beamRow]);
+
+  const rowHeight = compact ? 44 : 50;
+  const done = step >= SWEEP_MARKETS.length;
 
   return (
-    <View className="flex-1 items-center justify-center">
-      <View style={{ width: 240, height: 240, alignItems: 'center', justifyContent: 'center' }}>
-        <Animated.View
-          style={{
-            position: 'absolute',
-            width: 220,
-            height: 220,
-            borderRadius: 110,
-            backgroundColor: Brand[500] + '26',
-            opacity: glowOpacity,
-            transform: [{ scale: glowScale }],
-          }}
-        />
+    <View className="flex-1 justify-center" style={{ opacity: active ? 1 : 0.98 }}>
+      <Panel title="CHECKING EVERY MARKET" chip={done ? 'DONE' : 'LIVE'}>
+        <View>
+          {/* The beam. Sits behind the rows and slides down with the step, so
+              what lights a row and what moves the light are one clock. */}
+          <Animated.View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              left: -12,
+              right: -12,
+              height: rowHeight,
+              borderRadius: Radius.md,
+              backgroundColor: Brand[500] + '1F',
+              borderTopWidth: 1,
+              borderBottomWidth: 1,
+              borderColor: Brand[500] + '4D',
+              // Fades out once it has run off the end of the list.
+              opacity: done ? 0 : 1,
+              transform: [
+                {
+                  translateY: beam.interpolate({
+                    inputRange: [0, SWEEP_MARKETS.length],
+                    outputRange: [0, rowHeight * SWEEP_MARKETS.length],
+                  }),
+                },
+              ],
+            }}
+          />
 
-        <Sparkle style={{ position: 'absolute', top: 14, left: 4 }} color={Brand[300]} size={22} delay={0} duration={1300} />
-        <Sparkle
-          style={{ position: 'absolute', top: 34, right: 0 }}
-          color={Accent.gold}
-          size={15}
-          delay={260}
-          duration={1250}
-        />
-        <Sparkle
-          style={{ position: 'absolute', bottom: 28, left: 20 }}
-          color={Brand[600]}
-          size={17}
-          delay={480}
-          duration={1500}
-        />
+          {SWEEP_MARKETS.map((market, index) => (
+            <SweepRow key={market.label} market={market} lit={step > index} height={rowHeight} />
+          ))}
+        </View>
+      </Panel>
 
-        <Animated.View
+      <ThemedText style={{ fontSize: 10.5, color: theme.textTertiary, textAlign: 'center', marginTop: 10 }}>
+        {done
+          ? `All ${SWEEP_MARKETS.length} markets checked · ranked safest first`
+          : `Checked ${step} of ${SWEEP_MARKETS.length} markets…`}
+      </ThemedText>
+    </View>
+  );
+}
+
+/** One market in the sweep. Greys out until the beam reaches it, then ticks. */
+function SweepRow({
+  market,
+  lit,
+  height,
+}: {
+  market: (typeof SWEEP_MARKETS)[number];
+  lit: boolean;
+  height: number;
+}): React.ReactElement {
+  const theme = useTheme();
+  const [anim] = useState(() => new Animated.Value(lit ? 1 : 0));
+
+  useEffect(() => {
+    Animated.timing(anim, {
+      toValue: lit ? 1 : 0,
+      // The tick lands promptly; clearing on the wrap is instant, so the list
+      // empties in one frame rather than fading out row by row.
+      duration: lit ? 240 : 0,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+  }, [anim, lit]);
+
+  return (
+    <View className="flex-row items-center" style={{ height, gap: 10 }}>
+      <ThemedText style={{ fontSize: 15 }}>{market.emoji}</ThemedText>
+      <View style={{ flex: 1 }}>
+        <Animated.Text
+          numberOfLines={1}
           style={{
-            transform: [{ translateY }],
-            width: 112,
-            height: 112,
-            borderRadius: Radius.xl,
-            backgroundColor: Brand[500],
-            alignItems: 'center',
-            justifyContent: 'center',
-            ...Shadow.card,
+            fontSize: 12.5,
+            fontWeight: '700',
+            color: anim.interpolate({ inputRange: [0, 1], outputRange: [theme.textTertiary, theme.text] }),
           }}>
-          <Svg width={62} height={62} viewBox="0 0 62 62">
-            <Circle cx={22} cy={26} r={5} fill="#06140C" />
-            <Circle cx={40} cy={26} r={5} fill="#06140C" />
-            <Path
-              d="M17 36 Q31 50 45 36"
-              stroke="#06140C"
-              strokeWidth={5.5}
-              strokeLinecap="round"
-              fill="none"
-            />
-          </Svg>
-        </Animated.View>
+          {market.label}
+        </Animated.Text>
+        <ThemedText style={{ fontSize: 10, color: theme.textTertiary }} numberOfLines={1}>
+          {market.note}
+        </ThemedText>
       </View>
+
+      {/* The tick pops in on the beam. Scale rather than a fade alone, so it
+          reads as something completing rather than something appearing. */}
+      <Animated.View
+        style={{
+          width: 20,
+          height: 20,
+          borderRadius: 999,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: Brand[500],
+          opacity: anim,
+          transform: [{ scale: anim.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] }) }],
+        }}>
+        <ThemedText style={{ fontSize: 11, fontWeight: '900', color: '#06140C' }}>✓</ThemedText>
+      </Animated.View>
     </View>
   );
 }
@@ -625,7 +655,7 @@ export function renderOnboardingPreview(kind: OnboardingSlide['kind'], active: b
   const key = active ? 'active' : 'idle';
   switch (kind) {
     case 'scan':
-      return <ScanHero key={key} active={active} />;
+      return <SweepPreview key={key} active={active} />;
     case 'rank':
       return <RankPreview key={key} active={active} />;
     case 'breakdown':
@@ -634,5 +664,8 @@ export function renderOnboardingPreview(kind: OnboardingSlide['kind'], active: b
       return <CoachPreview key={key} active={active} />;
     case 'close':
       return <ClosePreview />;
+    // The hero, consent, and name slides draw themselves end to end.
+    default:
+      return <View className="flex-1" />;
   }
 }

@@ -2,6 +2,8 @@ import { useAuth } from '@clerk/clerk-expo';
 import { Href, Redirect } from 'expo-router';
 
 import { useOnboarding } from '@/api/hooks/useOnboarding';
+import { useOnboardingProfile } from '@/api/hooks/useOnboardingProfile';
+import { useDevReplayFunnel } from '@/api/hooks/useDevReplayFunnel';
 import { useSavingsGoal } from '@/api/hooks/useSavingsGoal';
 import { useUserProfile } from '@/api/hooks/useUserProfile';
 import { BrandLoader } from '@/components/ui/loaders';
@@ -9,6 +11,8 @@ import { BrandLoader } from '@/components/ui/loaders';
 export default function Index(): React.ReactElement {
   const { isLoaded, isSignedIn } = useAuth();
   const { hasCompletedOnboarding, isLoading: onboardingLoading } = useOnboarding();
+  const { isLoading: localProfileLoading } = useOnboardingProfile();
+  const { replaying, isLoading: replayLoading } = useDevReplayFunnel();
   const { hasCompletedProfile, isLoading: profileLoading } = useUserProfile();
   const { hasGoal, isLoading: goalLoading } = useSavingsGoal();
 
@@ -33,11 +37,19 @@ export default function Index(): React.ReactElement {
   const bypassAuth = __DEV__ && process.env.EXPO_PUBLIC_DEV_BYPASS_AUTH === '1';
   if (!isSignedIn && !bypassAuth) return <Redirect href="/sign-in" />;
 
-  // Once, right after sign-in: a short profile survey (age/experience/goals) for the team's
-  // own analytics — before goal-setup, since that's the next one-time step in the funnel.
+  // Straight into the quiz that builds their plan. The greeting is not here —
+  // it is the second slide of the carousel, right after they give their name.
+  //
+  // `replaying` is the dev button on the sign-in screen: the completion flag it
+  // would otherwise have to beat lives on the server, so this is what lets the
+  // funnel be walked again without touching the database.
   if (!bypassAuth) {
-    if (profileLoading) return <BrandLoader subtitle="Loading your profile…" />;
-    if (!hasCompletedProfile) return <Redirect href={'/profile-survey' as Href} />;
+    if (profileLoading || localProfileLoading || replayLoading) {
+      return <BrandLoader subtitle="Loading your profile…" />;
+    }
+    if (!hasCompletedProfile || replaying) {
+      return <Redirect href={'/profile-survey' as Href} />;
+    }
   }
 
   // First real step after sign-in: what are you saving for? (one-time until a goal exists)

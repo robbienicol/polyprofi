@@ -3,7 +3,7 @@
  * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
  */
 
-import { Platform } from 'react-native';
+import { Platform, type TextStyle } from 'react-native';
 
 export const Colors = {
   light: {
@@ -59,9 +59,9 @@ export const Accent = {
  * Source of truth for ThemedText variants; import directly for custom Text.
  */
 export const Type = {
-  display: { fontSize: 34, lineHeight: 42, letterSpacing: -0.6, fontWeight: '800' },
-  title: { fontSize: 28, lineHeight: 36, letterSpacing: -0.5, fontWeight: '800' },
-  h1: { fontSize: 22, lineHeight: 29, letterSpacing: -0.3, fontWeight: '700' },
+  display: { fontSize: 34, lineHeight: 42, letterSpacing: -0.3, fontWeight: '800' },
+  title: { fontSize: 28, lineHeight: 36, letterSpacing: -0.3, fontWeight: '800' },
+  h1: { fontSize: 22, lineHeight: 29, letterSpacing: -0.2, fontWeight: '700' },
   h2: { fontSize: 18, lineHeight: 25, letterSpacing: -0.2, fontWeight: '700' },
   h3: { fontSize: 16, lineHeight: 22, letterSpacing: -0.1, fontWeight: '700' },
   body: { fontSize: 15, lineHeight: 22, letterSpacing: 0, fontWeight: '500' },
@@ -125,6 +125,27 @@ export const Fonts = Platform.select({
     mono: 'var(--font-mono)',
   },
 });
+
+/**
+ * Plus Jakarta Sans — the display face. Custom fonts on native ignore
+ * `fontWeight`, so each weight is its own family and we resolve the family from
+ * the weight the style asked for.
+ */
+export const DisplayFont = {
+  '500': 'PlusJakartaSans_500Medium',
+  '600': 'PlusJakartaSans_600SemiBold',
+  '700': 'PlusJakartaSans_700Bold',
+  '800': 'PlusJakartaSans_800ExtraBold',
+  '900': 'PlusJakartaSans_800ExtraBold',
+} as const;
+
+/** Size at or above which text is treated as a heading and gets the display face. */
+export const DISPLAY_MIN_SIZE = 18;
+
+export function displayFontFamily(weight?: TextStyle['fontWeight']): string {
+  const key = String(weight ?? '700');
+  return DisplayFont[key as keyof typeof DisplayFont] ?? DisplayFont['700'];
+}
 
 export const Spacing = {
   half: 2,

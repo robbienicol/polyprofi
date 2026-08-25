@@ -1,6 +1,6 @@
 import { Platform, StyleSheet, Text, type TextProps, type TextStyle } from 'react-native';
 
-import { Fonts, LINE_HEIGHT_RATIO, ThemeColor, Type } from '@/constants/theme';
+import { DISPLAY_MIN_SIZE, Fonts, LINE_HEIGHT_RATIO, ThemeColor, Type, displayFontFamily } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 type TextVariant =
@@ -25,6 +25,20 @@ export function ThemedText({ style, type = 'default', themeColor, ...rest }: The
       ? Math.round(flat.fontSize * LINE_HEIGHT_RATIO)
       : undefined;
 
+  // Headings wear the display face. Resolved from the *final* size/weight, so
+  // inline-styled headers (`fontSize: 34, fontWeight: '800'`) pick it up too.
+  // Anything that named its own family — the mono figures — keeps it.
+  const resolved = StyleSheet.flatten([styles[type], style]) as TextStyle | undefined;
+  const headingFont =
+    resolved &&
+    resolved.fontFamily == null &&
+    typeof resolved.fontSize === 'number' &&
+    resolved.fontSize >= DISPLAY_MIN_SIZE
+      ? // The weight lives in the family name; leaving fontWeight set on top of it
+        // makes Android (and web @font-face matching) synthesize a second bold.
+        { fontFamily: displayFontFamily(resolved.fontWeight), fontWeight: 'normal' as const }
+      : undefined;
+
   return (
     <Text
       style={[
@@ -32,6 +46,7 @@ export function ThemedText({ style, type = 'default', themeColor, ...rest }: The
         styles[type],
         style,
         autoLineHeight != null && { lineHeight: autoLineHeight },
+        headingFont,
       ]}
       {...rest}
     />

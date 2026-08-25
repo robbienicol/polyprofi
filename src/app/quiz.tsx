@@ -8,6 +8,7 @@ import { useGoalsProgress } from '@/api/hooks/useGoalProgress';
 import { usePreferences } from '@/api/hooks/usePreferences';
 import { useQuizAnswers } from '@/api/hooks/useQuizAnswers';
 import { useSavedRoutes } from '@/api/hooks/useSavedRoutes';
+import { useOnboardingProfile } from '@/api/hooks/useOnboardingProfile';
 import { useUserProfile } from '@/api/hooks/useUserProfile';
 import { useSavingsGoal, type SavingsGoalInput } from '@/api/hooks/useSavingsGoal';
 import { OnboardingGlow } from '@/components/onboarding/OnboardingPreviews';
@@ -16,6 +17,7 @@ import { Brand, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { requestAppRating } from '@/lib/app-rating';
 import { ACQUISITION_PLATFORMS } from '@/lib/preferences';
+import { searchCategoriesFor } from '@/lib/onboarding-profile';
 import { buildRouteParams, referenceStakeFor, surveyAmountCeiling } from '@/lib/quiz-profile';
 import { defaultQuizGoal, goalByLabel, goalRemaining, isOpenEnded } from '@/lib/savings-goal';
 import type { AcquisitionPlatform, QuizAnswers, SavingsGoal } from '@/types/bets';
@@ -112,6 +114,10 @@ export default function QuizScreen(): React.ReactElement {
   // What the user said they can put in, from the profile survey. Null when they
   // skipped it, which leaves the stake goal-derived exactly as before.
   const { profile } = useUserProfile();
+  // The markets they said they were drawn to, minus the ones they ruled out.
+  // Only a starting point for the first search — a prefill from a previous
+  // search is what they last actually chose, so it wins.
+  const { profile: onboarding } = useOnboardingProfile();
 
   const prefill = quizAnswers ?? history[0]?.quizSnapshot;
   // The goal of the last search, so returning to the quiz resumes what you were
@@ -130,6 +136,7 @@ export default function QuizScreen(): React.ReactElement {
       remainingFor={(goal) => goalRemaining(goalsProgress.progressFor(goal.id).netGain, goal)}
       preferredPlatforms={preferences.preferredPlatforms}
       investmentCeiling={surveyAmountCeiling(profile?.investmentAmount)}
+      preferredCategories={searchCategoriesFor(onboarding.answers)}
       saveAnswers={saveAnswers}
       addGoalAsync={addGoalAsync}
     />
@@ -143,6 +150,7 @@ function QuizForm({
   remainingFor,
   preferredPlatforms,
   investmentCeiling,
+  preferredCategories,
   saveAnswers,
   addGoalAsync,
 }: {
@@ -154,6 +162,8 @@ function QuizForm({
   preferredPlatforms: AcquisitionPlatform[];
   /** Top of the survey's amount range, or null if it was skipped. */
   investmentCeiling: number | null;
+  /** Markets from onboarding, used only when there is no previous search to resume. */
+  preferredCategories: string[];
   saveAnswers: ReturnType<typeof useQuizAnswers>['saveAnswers'];
   addGoalAsync: (input: SavingsGoalInput) => Promise<{ goal: SavingsGoal }>;
 }): React.ReactElement {
@@ -173,7 +183,7 @@ function QuizForm({
   const [nameFocused, setNameFocused] = useState(false);
   const [target, setTarget] = useState(String(startingTarget));
   const [timeframe, setTimeframe] = useState<QuizAnswers['timeframe']>(prefill?.timeframe ?? 'week');
-  const [categories, setCategories] = useState<string[]>(prefill?.categories ?? []);
+  const [categories, setCategories] = useState<string[]>(prefill?.categories ?? preferredCategories);
   const [isSaving, setIsSaving] = useState(false);
   // Seeded from the last search, else from the signup survey, else blank. Blank is fine:
   // it falls back to the goal-derived stake, which is what the app did before this asked.

@@ -1,8 +1,16 @@
 import '@/global.css';
 
+import {
+  PlusJakartaSans_500Medium,
+  PlusJakartaSans_600SemiBold,
+  PlusJakartaSans_700Bold,
+  PlusJakartaSans_800ExtraBold,
+  useFonts,
+} from '@expo-google-fonts/plus-jakarta-sans';
 import { ClerkProvider } from '@clerk/clerk-expo';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as Notifications from 'expo-notifications';
+import * as SplashScreen from 'expo-splash-screen';
 import { Stack, router, usePathname, type Href } from 'expo-router';
 import { useEffect, useRef } from 'react';
 import { useColorScheme } from 'react-native';
@@ -15,6 +23,8 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { clerkTokenCache } from '@/lib/clerk-cache';
 import { shouldPresentCelebration } from '@/lib/savings-goal';
+
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 const queryClient = new QueryClient();
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ?? '';
@@ -69,9 +79,26 @@ function GoalCelebrationGate(): null {
   return null;
 }
 
-export default function RootLayout(): React.ReactElement {
+export default function RootLayout(): React.ReactElement | null {
   useColorScheme(); // subscribe to color scheme changes
   useNotificationObserver();
+
+  // The display face ships with the bundle, so this resolves on the first frame
+  // after load; holding the splash avoids a visible reflow of every heading.
+  const [fontsLoaded, fontError] = useFonts({
+    PlusJakartaSans_500Medium,
+    PlusJakartaSans_600SemiBold,
+    PlusJakartaSans_700Bold,
+    PlusJakartaSans_800ExtraBold,
+  });
+
+  useEffect(() => {
+    // A font that fails to load is not worth a stuck splash — fall back to system.
+    if (fontsLoaded || fontError) SplashScreen.hideAsync().catch(() => {});
+  }, [fontsLoaded, fontError]);
+
+  if (!fontsLoaded && !fontError) return null;
+
   return (
     <ErrorBoundary>
       <SafeAreaProvider>

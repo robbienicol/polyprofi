@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import type { SportsMatch } from '@/lib/sports-market-match';
 import { parsePortfolioHistory, serializePortfolioHistory } from '@/lib/portfolio-history';
+import { sanitizeOnboardingProfile, type OnboardingProfile } from '@/lib/onboarding-profile';
 import { sanitizePreferences, type Preferences } from '@/lib/preferences';
 import { migrateSavingsGoalState } from '@/lib/savings-goal';
 import { QuizAnswers, SavingsGoalState, TrackedBet } from '@/types/bets';
@@ -35,6 +36,8 @@ const KEYS = {
   SPORTS_MATCHES: 'polyprofit:sportsMatches',
   BIOMETRIC_LOCK: 'polyprofit:biometricLockEnabled',
   PREFERENCES: 'polyprofit:preferences',
+  ONBOARDING_PROFILE: 'polyprofit:onboardingProfile',
+  DEV_REPLAY_FUNNEL: 'polyprofit:devReplayFunnel',
 } as const;
 
 const MAX_SAVED_BATCHES = 10;
@@ -194,6 +197,46 @@ export async function getOnboardingComplete(): Promise<boolean> {
 
 export async function setOnboardingComplete(): Promise<void> {
   await AsyncStorage.setItem(KEYS.ONBOARDING, 'true');
+}
+
+// ── First-run answers ────────────────────────────────────────────────────────
+// The parts of onboarding the server profile has no column for. One blob,
+// sanitized on read, so a new question needs neither a key nor a migration.
+
+export async function getOnboardingProfile(): Promise<OnboardingProfile> {
+  const raw = await AsyncStorage.getItem(KEYS.ONBOARDING_PROFILE);
+  return sanitizeOnboardingProfile(raw ? parseJson(raw) : null);
+}
+
+/** Merge a patch over what's stored and return the resulting full object. */
+export async function updateOnboardingProfile(patch: Partial<OnboardingProfile>): Promise<OnboardingProfile> {
+  const next = sanitizeOnboardingProfile({ ...(await getOnboardingProfile()), ...patch });
+  await AsyncStorage.setItem(KEYS.ONBOARDING_PROFILE, JSON.stringify(next));
+  return next;
+}
+
+// ── Dev: replay the first-run funnel ─────────────────────────────────────────
+// Clearing the two local keys is not enough on its own: `profile_completed_at`
+// lives on the server, so the router would still skip the quiz. This flag makes
+// index.tsx ignore that column for one run through, and building-plan clears it
+// once the funnel has been completed again. Only ever set from a `__DEV__` build.
+
+export async function getDevReplayFunnel(): Promise<boolean> {
+  return (await AsyncStorage.getItem(KEYS.DEV_REPLAY_FUNNEL)) === 'true';
+}
+
+export async function clearDevReplayFunnel(): Promise<void> {
+  await AsyncStorage.removeItem(KEYS.DEV_REPLAY_FUNNEL);
+}
+
+/**
+ * Wipes the first-run state so the carousel, the greeting, and the quiz all run
+ * again from the top. Deliberately leaves goals, saved routes, and settings
+ * alone — this is for looking at the funnel, not for emptying the app.
+ */
+export async function resetOnboardingForDev(): Promise<void> {
+  await AsyncStorage.multiRemove([KEYS.ONBOARDING, KEYS.ONBOARDING_PROFILE]);
+  await AsyncStorage.setItem(KEYS.DEV_REPLAY_FUNNEL, 'true');
 }
 
 export async function getSavedRoutesHistory(): Promise<SavedRoutesBatch[]> {
