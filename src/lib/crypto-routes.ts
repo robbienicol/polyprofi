@@ -22,7 +22,22 @@ export const CRYPTO_UNIVERSE: CryptoDefinition[] = [
   { symbol: 'BTC-USD', ticker: 'BTC', name: 'Bitcoin', emoji: '₿', riskLevel: 5 },
   { symbol: 'ETH-USD', ticker: 'ETH', name: 'Ethereum', emoji: 'Ξ', riskLevel: 5 },
   { symbol: 'SOL-USD', ticker: 'SOL', name: 'Solana', emoji: '◎', riskLevel: 5 },
+  { symbol: 'XRP-USD', ticker: 'XRP', name: 'XRP', emoji: '✕', riskLevel: 5 },
+  { symbol: 'DOGE-USD', ticker: 'DOGE', name: 'Dogecoin', emoji: '🐕', riskLevel: 5 },
 ];
+
+/**
+ * Extra words a search should accept for a coin beyond its ticker and name, so
+ * "doge coin" and "bitcoin" both land. Kept alongside the universe rather than in
+ * the search module: a coin's aliases belong with the coin.
+ */
+export const CRYPTO_ALIASES: Record<string, string[]> = {
+  'BTC-USD': ['bitcoin', 'btc'],
+  'ETH-USD': ['ethereum', 'ether', 'eth'],
+  'SOL-USD': ['solana', 'sol'],
+  'XRP-USD': ['xrp', 'ripple'],
+  'DOGE-USD': ['doge', 'dogecoin'],
+};
 
 export const CRYPTO_SYMBOLS: string[] = CRYPTO_UNIVERSE.map((coin) => coin.symbol);
 

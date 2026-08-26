@@ -92,6 +92,21 @@ export async function fetchStocks(): Promise<StockQuote[]> {
     .map((quote) => ({ ...quote, ...yields.get(quote.symbol) }));
 }
 
+/**
+ * Quotes for an arbitrary symbol list, for on-demand lookups (route search) rather
+ * than the fixed daily universe. No treasury yield facts are attached — those belong
+ * to the two symbols fetchStocks knows about, and a search hit is priced from its own
+ * volatility. A symbol Yahoo cannot resolve is dropped, never faked.
+ */
+export async function fetchStockQuotes(symbols: string[]): Promise<StockQuote[]> {
+  const wanted = [...new Set(symbols.filter(Boolean))];
+  if (wanted.length === 0) return [];
+  const settled = await Promise.allSettled(wanted.map(fetchStockQuote));
+  return settled
+    .map((result) => (result.status === 'fulfilled' ? result.value : null))
+    .filter((quote): quote is StockQuote => quote !== null);
+}
+
 async function fetchStockQuote(symbol: string): Promise<StockQuote | null> {
   const response = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=5y`, { headers: { Accept: 'application/json' } });
   if (!response.ok) return null;

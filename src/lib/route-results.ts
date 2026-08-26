@@ -73,22 +73,52 @@ export function predictionFacetsActive(filters: RouteFilters): boolean {
   return isPredictionCategory(filters.category);
 }
 
-/** The keyword actually in force: only while the prediction facets are live. */
+/**
+ * The keyword actually in force. Unlike the topic and resolution facets, this one
+ * applies in every asset class: the search bar sits above the filters and is always
+ * visible, so a keyword narrowing the list is always explained by a control the user
+ * can see.
+ */
 export function activeKeyword(filters: RouteFilters): string {
-  return predictionFacetsActive(filters) ? filters.keyword.trim() : '';
+  return filters.keyword.trim();
 }
 
 /**
  * Whether a route reads as a match for the typed words. Matches on the text the
- * user can actually see — description and line — so a hit is always explicable by
- * looking at the card. Every word must appear, which makes "messi ronaldo" narrow
- * rather than widen.
+ * user can actually see on the card — description, line, category and platform — so
+ * a hit is always explicable by looking at it. Every word must appear, which makes
+ * "messi ronaldo" narrow rather than widen.
  */
 export function routeMatchesKeyword(route: Route, keyword: string): boolean {
   const words = keyword.toLowerCase().split(/\s+/).filter(Boolean);
   if (words.length === 0) return true;
-  const haystack = `${route.description} ${route.line ?? ''}`.toLowerCase();
+  const haystack = `${route.description} ${route.line ?? ''} ${route.category} ${route.platform}`.toLowerCase();
   return words.every((word) => haystack.includes(word));
+}
+
+/**
+ * What a search actually turned up, as one of four states. They are different
+ * problems with different answers, and collapsing them into "no results" is what
+ * makes a search feel broken: "we don't cover Dogecoin" is a coverage fact, while
+ * "your risk filter is hiding it" is a control the user can move.
+ *
+ * `matchCount` counts routes matching the keyword BEFORE the filter chips apply;
+ * `shownCount` counts what survives them.
+ */
+export type SearchOutcome = 'idle' | 'searching' | 'uncovered' | 'filtered-out' | 'found';
+
+export function searchOutcome({ keyword, matchCount, shownCount, isSearching }: {
+  keyword: string;
+  matchCount: number;
+  shownCount: number;
+  isSearching: boolean;
+}): SearchOutcome {
+  if (!keyword.trim()) return 'idle';
+  // Order matters: a search still in flight has no results yet, and calling that
+  // "we don't cover it" would flash a wrong answer on every keystroke.
+  if (isSearching) return 'searching';
+  if (matchCount === 0) return 'uncovered';
+  return shownCount === 0 ? 'filtered-out' : 'found';
 }
 
 export function groupRoutesByChance(routes: Route[]): RouteGroup[] {
@@ -203,8 +233,8 @@ export function buildRouteResults(
   if (filters.minimumProbability > 0) {
     filtered = filtered.filter((route) => route.probability >= filters.minimumProbability);
   }
+  if (keyword) filtered = filtered.filter((route) => routeMatchesKeyword(route, keyword));
   if (predictionFacetsActive(filters)) {
-    if (keyword) filtered = filtered.filter((route) => routeMatchesKeyword(route, keyword));
     // A route with no topic is unknown, not a non-match, but it still cannot satisfy a
     // topic the user asked for — so it drops out while a topic filter is active.
     if (filters.predictionTopic) {
@@ -429,12 +459,51 @@ export function __selfCheck(): void {
     'a keyword narrows the list to matching routes',
   );
   console.assert(
-    activeKeyword({ ...filters, keyword: 'messi' }) === '',
-    'a keyword does not apply while the prediction facets are hidden',
+    activeKeyword({ ...filters, keyword: '  messi  ' }) === 'messi',
+    'a keyword applies in every asset class, trimmed',
   );
   console.assert(
-    buildRouteResults([messi, tesla], params, 1000, { ...filters, keyword: 'messi' }).filtered.length === 2,
-    'a keyword set outside the prediction class leaves the list alone',
+    buildRouteResults([messi, tesla], params, 1000, { ...filters, keyword: 'messi' }).filtered.length === 1,
+    'a keyword narrows the all-assets view too, not just prediction markets',
+  );
+  const etf: Route = {
+    ...reportedRoute,
+    id: 'etf-voo',
+    category: 'Stocks & ETFs',
+    platform: 'Brokerage',
+    description: 'Put your $1,000 in VOO (Vanguard S&P 500 ETF, currently $500)',
+    line: undefined,
+    lossProfile: 'partial',
+  };
+  console.assert(
+    buildRouteResults([etf, messi], params, 1000, { ...filters, keyword: 'voo' }).filtered.length === 1,
+    'an asset search matches a fund route, which carries no prediction facets at all',
+  );
+  console.assert(
+    routeMatchesKeyword(etf, 'brokerage') && routeMatchesKeyword(messi, 'polymarket'),
+    'category and platform are searchable, since both are printed on the card',
+  );
+
+  // ── search outcome ────────────────────────────────────────────────────────
+  console.assert(
+    searchOutcome({ keyword: '', matchCount: 0, shownCount: 0, isSearching: false }) === 'idle',
+    'no keyword means no search message at all',
+  );
+  console.assert(
+    searchOutcome({ keyword: 'messi', matchCount: 0, shownCount: 0, isSearching: true }) === 'searching',
+    'a search still in flight is not yet a miss',
+  );
+  console.assert(
+    searchOutcome({ keyword: 'doge', matchCount: 0, shownCount: 0, isSearching: false }) === 'uncovered',
+    'nothing found anywhere means we do not cover it — say so rather than showing an empty list',
+  );
+  console.assert(
+    searchOutcome({ keyword: 'doge', matchCount: 3, shownCount: 0, isSearching: false }) === 'filtered-out',
+    'found but hidden is a filter problem, not a coverage one',
+  );
+  console.assert(
+    searchOutcome({ keyword: 'doge', matchCount: 3, shownCount: 3, isSearching: false }) === 'found',
+    'found and shown needs no explanation',
   );
 
   // A named market that cannot reach the goal must still show: the user asked for it.

@@ -4,6 +4,7 @@ import { Pressable, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { Accent, Radius, RiskScale, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { predictionTopic } from '@/lib/prediction-topics';
 import { debtLiquidityLabel, debtYieldLabel, isDebtRoute } from '@/lib/route-investment-metrics';
 import { Route } from '@/types/routes';
 
@@ -46,6 +47,12 @@ function RouteCardInner({ route, requiredInvestment, currentInvestment, onTrack,
   const debtYield = debtYieldLabel(route, requiredInvestment);
   const debtLiquidity = debtLiquidityLabel(route);
   const needsMoreToHitGoal = !!requiredInvestment && !!currentInvestment && requiredInvestment > currentInvestment;
+  // Prediction markets span sports, politics, crypto and more, and the question text
+  // alone rarely says which — "Will Alcaraz reach the final?" reads as sports only if
+  // you know the name. The topic comes from the market's own tags, so it is shown when
+  // present and simply omitted when the tags map to nothing; a guessed label would be
+  // worse than none.
+  const topic = predictionTopic(route.predictionTopic);
   const probabilityLabel = route.meetsTarget ? 'Chance of hitting goal' : 'Current amount hits goal';
   const probabilityValue = route.meetsTarget ? `${route.probability}%` : 'No';
   const probabilityWidth = route.meetsTarget ? Math.min(route.probability, 100) : 0;
@@ -82,9 +89,18 @@ function RouteCardInner({ route, requiredInvestment, currentInvestment, onTrack,
               <ThemedText style={{ fontSize: 20 }}>{route.emoji}</ThemedText>
             </View>
             <View className="flex-1">
-              <ThemedText style={{ fontSize: 14, fontWeight: '700', color: theme.text, letterSpacing: -0.2 }} numberOfLines={1}>
-                {route.category}
-              </ThemedText>
+              <View className="flex-row items-center" style={{ gap: 6 }}>
+                <ThemedText style={{ fontSize: 14, fontWeight: '700', color: theme.text, letterSpacing: -0.2 }} numberOfLines={1}>
+                  {route.category}
+                </ThemedText>
+                {topic ? (
+                  <View style={{ paddingHorizontal: 7, paddingVertical: 2, borderRadius: Radius.pill, backgroundColor: theme.backgroundSelected }}>
+                    <ThemedText style={{ fontSize: 10, fontWeight: '800', color: theme.textSecondary }} numberOfLines={1}>
+                      {topic.emoji} {topic.label}
+                    </ThemedText>
+                  </View>
+                ) : null}
+              </View>
               <ThemedText style={{ fontSize: 11, color: theme.textTertiary }} numberOfLines={1}>
                 {route.platform}
               </ThemedText>

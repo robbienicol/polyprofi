@@ -6,10 +6,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuizAnswers } from '@/api/hooks/useQuizAnswers';
 import { useRoutes } from '@/api/hooks/useRoutes';
 import { usePredictionSearch } from '@/api/hooks/usePredictionSearch';
+import { useAssetSearch } from '@/api/hooks/useAssetSearch';
 import { useSavedRoutes } from '@/api/hooks/useSavedRoutes';
 import { useSavingsGoal } from '@/api/hooks/useSavingsGoal';
 import { useTrackedBets } from '@/api/hooks/useTrackedBets';
 import { RouteFilters } from '@/components/routes/RouteFilters';
+import { RouteSearchBar } from '@/components/routes/RouteSearchBar';
 import { RoutesHeader } from '@/components/routes/RoutesHeader';
 import { TrackRouteForm } from '@/components/routes/TrackRouteForm';
 import { RouteCard } from '@/components/molecules/RouteCard';
@@ -23,7 +25,7 @@ import { scheduleWeeklyReminder } from '@/lib/notifications';
 import { parseEntryPrice } from '@/lib/parse-bet-line';
 import { investmentSliderMaximum } from '@/lib/quiz-profile';
 import { openTradeDestination, preferredTradeDestination, tradeDestinationLabel } from '@/lib/route-actions';
-import { activeKeyword, buildRouteResults, groupRoutesByChance, predictionFacetsActive, resolveInvestmentAmount } from '@/lib/route-results';
+import { activeKeyword, buildRouteResults, groupRoutesByChance, predictionFacetsActive, resolveInvestmentAmount, routeMatchesKeyword, searchOutcome } from '@/lib/route-results';
 import type { RouteFilters as Filters } from '@/lib/route-results';
 import { trackedPositionFields } from '@/lib/tracked-assets';
 import type { Route, RouteParams, SavedRoutesBatch } from '@/types/routes';
@@ -116,21 +118,46 @@ export default function RoutesScreen(): React.ReactElement {
     setVisibleCount(30);
   }
 
-  // Keyword search reaches past this goal's pool into all of Polymarket, so its hits
-  // are merged in before scoring. Ids already present win, so a market that is both
+  // Keyword search reaches past this goal's pool on both sides of the map — the whole
+  // Polymarket catalog, and the whole curated fund/coin universe — so its hits are
+  // merged in before scoring. Ids already present win, so a market that is both
   // searched and already a route is not duplicated.
-  const search = usePredictionSearch(activeKeyword(filters), sessionParams);
+  const keyword = activeKeyword(filters);
+  const predictionSearch = usePredictionSearch(keyword, sessionParams);
+  const assetSearch = useAssetSearch(keyword, sessionParams);
+  // Gamma's search is lenient — it ORs the words, so "zorble quantis" comes back with
+  // a hundred markets matching neither. The strict local match is what the list
+  // actually shows, so it is also what gets merged and counted: a "149 pulled in"
+  // line above an empty list is worse than no line at all.
+  const searchRoutes = useMemo(
+    () => (keyword
+      ? [...predictionSearch.routes, ...assetSearch.routes].filter((route) => routeMatchesKeyword(route, keyword))
+      : []),
+    [keyword, predictionSearch.routes, assetSearch.routes],
+  );
   const searchPool = useMemo(() => {
-    if (search.routes.length === 0) return routes;
+    if (searchRoutes.length === 0) return routes;
     const known = new Set(routes.map((route) => route.id));
-    return [...routes, ...search.routes.filter((route) => !known.has(route.id))];
-  }, [routes, search.routes]);
+    return [...routes, ...searchRoutes.filter((route) => !known.has(route.id))];
+  }, [routes, searchRoutes]);
 
   const results = sessionParams
     ? buildRouteResults(searchPool, sessionParams, displayedInvestment, filters)
     : null;
   const ranked = results?.ranked ?? [];
   const filtered = results?.filtered ?? [];
+  const isSearching = predictionSearch.isSearching || assetSearch.isSearching;
+  // Matches before the filter chips narrow them: the gap between this and `filtered`
+  // is what separates "we don't cover it" from "your filters are hiding it".
+  const keywordMatches = keyword
+    ? ranked.filter((route) => routeMatchesKeyword(route, keyword)).length
+    : 0;
+  const outcome = searchOutcome({
+    keyword,
+    matchCount: keywordMatches,
+    shownCount: filtered.length,
+    isSearching,
+  });
 
   async function handleRefresh(): Promise<void> {
     if (isHistorical || !sessionParams) return;
@@ -252,13 +279,17 @@ export default function RoutesScreen(): React.ReactElement {
             onBackToLatest={() => router.replace('/(tabs)/routes')}
           />
         )}
+        <RouteSearchBar
+          value={filters.keyword}
+          onChange={(nextKeyword) => setFiltersAndReset({ ...filters, keyword: nextKeyword })}
+          isSearching={isSearching}
+          pulledInCount={searchRoutes.length}
+        />
         {ranked.length > 0 && (
           <RouteFilters
             filters={filters}
             categories={ranked.map((route) => route.category)}
             onChange={setFiltersAndReset}
-            isSearching={search.isSearching}
-            searchResultCount={search.routes.length}
           />
         )}
         {error && <RoutesError message={error} onRetry={refresh} />}
@@ -275,7 +306,15 @@ export default function RoutesScreen(): React.ReactElement {
             <ThemedText style={{ fontSize: 13, fontWeight: '800', color: Brand[500] }}>Show 30 more · {filtered.length - visibleCount} remaining</ThemedText>
           </Pressable>
         )}
-        {filtered.length === 0 && !isLoading && routes.length > 0 && (
+        {outcome === 'searching' && filtered.length === 0 && (
+          <ThemedText type="small" themeColor="textSecondary" className="text-center" style={{ paddingVertical: 24 }}>
+            Searching for “{keyword}”…
+          </ThemedText>
+        )}
+        {outcome === 'uncovered' && (
+          <EmptyUncovered keyword={keyword} onClear={() => setFiltersAndReset({ ...filters, keyword: '' })} />
+        )}
+        {(outcome === 'filtered-out' || (outcome === 'idle' && filtered.length === 0 && !isLoading && routes.length > 0)) && (
           <EmptyFiltered
             filters={filters}
             unlockAmount={results?.unlockInvestmentFor(filters.minimumProbability) ?? null}
@@ -330,6 +369,37 @@ function EmptyRoutes({ hasSavedQuiz, onStart }: { hasSavedQuiz: boolean; onStart
 function RoutesError({ message, onRetry }: { message: string; onRetry: () => void }): React.ReactElement {
   const theme = useTheme();
   return <View className="items-center gap-2 py-10 px-6" style={{ borderRadius: Radius.lg, backgroundColor: Accent.red + '12', borderWidth: 1, borderColor: Accent.red + '30' }}><ThemedText style={{ fontSize: 24 }}>⚠️</ThemedText><ThemedText style={{ fontSize: 14, fontWeight: '700', color: theme.text }}>Couldn&apos;t load routes</ThemedText><ThemedText className="text-center" style={{ fontSize: 13, color: theme.textSecondary }}>{message}</ThemedText><Pressable onPress={onRetry} className="active:opacity-70 mt-1" style={{ borderRadius: Radius.md, paddingHorizontal: 16, paddingVertical: 9, backgroundColor: Brand[500] }}><ThemedText style={{ fontSize: 13, fontWeight: '700', color: '#06140C' }}>Try again</ThemedText></Pressable></View>;
+}
+
+/**
+ * A search that found nothing anywhere. This is a coverage answer, not a filter one:
+ * clearing filters would not help, because there is no route behind them. Saying what
+ * we DO cover is the useful half — "we don't have that" alone reads as a bug.
+ *
+ * Prediction markets are searched live across the whole Polymarket catalog, so a miss
+ * there means the market genuinely doesn't exist or has already settled. Funds, stocks
+ * and coins come from a curated universe, so a miss there means we deliberately don't
+ * carry it — and that distinction is not worth explaining to the user mid-search.
+ */
+function EmptyUncovered({ keyword, onClear }: { keyword: string; onClear: () => void }): React.ReactElement {
+  const theme = useTheme();
+  return (
+    <View className="items-center gap-2 py-10 px-6">
+      <ThemedText style={{ fontSize: 26 }}>🔍</ThemedText>
+      <ThemedText type="smallBold" className="text-center">Nothing we can price for “{keyword}”</ThemedText>
+      <ThemedText type="small" themeColor="textSecondary" className="text-center" style={{ lineHeight: 19, maxWidth: 320 }}>
+        We searched every open Polymarket contract plus the funds, stocks and coins we
+        cover. Either no live market matches, or it&apos;s an asset we don&apos;t carry —
+        we only route to things we can price honestly.
+      </ThemedText>
+      <Pressable onPress={onClear} className="active:opacity-60 mt-1">
+        <ThemedText type="small" style={{ color: Brand[500], fontWeight: '700' }}>Clear search</ThemedText>
+      </Pressable>
+      <ThemedText type="small" style={{ color: theme.textTertiary, fontSize: 11, marginTop: 2 }}>
+        Try a team, a person, a ticker, or what a fund holds.
+      </ThemedText>
+    </View>
+  );
 }
 
 /**

@@ -8,6 +8,9 @@ import type { Route, RouteParams } from '@/types/routes';
 /** Below this, a keyword matches half of Polymarket and the request is wasted. */
 export const MIN_KEYWORD_LENGTH = 2;
 
+/** Ceiling on markets turned into routes from one search, before the band quotas. */
+const MAX_SEARCH_MARKETS = 150;
+
 /** Keystrokes settle before a request goes out, so typing "Messi" is one search. */
 const DEBOUNCE_MS = 350;
 
@@ -37,7 +40,11 @@ export function usePredictionSearch(keyword: string, params: RouteParams | null)
     queryFn: async (): Promise<Route[]> => {
       const markets = await searchPolymarketByKeyword(settled);
       if (markets.length === 0 || !params) return [];
-      return buildPolymarketRoutes(markets, params, markets.length);
+      // A tournament query ("us open") reaches several hundred markets, and each one
+      // can yield two routes. Cap it: buildPolymarketRoutes fills its quota across
+      // price bands, so the cut keeps longshots and favourites both represented
+      // rather than lopping off whichever end sorted last.
+      return buildPolymarketRoutes(markets, params, Math.min(markets.length, MAX_SEARCH_MARKETS));
     },
     enabled,
     staleTime: 5 * 60_000,

@@ -221,7 +221,13 @@ async function searchPolymarketMarkets(question: string): Promise<PolymarketEntr
 }
 
 /**
- * Keyword search for the route list: "Messi", "Tesla", "Fed".
+ * Keyword search for the route list: "Messi", "Tesla", "US Open".
+ *
+ * The daily snapshot only holds the top ~100 markets per horizon band, so a search
+ * that read from it would miss almost everything. Gamma's public-search indexes the
+ * whole catalog instead, and this pages through it: an event-heavy query like
+ * "us open" is hundreds of events deep, and the tournament markets a user actually
+ * wants sit well past the first page.
  *
  * Two things the raw endpoint gets wrong for this use. It happily returns settled
  * markets — every "Messi" hit is closed and priced 0/1 — which would otherwise be
@@ -229,37 +235,58 @@ async function searchPolymarketMarkets(question: string): Promise<PolymarketEntr
  * leaving the markets bare, so a searched market would lose its topic. Both are
  * fixed here rather than at the call site.
  */
+const SEARCH_EVENTS_PER_PAGE = 50;
+const SEARCH_PAGES = 3;
+
 export async function searchPolymarketByKeyword(keyword: string): Promise<PolymarketEntry[]> {
   const trimmed = keyword.trim();
   if (trimmed.length < 2) return [];
-  const query = new URLSearchParams({ q: trimmed, limit_per_type: '20' });
+
+  // allSettled, not all: a failed page must narrow the result, not empty it.
+  const settled = await Promise.allSettled(
+    Array.from({ length: SEARCH_PAGES }, (_unused, index) => searchPolymarketPage(trimmed, index + 1)),
+  );
+  const entries = settled.flatMap((result) => (result.status === 'fulfilled' ? result.value : []));
+
+  // Same sanity floor the goal-scoped universe uses: two-sided, and priced
+  // somewhere a position can actually be taken. A 1¢ longshot in a 60-player
+  // field is a real market but not a route we can honestly price.
+  const tradeable = entries.filter((market) => market.prices.length === 2
+    && market.outcomes.length === 2
+    && polymarketMaturityDays(market.endDate) != null
+    && market.prices.every((price) => Number.isFinite(price) && price >= 0.02 && price <= 0.98));
+
+  return [...new Map(tradeable.map((market) => [market.slug ?? market.question, market])).values()];
+}
+
+/** One page of public-search, flattened from events to their open markets. */
+async function searchPolymarketPage(keyword: string, page: number): Promise<PolymarketEntry[]> {
+  const query = new URLSearchParams({
+    q: keyword,
+    limit_per_type: String(SEARCH_EVENTS_PER_PAGE),
+    events_status: 'active',
+    page: String(page),
+  });
   try {
     const response = await fetch(`https://gamma-api.polymarket.com/public-search?${query}`, { headers: { Accept: 'application/json' } });
     if (!response.ok) {
-      console.warn(`[market-data:polymarket] keyword search: ${response.status}`);
+      console.warn(`[market-data:polymarket] keyword search p${page}: ${response.status}`);
       return [];
     }
     const value = await responseJson(response);
     if (!isRecord(value) || !Array.isArray(value.events)) return [];
 
-    const entries = value.events.flatMap((event) => {
+    return value.events.flatMap((event) => {
       if (!isRecord(event) || !Array.isArray(event.markets)) return [];
       // A settled event's markets are all history, whatever their own flags say.
       if (event.closed === true) return [];
       const eventTags = eventTagSlugs(event);
+      // An open tournament event still carries settled markets — the players
+      // already knocked out, priced 0/1. Those are filtered per market, not per event.
       return event.markets
         .filter((market): market is RawMarket => isRawMarket(market) && isTradeableRaw(market))
         .map((market) => withInheritedTags(toPolymarketEntry(market), eventTags));
     });
-
-    // Same sanity floor the goal-scoped universe uses: two-sided, and priced
-    // somewhere a position can actually be taken.
-    const tradeable = entries.filter((market) => market.prices.length === 2
-      && market.outcomes.length === 2
-      && polymarketMaturityDays(market.endDate) != null
-      && market.prices.every((price) => Number.isFinite(price) && price >= 0.02 && price <= 0.98));
-
-    return [...new Map(tradeable.map((market) => [market.slug ?? market.question, market])).values()];
   } catch {
     return [];
   }
