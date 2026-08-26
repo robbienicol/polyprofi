@@ -1,6 +1,6 @@
 import { PolymarketEntry } from '@/api/client/market-data';
 import { polymarketMarketQuality } from '@/lib/polymarket-market-quality';
-import { bracketRiskLevel, buildSwingPlan } from '@/lib/prediction-swing';
+import { bracketLossProfile, bracketRiskLevel, buildSwingPlan } from '@/lib/prediction-swing';
 import { topicForTags } from '@/lib/prediction-topics';
 import { ExitPlan, MarketQualityFacts, Route, RouteParams } from '@/types/routes';
 
@@ -93,6 +93,11 @@ function toSwingRoute(
   const { market, outcome } = candidate;
   const expectedReturn = Math.round(params.balance * plan.winReturnRate);
   const riskLevel = bracketRiskLevel(plan.effectiveLossFraction);
+  // Derived, never assumed. A bracket in a thin book has an effectiveLossFraction
+  // near 1 — the stop cannot fill, so the position is all-or-nothing in everything
+  // but name, and badging it "capital preservation" was the label contradicting
+  // the risk level printed next to it on the same card.
+  const lossProfile = bracketLossProfile(plan.effectiveLossFraction);
   const maxLossPct = Math.round(plan.effectiveLossFraction * 100);
   const stake = Math.round(params.balance).toLocaleString();
 
@@ -103,14 +108,16 @@ function toSwingRoute(
     description:
       `Trade ${outcome} on “${market.question}”: buy near ${plan.entryCents}¢, sell at ` +
       `${plan.takeProfitCents}¢, stop at ${plan.stopCents}¢ — the stop caps the loss at about ` +
-      `${maxLossPct}% of your stake instead of all of it.`,
+      (lossProfile === 'partial'
+        ? `${maxLossPct}% of your stake instead of all of it.`
+        : `${maxLossPct}% of your stake — the book is too thin for the stop to be relied on.`),
     riskLevel,
     probability: Math.round(plan.successProbability),
     expectedReturn,
     platform: 'Polymarket',
     line: `${outcome} ${plan.entryCents}¢ → ${plan.takeProfitCents}¢`,
     maturesInDays: plan.expectedExitDays,
-    lossProfile: 'partial',
+    lossProfile,
     meetsTarget: expectedReturn >= params.target,
     strategy:
       `Buy ${outcome} near ${plan.entryCents}¢ (about ${plan.netEntryCents}¢ after the spread), ` +
@@ -256,6 +263,12 @@ export function __selfCheck(): void {
   console.assert(both.length === 2, 'a liquid, moving market offers both hold and swing routes');
   const [held, swung] = both;
   console.assert(held.lossProfile === 'binary' && swung.lossProfile === 'partial', 'only the bracketed route caps its loss');
+  // The label and the risk band are now one decision, so they can never disagree
+  // on the same card: "Capital preservation" beside "Very Aggressive" was the bug.
+  console.assert(
+    both.every((route) => route.lossProfile !== 'partial' || route.riskLevel < 5),
+    'no route claims capital preservation while showing the top risk band',
+  );
   console.assert(swung.exitPlan?.kind === 'bracket', 'the swing route carries its exit plan');
   console.assert(
     swung.exitPlan!.costEdgePts < 0,

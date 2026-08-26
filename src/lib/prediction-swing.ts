@@ -238,6 +238,21 @@ export function buildSwingPlan(input: SwingPlanInput): ExitPlan | null {
 }
 
 /** Risk band for a bracketed position, driven by what the stop actually leaves at risk. */
+/**
+ * Whether a bracket genuinely preserves capital, or only claims to.
+ *
+ * "Capital preservation" is a promise the user reads as "I keep most of my
+ * money in the bad case". A stop that still leaves more than half the stake at
+ * risk does not keep that promise, whatever the plan intends — and in a thin
+ * book `effectiveLossFraction` climbs toward 1 precisely because the stop is
+ * fiction there. Above this line the honest label is the all-or-nothing one.
+ */
+export const PRESERVES_CAPITAL_BELOW = 0.5;
+
+export function bracketLossProfile(effectiveLossFraction: number): 'binary' | 'partial' {
+  return effectiveLossFraction < PRESERVES_CAPITAL_BELOW ? 'partial' : 'binary';
+}
+
 export function bracketRiskLevel(effectiveLossFraction: number): number {
   if (effectiveLossFraction <= 0.15) return 2;
   if (effectiveLossFraction <= 0.3) return 3;
@@ -377,6 +392,27 @@ export function __selfCheck(): void {
   invariant(impossible === null, 'a goal needing >99¢ must yield no plan');
 
   invariant(bracketRiskLevel(0.1) === 2 && bracketRiskLevel(0.95) === 5, 'risk band follows what the stop leaves at risk');
+
+  // The reported bug: a bracket could be badged "Capital preservation" while the
+  // risk level printed beside it said Very Aggressive, because the loss profile
+  // was hardcoded rather than derived. The two now come from one number.
+  invariant(
+    bracketLossProfile(0.1) === 'partial',
+    'a stop that leaves 10% at risk really does preserve capital',
+  );
+  invariant(
+    bracketLossProfile(0.95) === 'binary',
+    'a stop that cannot fill is all-or-nothing, whatever the plan intended',
+  );
+  invariant(
+    bracketLossProfile(0.5) === 'binary',
+    'losing exactly half the stake is not preservation — the boundary is exclusive',
+  );
+  invariant(
+    [0, 0.1, 0.29, 0.49, 0.5, 0.61, 0.95, 1].every((fraction) =>
+      bracketLossProfile(fraction) === 'partial' ? bracketRiskLevel(fraction) < 5 : true),
+    'no route can ever claim capital preservation while showing the top risk band',
+  );
 }
 
 function invariant(condition: unknown, message: string): asserts condition {
