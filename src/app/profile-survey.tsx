@@ -4,18 +4,16 @@ import { Animated, Easing, Pressable, ScrollView, TextInput, useWindowDimensions
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useOnboardingProfile } from '@/api/hooks/useOnboardingProfile';
-import { OnboardingGlow, renderOnboardingPreview } from '@/components/onboarding/OnboardingPreviews';
+import { OnboardingGlow } from '@/components/onboarding/OnboardingPreviews';
 import { Choice, Options, PageHead, TaskRow, useSpokenLine, useTaskProgress } from '@/components/onboarding/quiz-kit';
 import {
   AGE_RANGES,
   AMOUNTS,
   buildPageCopy,
   CAN_CONTINUE,
-  COUNTRIES,
   EXPERIENCE_LEVELS,
   MARKETS,
-  OTHER,
-  OUTCOMES,
+    OUTCOMES,
   PAGE_IDS,
   profilingTasks,
   SCAN_TASK_COUNT,
@@ -28,7 +26,6 @@ import { ThemedText } from '@/components/themed-text';
 import { Brand, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import {
-  CONTRIBUTIONS,
   EMPTY_ANSWERS,
   HORIZONS,
   LOSS_REACTIONS,
@@ -382,26 +379,6 @@ function renderPageBody(props: BodyProps): React.ReactElement | null {
               ))}
             </Options>
           </Field>
-          <Field label="Country">
-            <Options gap={7}>
-              {COUNTRIES.map((option) => (
-                <Choice
-                  key={option}
-                  label={option}
-                  selected={answers.country === option}
-                  onPress={() => set('country', option)}
-                />
-              ))}
-            </Options>
-            {answers.country === OTHER ? (
-              <FreeText
-                value={answers.countryOther}
-                placeholder="Which country?"
-                maxLength={40}
-                onChangeText={(text) => set('countryOther', text)}
-              />
-            ) : null}
-          </Field>
         </View>
       );
 
@@ -409,9 +386,6 @@ function renderPageBody(props: BodyProps): React.ReactElement | null {
       return (
         <LoaderPage tasks={profilingTasks(answers)} active={props.active} onDone={props.onScanDone} />
       );
-
-    case 'sweep_intro':
-      return <SweepIntro active={props.active} />;
 
     case 'capital':
       return (
@@ -439,22 +413,6 @@ function renderPageBody(props: BodyProps): React.ReactElement | null {
               note={option.note}
               selected={answers.horizon === option.value}
               onPress={() => set('horizon', option.value)}
-            />
-          ))}
-        </Options>
-      );
-
-    case 'contribution':
-      return (
-        <Options>
-          {CONTRIBUTIONS.map((option) => (
-            <Choice
-              key={option.value}
-              label={option.label}
-              note={option.note}
-              wide
-              selected={answers.contribution === option.value}
-              onPress={() => set('contribution', option.value)}
             />
           ))}
         </Options>
@@ -598,22 +556,6 @@ function FreeText({
   );
 }
 
-/**
- * The interstitial. It borrows the carousel's own scan illustration, so the
- * thing being named here is visibly the thing they were shown a minute ago.
- */
-function SweepIntro({ active }: { active: boolean }): React.ReactElement {
-  return <View style={{ flex: 1, minHeight: 200 }}>{renderOnboardingPreview('scan', active)}</View>;
-}
-
-/**
- * A working pause inside the quiz.
- *
- * Both of these are real beats rather than filler: every bar is named after
- * something the person just told us, so the wait reads as their answers being
- * used. It starts only once the page is actually on screen — the render window
- * mounts it a page early — and advances itself when the last bar lands.
- */
 function LoaderPage({
   tasks,
   active,
@@ -756,11 +698,6 @@ function ReviewPage({
       page: 'outcome',
     },
     { label: 'Experience', value: answers.experience || '—', page: 'experience' },
-    {
-      label: 'Based in',
-      value: (answers.country === OTHER ? answers.countryOther.trim() : answers.country) || '—',
-      page: 'starting_point',
-    },
     { label: 'Can put in', value: answers.amount || '—', page: 'capital' },
     {
       label: 'Timeframe',
@@ -771,11 +708,6 @@ function ReviewPage({
       label: 'If it drops',
       value: LOSS_REACTIONS.find((item) => item.value === answers.lossReaction)?.label ?? '—',
       page: 'loss_reaction',
-    },
-    {
-      label: 'Adding more',
-      value: CONTRIBUTIONS.find((item) => item.value === answers.contribution)?.label ?? '—',
-      page: 'contribution',
     },
     { label: 'Markets', value: answers.markets.join(', ') || 'Everything', page: 'markets' },
     {

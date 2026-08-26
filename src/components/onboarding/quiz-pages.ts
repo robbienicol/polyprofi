@@ -24,6 +24,7 @@
  */
 
 import type { PageCopy } from '@/components/onboarding/quiz-kit';
+import { deviceCountry } from '@/lib/device-region';
 import type { LossReaction, NotificationChoice, SurveyAnswers } from '@/lib/onboarding-profile';
 
 export const PAGE_IDS = [
@@ -35,12 +36,9 @@ export const PAGE_IDS = [
   // feel like a form, so this is where the app does something with them and says
   // so — every bar it fills is named after something they actually said.
   'profiling',
-  // Not a question — the payoff for everything above it.
-  'sweep_intro',
   'capital',
   'horizon',
   'loss_reaction',
-  'contribution',
   'markets',
   // Asked straight after the opposite question, while the same list is fresh.
   // Exclusions are worth their own page: people are far more certain about what
@@ -56,7 +54,7 @@ export const PAGE_IDS = [
 export type PageId = (typeof PAGE_IDS)[number];
 
 /** Pages that are statements or permission asks rather than things we ask them. */
-const NON_QUESTIONS: readonly PageId[] = ['sweep_intro', 'profiling', 'scan', 'notifications', 'review'];
+const NON_QUESTIONS: readonly PageId[] = ['profiling', 'scan', 'notifications', 'review'];
 
 /** How many questions the welcome screen promises. Counted, never hardcoded. */
 export const SURVEY_QUESTION_COUNT = PAGE_IDS.filter((id) => !NON_QUESTIONS.includes(id)).length;
@@ -68,7 +66,6 @@ export const OTHER = 'Other';
 export const SOMETHING_ELSE = 'Something else';
 
 export const AGE_RANGES = ['18-24', '25-34', '35-44', '45-54', '55-64', '65+', SKIP] as const;
-export const COUNTRIES = ['United States', 'Canada', 'United Kingdom', 'Australia', OTHER, SKIP] as const;
 
 export const EXPERIENCE_LEVELS = [
   { label: 'None yet', note: 'Starting from scratch' },
@@ -118,15 +115,11 @@ export const CAN_CONTINUE: Record<PageId, (answers: SurveyAnswers) => boolean> =
   motivation: (a) => a.motivations.length > 0,
   outcome: (a) => Boolean(a.outcome),
   experience: (a) => Boolean(a.experience),
-  // Country is the load-bearing one — T-bills and HYSAs are US-only. Age is
-  // optional in practice because "Prefer not to say" is a real answer.
-  starting_point: (a) => Boolean(a.ageRange && a.country),
+  starting_point: (a) => Boolean(a.ageRange),
   profiling: () => true,
-  sweep_intro: () => true,
   capital: (a) => Boolean(a.amount),
   horizon: (a) => Boolean(a.horizon),
   loss_reaction: (a) => Boolean(a.lossReaction),
-  contribution: (a) => Boolean(a.contribution),
   // No market is a real answer: it means "show me everything".
   markets: () => true,
   // Both exclusion pages are opt-in; skipping one means "nothing is off limits".
@@ -171,12 +164,6 @@ const HORIZON_ACKS: Record<string, string> = {
   years: "Years to work with. That's the patient way to do this, and it pays for itself.",
 };
 
-const CONTRIBUTION_ACKS: Record<string, string> = {
-  none: "One lump sum, then. We'll make it count.",
-  monthly: "Adding a bit every month is the habit that does the heavy lifting. We'll build around it.",
-  sometimes: "Whenever you can is fine. We'll leave room for it.",
-};
-
 const AMOUNT_ACKS: Record<string, string> = {
   'Under $1,000': "That is a real start, and it is how nearly everyone begins. Nothing we show you will cost more.",
   '$1,000 - $5,000': "A few thousand is plenty to work with — enough to split across a few picks.",
@@ -195,8 +182,6 @@ export function buildPageCopy(
   // is what folding a sentence that contains "I" gets you.
   const motivations = phraseList([...answers.motivations]);
   const outcome = answers.outcome === SOMETHING_ELSE ? answers.outcomeOther.trim() : answers.outcome ?? '';
-  const country = answers.country === OTHER ? answers.countryOther.trim() : answers.country ?? '';
-  const usBased = answers.country === 'United States';
   const markets = phraseList([...answers.markets]);
   const avoided = phraseList([...answers.avoidMarkets]);
 
@@ -226,21 +211,15 @@ export function buildPageCopy(
     starting_point: {
       ack: EXPERIENCE_ACKS[answers.experience ?? ''] ?? null,
       title: 'A little about you.',
-      helper: 'Where you live decides what you are allowed to buy, so we only ever show you things you can actually get.',
+      // The old helper promised that where you live decides what we show you.
+      // Nothing ever read the country, so the promise was not kept — and the
+      // device knows the answer anyway. Age is the only thing asked here now.
+      helper: 'One question, and only so the numbers we show you are pitched at the right stage.',
     },
     profiling: {
       // Named for what it is doing with their answers, not for the wait.
       title: name ? `Nice work, ${name}. Setting you up…` : 'Nice work. Setting you up…',
       helper: null,
-    },
-    sweep_intro: {
-      // The one page in the run that introduces the thing nobody else does, so
-      // it gets a name-first announcement rather than a capability note.
-      badge: 'New',
-      title: 'Meet the Sweep.',
-      helper: usBased
-        ? 'One look at stocks, savings, crypto, prediction markets and sports bets. Live prices, safest first.'
-        : `One look at every market you can use in ${country || 'your country'}. Live prices, safest first.`,
     },
     capital: {
       title: 'Roughly how much are\nyou looking to invest?',
@@ -256,13 +235,8 @@ export function buildPageCopy(
       title: 'Your $500 drops to $400\novernight. What do you do?',
       helper: "The honest answer is the useful one — this is the question that keeps you out of things you would regret.",
     },
-    contribution: {
-      ack: answers.lossReaction ? LOSS_ACKS[answers.lossReaction] : null,
-      title: 'Will you be adding\nto this over time?',
-      helper: 'If more is coming, we can hold some back rather than committing it all today.',
-    },
     markets: {
-      ack: CONTRIBUTION_ACKS[answers.contribution ?? ''] ?? null,
+      ack: answers.lossReaction ? LOSS_ACKS[answers.lossReaction] : null,
       title: 'Any markets you\nare drawn to?',
       helper: 'Optional — leave it blank and we sweep everything. This only changes what we lead with.',
     },
@@ -286,12 +260,11 @@ export function buildPageCopy(
     },
     notifications: {
       title: name ? `Let us watch it for you, ${name}.` : 'Let us watch it for you.',
-      // The goal is quoted rather than folded into the sentence: every option is
-      // a phrase of a different shape, and "you will not reach extra income on
-      // the side" is what interpolating them directly produces.
-      helper: outcome
-        ? `"${outcome}" takes more than one visit, and nobody keeps checking on their own. We'll nudge you when something better shows up, and when it is time to sell.`
-        : "Nobody keeps checking on their own. We'll nudge you when something better shows up, and when it is time to sell. Nothing else.",
+      // Concrete, and about the two things the previews underneath actually show.
+      // The old copy quoted their goal back at them and said it "takes more than
+      // one visit", which asked them to imagine a future problem — on a page that
+      // runs before they have picked anything at all.
+      helper: "Prices move after you pick. We'll tell you when a better route opens up, and when it's time to take the money.",
     },
     review: {
       title: name ? `That's the hard part done, ${name}.` : "That's the hard part done.",
@@ -317,7 +290,7 @@ export function profilingTasks(answers: SurveyAnswers): string[] {
     answers.experience
       ? `Setting how much we explain (${answers.experience.toLocaleLowerCase()})`
       : 'Setting how much we explain',
-    answers.country ? `Unlocking what you can buy in ${answers.country}` : 'Checking what you can buy',
+    deviceCountry() ? `Unlocking what you can buy in ${deviceCountry()}` : 'Checking what you can buy',
   ];
 }
 

@@ -9,10 +9,11 @@ import { usePreferences } from '@/api/hooks/usePreferences';
 import { useUserProfile, type UserProfileInput } from '@/api/hooks/useUserProfile';
 import { OnboardingGlow } from '@/components/onboarding/OnboardingPreviews';
 import { TaskRow, useTaskProgress } from '@/components/onboarding/quiz-kit';
-import { buildTasks, OTHER, SKIP, SOMETHING_ELSE } from '@/components/onboarding/quiz-pages';
+import { buildTasks, SKIP, SOMETHING_ELSE } from '@/components/onboarding/quiz-pages';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { deviceCountry } from '@/lib/device-region';
 import { syncWeeklyReminder } from '@/lib/notifications';
 import { ACQUISITION_PLATFORMS } from '@/lib/preferences';
 import type { AcquisitionPlatform } from '@/types/bets';
@@ -63,11 +64,11 @@ const FACTS = [
 /** Maps a completed quiz run onto the profile columns the server actually has. */
 function toProfileInput(answers: SurveyAnswers): UserProfileInput {
   const outcome = answers.outcome === SOMETHING_ELSE ? answers.outcomeOther.trim() || SOMETHING_ELSE : answers.outcome;
-  const country = answers.country === OTHER ? answers.countryOther.trim() || OTHER : answers.country;
 
   return {
     ageRange: answers.ageRange === SKIP ? null : answers.ageRange,
-    country: country === SKIP ? null : country,
+    // Read off the device rather than asked for — see @/lib/device-region.
+    country: deviceCountry(),
     financialGoal: outcome,
     investingExperience: answers.experience,
     marketsInterested: answers.markets,

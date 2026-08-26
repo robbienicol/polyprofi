@@ -32,15 +32,6 @@ export const HORIZONS = [
 
 export type Horizon = (typeof HORIZONS)[number]['value'];
 
-/** Whether more money is coming, which changes how much of it we put to work now. */
-export const CONTRIBUTIONS = [
-  { value: 'none', label: 'No, this is it', note: 'A single lump sum' },
-  { value: 'monthly', label: 'Yes, monthly', note: 'A set amount each month' },
-  { value: 'sometimes', label: 'When I can', note: 'No fixed schedule' },
-] as const;
-
-export type Contribution = (typeof CONTRIBUTIONS)[number]['value'];
-
 /** What brought them here. Multi-select — most people have more than one reason. */
 export const MOTIVATIONS = [
   'Grow what I have',
@@ -69,12 +60,9 @@ export interface SurveyAnswers {
   outcomeOther: string;
   experience: string | null;
   ageRange: string | null;
-  country: string | null;
-  countryOther: string;
   amount: string | null;
   horizon: Horizon | null;
   lossReaction: LossReaction | null;
-  contribution: Contribution | null;
   markets: string[];
   /** Markets they want left out entirely. Beats `markets` wherever they overlap. */
   avoidMarkets: string[];
@@ -88,12 +76,9 @@ export const EMPTY_ANSWERS: SurveyAnswers = {
   outcomeOther: '',
   experience: null,
   ageRange: null,
-  country: null,
-  countryOther: '',
   amount: null,
   horizon: null,
   lossReaction: null,
-  contribution: null,
   markets: [],
   avoidMarkets: [],
   avoidPlatforms: [],
@@ -161,8 +146,6 @@ function sanitizeAnswers(value: unknown): SurveyAnswers {
     outcomeOther: typeof value.outcomeOther === 'string' ? value.outcomeOther : '',
     experience: stringOrNull(value.experience),
     ageRange: stringOrNull(value.ageRange),
-    country: stringOrNull(value.country),
-    countryOther: typeof value.countryOther === 'string' ? value.countryOther : '',
     amount: stringOrNull(value.amount),
     horizon: oneOf(
       value.horizon,
@@ -171,10 +154,6 @@ function sanitizeAnswers(value: unknown): SurveyAnswers {
     lossReaction: oneOf(
       value.lossReaction,
       LOSS_REACTIONS.map((item) => item.value)
-    ),
-    contribution: oneOf(
-      value.contribution,
-      CONTRIBUTIONS.map((item) => item.value)
     ),
     markets: strings(value.markets),
     avoidMarkets: strings(value.avoidMarkets),
