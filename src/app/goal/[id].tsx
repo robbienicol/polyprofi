@@ -4,6 +4,7 @@ import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useGoalProgress } from '@/api/hooks/useGoalProgress';
+import { useOnboardingProfile } from '@/api/hooks/useOnboardingProfile';
 import { useMoney, usePreferences } from '@/api/hooks/usePreferences';
 import { useQuizAnswers } from '@/api/hooks/useQuizAnswers';
 import { useSavedRoutes } from '@/api/hooks/useSavedRoutes';
@@ -14,6 +15,7 @@ import { PortfolioOverview } from '@/components/portfolio/PortfolioOverview';
 import { ThemedText } from '@/components/themed-text';
 import { Accent, Brand, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { excludedSearchCategoriesFor, riskToleranceFor } from '@/lib/onboarding-profile';
 import { buildRouteParams, referenceStakeFor, surveyAmountCeiling } from '@/lib/quiz-profile';
 import { betsForGoal, goalProgressFraction, goalRemaining, goalTimeframe, isOpenEnded } from '@/lib/savings-goal';
 
@@ -28,6 +30,8 @@ export default function GoalDetailScreen(): React.ReactElement {
   const { bets, reassignBets } = useTrackedBets();
   const { quizAnswers, saveAnswers } = useQuizAnswers();
   const { history } = useSavedRoutes();
+  // The quiz answers, for the searches that have no previous search to inherit from.
+  const { profile: onboarding } = useOnboardingProfile();
   const { preferences } = usePreferences();
   const { profile } = useUserProfile();
   const investmentCeiling = surveyAmountCeiling(profile?.investmentAmount);
@@ -72,8 +76,12 @@ export default function GoalDetailScreen(): React.ReactElement {
         investmentCeiling: ceiling ?? undefined,
         target,
         timeframe: goalTimeframe(goal),
-        riskTolerance: prefill?.riskTolerance ?? 'balanced',
+        // No previous search to inherit from means falling back to the quiz answers
+        // rather than to 'balanced' for everyone. The goal's own deadline still owns
+        // the timeframe here — that is a property of the goal, not of the person.
+        riskTolerance: prefill?.riskTolerance ?? riskToleranceFor(onboarding.answers),
         categories: prefill?.categories ?? [],
+        excludedCategories: excludedSearchCategoriesFor(onboarding.answers),
         preferredPlatforms: preferences.preferredPlatforms,
       }),
       {

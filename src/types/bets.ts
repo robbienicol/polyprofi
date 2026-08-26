@@ -55,6 +55,14 @@ export interface QuizAnswers {
   target: number;
   timeframe: 'today' | 'week' | 'month' | '3months' | '1year' | '5years';
   categories: string[]; // empty means no preference (all markets)
+  /**
+   * Categories to keep out of the results entirely, from the "anything you'd
+   * rather leave out" answer. Unlike `categories` this is a hard exclusion and
+   * it applies even when `categories` is empty — "no preference" still isn't
+   * permission to show someone the one market they ruled out. Optional so
+   * searches saved before this field still load.
+   */
+  excludedCategories?: string[];
   riskTolerance: 'conservative' | 'balanced' | 'aggressive';
   /** Apps the user already uses. Optional so quizzes saved before this field still load. */
   preferredPlatforms?: AcquisitionPlatform[];

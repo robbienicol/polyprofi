@@ -50,6 +50,9 @@ export function isQuizAnswers(value: unknown): value is QuizAnswers {
     && isFiniteNumber(value.target)
     && isOneOf(value.timeframe, ['today', 'week', 'month', '3months', '1year', '5years'])
     && isStringArray(value.categories)
+    // Optional for the same reason, and validated because a garbage value would
+    // reach routeMatchesCategories, which iterates it.
+    && isOptional(value.excludedCategories, isStringArray)
     && isOneOf(value.riskTolerance, ['conservative', 'balanced', 'aggressive'])
     && isOptional(value.preferredPlatforms, isAcquisitionPlatformArray)
     // Optional: searches saved before the quiz asked this still load, and a garbage

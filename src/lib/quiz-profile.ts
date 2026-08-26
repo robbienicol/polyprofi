@@ -246,6 +246,13 @@ export function filterRoutesForQuiz(routes: Route[], params: RouteParams): Route
     result = [...new Map([...matched, ...baselines].map((r) => [r.id, r])).values()];
   }
 
+  // Applied last, and to the baseline rescue above as well: a market someone asked
+  // us to leave out does not come back in through the safe-route back door.
+  const excluded = params.excludedCategories ?? [];
+  if (excluded.length > 0) {
+    result = result.filter((r) => !routeMatchesCategories(r, excluded));
+  }
+
   return sortSafestFirst(result);
 }
 
@@ -341,6 +348,29 @@ export function __selfCheck(): void {
   console.assert(
     weekRoutes.length === 1 && weekRoutes[0].id === 'near-week',
     'one-week quiz keeps the 10d near miss but hides 11d and two-year routes',
+  );
+
+  // the reported gap: "leave crypto out" has to hold even when no market was picked,
+  // and it must not be undone by the safe-route rescue.
+  const cryptoRoute: Route = { ...voo, id: 'crypto', category: 'Crypto' };
+  const etfRoute: Route = { ...voo, id: 'etf', category: 'Stocks & ETFs', strategy: 'broad market ETF' };
+  const noPreference: RouteParams = { ...weekParams, categories: [], excludedCategories: ['Crypto'] };
+  const excluded = filterRoutesForQuiz([cryptoRoute, etfRoute], noPreference);
+  console.assert(
+    excluded.length === 1 && excluded[0].id === 'etf',
+    'an excluded category is dropped even when categories is empty ("no preference" is not permission)',
+  );
+  const rescued = filterRoutesForQuiz(
+    [cryptoRoute, etfRoute],
+    { ...weekParams, categories: ['Polymarket'], excludedCategories: ['Stocks'] },
+  );
+  console.assert(
+    rescued.every((route) => route.id !== 'etf'),
+    'the ETF/treasury baseline rescue does not smuggle an excluded category back in',
+  );
+  console.assert(
+    filterRoutesForQuiz([cryptoRoute, etfRoute], weekParams).length === 2,
+    'a search saved before excludedCategories existed filters exactly as it used to',
   );
 
   // an unresolved Polymarket contract (no end date) must not get waved through as a match —

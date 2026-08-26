@@ -9,6 +9,7 @@ import { __selfCheck as checkPolymarketRoutes } from '@/lib/polymarket-routes';
 import { __selfCheck as checkPredictionSwing } from '@/lib/prediction-swing';
 import { __selfCheck as checkPredictionTopics } from '@/lib/prediction-topics';
 import { __selfCheck as checkRouteInvestmentMetrics } from '@/lib/route-investment-metrics';
+import { __selfCheck as checkOnboardingProfile } from '@/lib/onboarding-profile';
 import { __selfCheck as checkPlatformFees } from '@/lib/platform-fees';
 import { __selfCheck as checkPortfolio } from '@/lib/portfolio';
 import { __selfCheck as checkPortfolioProgress } from '@/lib/portfolio-progress';
@@ -32,6 +33,7 @@ const checks = [
   ['prediction swing math', checkPredictionSwing],
   ['prediction topics', checkPredictionTopics],
   ['route investment metrics', checkRouteInvestmentMetrics],
+  ['onboarding profile', checkOnboardingProfile],
   ['platform fees', checkPlatformFees],
   ['portfolio math', checkPortfolio],
   ['portfolio goal progress', checkPortfolioProgress],

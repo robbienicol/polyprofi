@@ -17,7 +17,12 @@ import { Brand, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { requestAppRating } from '@/lib/app-rating';
 import { ACQUISITION_PLATFORMS } from '@/lib/preferences';
-import { searchCategoriesFor } from '@/lib/onboarding-profile';
+import {
+  excludedSearchCategoriesFor,
+  riskToleranceFor,
+  searchCategoriesFor,
+  searchTimeframeFor,
+} from '@/lib/onboarding-profile';
 import { buildRouteParams, referenceStakeFor, surveyAmountCeiling } from '@/lib/quiz-profile';
 import { defaultQuizGoal, goalByLabel, goalRemaining, isOpenEnded } from '@/lib/savings-goal';
 import type { AcquisitionPlatform, QuizAnswers, SavingsGoal } from '@/types/bets';
@@ -67,8 +72,6 @@ const MARKETS = [
 
 /** One tap to the amounts most people actually pick, so the keyboard is optional. */
 const QUICK_AMOUNTS = [100, 500, 1_000, 5_000] as const;
-
-const DEFAULT_RISK_TOLERANCE: QuizAnswers['riskTolerance'] = 'balanced';
 
 /** Widest goal the hero number can show without running off a small phone. */
 const MAX_TARGET_DIGITS = 7;
@@ -137,6 +140,9 @@ export default function QuizScreen(): React.ReactElement {
       preferredPlatforms={preferences.preferredPlatforms}
       investmentCeiling={surveyAmountCeiling(profile?.investmentAmount)}
       preferredCategories={searchCategoriesFor(onboarding.answers)}
+      excludedCategories={excludedSearchCategoriesFor(onboarding.answers)}
+      defaultTimeframe={searchTimeframeFor(onboarding.answers)}
+      defaultRiskTolerance={riskToleranceFor(onboarding.answers)}
       saveAnswers={saveAnswers}
       addGoalAsync={addGoalAsync}
     />
@@ -151,6 +157,9 @@ function QuizForm({
   preferredPlatforms,
   investmentCeiling,
   preferredCategories,
+  excludedCategories,
+  defaultTimeframe,
+  defaultRiskTolerance,
   saveAnswers,
   addGoalAsync,
 }: {
@@ -164,6 +173,16 @@ function QuizForm({
   investmentCeiling: number | null;
   /** Markets from onboarding, used only when there is no previous search to resume. */
   preferredCategories: string[];
+  /**
+   * Markets ruled out in onboarding. Unlike the three defaults around it this is
+   * not a starting point a prefill can overwrite — it rides on every search until
+   * they change it in the quiz itself.
+   */
+  excludedCategories: string[];
+  /** Their stated horizon, as the timeframe a first search opens on. */
+  defaultTimeframe: QuizAnswers['timeframe'];
+  /** Derived from how they said they'd handle a loss. See riskToleranceFor. */
+  defaultRiskTolerance: QuizAnswers['riskTolerance'];
   saveAnswers: ReturnType<typeof useQuizAnswers>['saveAnswers'];
   addGoalAsync: (input: SavingsGoalInput) => Promise<{ goal: SavingsGoal }>;
 }): React.ReactElement {
@@ -182,7 +201,7 @@ function QuizForm({
   const [goalEmoji, setGoalEmoji] = useState(startingGoal?.emoji ?? CUSTOM_GOAL_EMOJI);
   const [nameFocused, setNameFocused] = useState(false);
   const [target, setTarget] = useState(String(startingTarget));
-  const [timeframe, setTimeframe] = useState<QuizAnswers['timeframe']>(prefill?.timeframe ?? 'week');
+  const [timeframe, setTimeframe] = useState<QuizAnswers['timeframe']>(prefill?.timeframe ?? defaultTimeframe);
   const [categories, setCategories] = useState<string[]>(prefill?.categories ?? preferredCategories);
   const [isSaving, setIsSaving] = useState(false);
   // Seeded from the last search, else from the signup survey, else blank. Blank is fine:
@@ -242,8 +261,9 @@ function QuizForm({
           investmentCeiling: investCeiling ?? undefined,
           target: targetValue,
           timeframe,
-          riskTolerance: prefill?.riskTolerance ?? DEFAULT_RISK_TOLERANCE,
+          riskTolerance: prefill?.riskTolerance ?? defaultRiskTolerance,
           categories,
+          excludedCategories,
           // Where the user can actually trade is a standing preference, set in Settings.
           preferredPlatforms,
         }),
@@ -258,7 +278,7 @@ function QuizForm({
     };
 
     void run().catch(() => setIsSaving(false));
-  }, [targetValue, isSaving, existingGoal, addGoalAsync, trimmedName, goalEmoji, selectedTimeframe.deadlineWord, timeframe, saveAnswers, prefill?.riskTolerance, categories, preferredPlatforms, investCeiling, router]);
+  }, [targetValue, isSaving, existingGoal, addGoalAsync, trimmedName, goalEmoji, selectedTimeframe.deadlineWord, timeframe, saveAnswers, prefill?.riskTolerance, defaultRiskTolerance, categories, excludedCategories, preferredPlatforms, investCeiling, router]);
 
   return (
     <View className="flex-1" style={{ backgroundColor: theme.background }}>

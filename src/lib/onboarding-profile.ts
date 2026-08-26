@@ -230,3 +230,122 @@ export function searchCategoriesFor(answers: SurveyAnswers): string[] {
 export function firstName(profile: OnboardingProfile | undefined): string {
   return (profile?.name ?? '').trim().split(/\s+/)[0] ?? '';
 }
+
+/* ------------------------------------------------- answers → search settings */
+
+/**
+ * How they said they'd react to a position going against them, turned into the
+ * risk tolerance every search runs at.
+ *
+ * The quiz has always asked this and the search has always ignored it, running
+ * `balanced` for everyone. It is the single answer that changes the most: it
+ * flows through `applyRiskTolerance` into the risk cap and probability floor,
+ * and into the AI prompt's risk note.
+ *
+ * Experience only ever pulls *toward* the middle, never past it. Someone who
+ * says they'd buy the dip but has never held a position gets the balanced feed
+ * rather than the sharp end — they are describing an instinct they have not
+ * tested. Nobody is made riskier than their own answer.
+ */
+export function riskToleranceFor(answers: SurveyAnswers): 'conservative' | 'balanced' | 'aggressive' {
+  const untested = answers.experience === 'None yet';
+  switch (answers.lossReaction) {
+    case 'sell':
+      return 'conservative';
+    case 'buy':
+      return untested ? 'balanced' : 'aggressive';
+    case 'unsure':
+      return untested ? 'conservative' : 'balanced';
+    case 'hold':
+      return 'balanced';
+    default:
+      return 'balanced';
+  }
+}
+
+/**
+ * The horizon they gave, as the timeframe a first search should start on. Keep
+ * the values in sync with TIMEFRAMES in `@/app/quiz` — they are the same union.
+ *
+ * "A few months" lands on 3 months rather than 1: the quiz's own note for it is
+ * "a balance of both", and one month is short enough that safe instruments
+ * cannot reach a meaningful target.
+ */
+export function searchTimeframeFor(answers: SurveyAnswers): 'week' | '3months' | '1year' | '5years' {
+  switch (answers.horizon) {
+    case 'weeks':
+      return 'week';
+    case 'months':
+      return '3months';
+    case 'year':
+      return '1year';
+    case 'years':
+      return '5years';
+    default:
+      return 'week';
+  }
+}
+
+/**
+ * The categories to keep out of a search entirely.
+ *
+ * `searchCategoriesFor` already subtracts these from the markets it seeds the
+ * picker with, but that is only a default and only an *inclusion* — someone who
+ * named nothing they wanted and one thing they wanted left out ends up with an
+ * empty category list, which the filter reads as "no preference" and shows them
+ * the very thing they excluded.
+ *
+ * Anything they also asked for wins, because two onboarding markets share a
+ * search category: ruling out savings must not rule out stocks with it.
+ */
+export function excludedSearchCategoriesFor(answers: SurveyAnswers): string[] {
+  const wanted = new Set(searchCategoriesFor(answers));
+  return Array.from(
+    new Set(
+      answers.avoidMarkets
+        .map((market) => SEARCH_CATEGORY_BY_MARKET[market])
+        .filter((category) => Boolean(category) && !wanted.has(category))
+    )
+  );
+}
+
+// ── self-check ──────────────────────────────────────────────────────────────
+export function __selfCheck(): void {
+  const answers = (over: Partial<SurveyAnswers>): SurveyAnswers => ({ ...EMPTY_ANSWERS, ...over });
+
+  console.assert(
+    riskToleranceFor(answers({ lossReaction: 'sell' })) === 'conservative',
+    "someone who'd sell on the way down gets the conservative feed, not everyone's 'balanced'",
+  );
+  console.assert(
+    riskToleranceFor(answers({ lossReaction: 'buy', experience: 'Comfortable' })) === 'aggressive',
+    'buying the dip with real experience opens the sharp end',
+  );
+  console.assert(
+    riskToleranceFor(answers({ lossReaction: 'buy', experience: 'None yet' })) === 'balanced',
+    'an untested instinct is pulled to the middle, never past it',
+  );
+  console.assert(
+    riskToleranceFor(answers({ lossReaction: 'unsure', experience: 'None yet' })) === 'conservative',
+    '"no idea" plus no experience is the one combination that should start safest',
+  );
+  console.assert(riskToleranceFor(EMPTY_ANSWERS) === 'balanced', 'no answer still falls back to balanced');
+
+  console.assert(searchTimeframeFor(answers({ horizon: 'months' })) === '3months', 'a few months is 3 months, not 1');
+  console.assert(searchTimeframeFor(EMPTY_ANSWERS) === 'week', 'no horizon keeps the old one-week default');
+
+  // The reported gap: ruling a market out did nothing unless you also named one you wanted.
+  console.assert(
+    excludedSearchCategoriesFor(answers({ avoidMarkets: ['Crypto'] })).includes('Crypto'),
+    'a market ruled out is excluded even when nothing was picked',
+  );
+  // Two onboarding markets share the "Stocks" search category.
+  console.assert(
+    excludedSearchCategoriesFor(answers({ markets: ['Stocks & ETFs'], avoidMarkets: ['Savings & T-bills'] })).length === 0,
+    'ruling out savings must not rule out stocks with it — the market they asked for wins',
+  );
+  console.assert(
+    excludedSearchCategoriesFor(EMPTY_ANSWERS).length === 0,
+    'no exclusions means an empty list, which the filter reads as no exclusion at all',
+  );
+}
