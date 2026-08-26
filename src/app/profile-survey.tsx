@@ -4,6 +4,7 @@ import { Animated, Easing, Pressable, ScrollView, TextInput, useWindowDimensions
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useOnboardingProfile } from '@/api/hooks/useOnboardingProfile';
+import { useRoutePrefetch } from '@/api/hooks/useRoutePrefetch';
 import { OnboardingGlow } from '@/components/onboarding/OnboardingPreviews';
 import { Choice, Options, PageHead, TaskRow, useSpokenLine, useTaskProgress } from '@/components/onboarding/quiz-kit';
 import {
@@ -78,6 +79,11 @@ function SurveyForm({
   const [submitting, setSubmitting] = useState(false);
 
   const pageId = PAGE_IDS[index];
+
+  // Start warming market data at the first pause, four answers in. Early enough to
+  // buy the search most of a minute, late enough that someone who bounces off the
+  // first question never triggers it.
+  useRoutePrefetch(index >= PAGE_IDS.indexOf('profiling'));
   const copy = buildPageCopy(answers, name, notifications);
   // One clock for the page's read-back line. Keyed on the page rather than the
   // text, which is rebuilt on every tap.

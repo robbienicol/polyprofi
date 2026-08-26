@@ -1,4 +1,5 @@
 import type { StockQuote, TreasuryBillYield } from '@/api/client/market-data-types';
+import { createInFlightCache } from '@/lib/in-flight-cache';
 import { isRecord, responseJson } from '@/lib/runtime-validation';
 import { dailyVolatility } from '@/lib/volatility-probability';
 
@@ -111,7 +112,23 @@ async function fetchTreasuryBillYieldsForYear(year: number): Promise<TreasuryBil
   }
 }
 
+/**
+ * Quotes are the slow, target-independent half of a route search, and nothing about
+ * them depends on the user's goal. Caching them lets the survey warm them minutes
+ * before the search that needs them — see useRoutePrefetch. The TTL is long enough to
+ * cover a walk through the funnel and short enough that a returning user gets fresh
+ * prices. Treasury yields keep their own cache above, which has an empty-result guard
+ * this one deliberately does not copy. Live portfolio prices come from
+ * fetchTrackedAssetQuotes, not here, so this TTL never staleness-bites a position.
+ */
+const QUOTE_TTL_MS = 10 * 60_000;
+const getStocks = createInFlightCache<StockQuote[]>(QUOTE_TTL_MS);
+
 export async function fetchStocks(): Promise<StockQuote[]> {
+  return getStocks(fetchStocksUncached, 'quotes:stocks');
+}
+
+async function fetchStocksUncached(): Promise<StockQuote[]> {
   const [yieldResults, quoteResults] = await Promise.all([
     Promise.allSettled([fetchTreasuryYieldFact(), fetchSgovYieldFact()]),
     Promise.allSettled(STOCK_SYMBOLS.map(fetchStockQuote)),
