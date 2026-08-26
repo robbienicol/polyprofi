@@ -209,7 +209,10 @@ export function PortfolioOverview({
             style={{
               fontSize: 14,
               fontWeight: '800',
-              color: (showExpected ? expectedProfit >= 0 : positive) ? Brand[500] : Accent.red,
+              // Red stays for the real P&L view — that is money actually down.
+              // The expected view is a model average, so it never goes red: a
+              // fairly-priced book sits near zero and crosses it on spread alone.
+              color: showExpected ? theme.text : positive ? Brand[500] : Accent.red,
               ...MONO,
             }}>
             {money(showExpected ? expectedProfit : netPnl, { signed: true })} (
@@ -272,14 +275,20 @@ export function PortfolioOverview({
 
       {/* Headline metrics */}
       <View className="flex-row" style={{ gap: 12 }}>
+        {/* Deliberately NOT red-when-negative. This is a modelled average over
+            outcomes, not money anyone has lost: a fairly-priced contract sits near
+            zero and dips below it on spread alone, which is ordinary rather than
+            alarming. Painting that red made a finance metric read as a warning
+            about the portfolio, so it stays in plain text at any sign and the
+            caption says what it is instead. */}
         <MetricTile
           label="Expected profit"
           value={money(expectedProfit, { decimals: 0, signed: true })}
-          valueColor={expectedProfit >= 0 ? Brand[500] : Accent.red}
+          valueColor={theme.text}
           caption={
             activeBets.length === 0
               ? 'Nothing working yet'
-              : `${weightedReturn >= 0 ? '+' : '−'}${Math.abs(weightedReturn).toFixed(1)}% on average${
+              : `Average across outcomes · ${weightedReturn >= 0 ? '+' : '−'}${Math.abs(weightedReturn).toFixed(1)}%${
                 longestMaturity > 0 ? ` over ${maturityWords(longestMaturity)}` : ''
               }${conservative ? ' · stocks & crypto at 0%' : ''}`
           }
@@ -349,7 +358,7 @@ export function PortfolioOverview({
                 </View>
                 <AllocationBar
                   pct={metric === 'share' ? row.pct : Math.min(Math.abs(row.evPct) * 2, 100)}
-                  color={metric === 'return' && row.evPct < 0 ? Accent.red : row.color}
+                  color={row.color}
                 />
                 <ThemedText style={{ fontSize: 11, color: theme.textTertiary, ...MONO }}>
                   {money(row.staked, { decimals: 0 })} staked
