@@ -22,6 +22,7 @@ import { AppLockGate } from '@/components/auth/AppLockGate';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { clerkTokenCache } from '@/lib/clerk-cache';
+import { useGainAlerts } from '@/api/hooks/useGainAlerts';
 import { shouldPresentCelebration } from '@/lib/savings-goal';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -58,6 +59,9 @@ function useNotificationObserver() {
  */
 function GoalHousekeeping(): null {
   useGoalMaintenance();
+  // Rides the portfolio refresh that is already running, and sends at most one
+  // piece of good news a day. Mounted here so it works whichever tab is open.
+  useGainAlerts();
   return null;
 }
 

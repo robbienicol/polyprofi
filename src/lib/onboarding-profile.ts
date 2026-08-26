@@ -22,15 +22,6 @@ export const LOSS_REACTIONS = [
 
 export type LossReaction = (typeof LOSS_REACTIONS)[number]['value'];
 
-/** How often the app should come to them, unprompted. */
-export const CHECK_IN_CADENCES = [
-  { value: 'daily', label: 'Every morning', note: 'A fresh read each day' },
-  { value: 'weekly', label: 'Once a week', note: 'A Sunday round-up' },
-  { value: 'events', label: 'Only when it matters', note: 'Goal reached, or time to sell' },
-] as const;
-
-export type CheckInCadence = (typeof CHECK_IN_CADENCES)[number]['value'];
-
 /** How soon they want to see the money move. Sets how long a pick may take to pay. */
 export const HORIZONS = [
   { value: 'weeks', label: 'Weeks', note: 'Quick, and riskier for it' },
@@ -89,7 +80,6 @@ export interface SurveyAnswers {
   avoidMarkets: string[];
   /** Platform values from ACQUISITION_PLATFORMS they do not want routed to. */
   avoidPlatforms: string[];
-  checkIn: CheckInCadence | null;
 }
 
 export const EMPTY_ANSWERS: SurveyAnswers = {
@@ -107,7 +97,6 @@ export const EMPTY_ANSWERS: SurveyAnswers = {
   markets: [],
   avoidMarkets: [],
   avoidPlatforms: [],
-  checkIn: null,
 };
 
 export interface OnboardingProfile {
@@ -190,10 +179,6 @@ function sanitizeAnswers(value: unknown): SurveyAnswers {
     markets: strings(value.markets),
     avoidMarkets: strings(value.avoidMarkets),
     avoidPlatforms: strings(value.avoidPlatforms),
-    checkIn: oneOf(
-      value.checkIn,
-      CHECK_IN_CADENCES.map((item) => item.value)
-    ),
   };
 }
 

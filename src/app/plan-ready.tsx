@@ -9,7 +9,7 @@ import { OTHER, SOMETHING_ELSE } from '@/components/onboarding/quiz-pages';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { CHECK_IN_CADENCES, HORIZONS, LOSS_REACTIONS, type SurveyAnswers } from '@/lib/onboarding-profile';
+import { HORIZONS, LOSS_REACTIONS, type SurveyAnswers } from '@/lib/onboarding-profile';
 
 /** Each row lands after the one above it, so the card assembles rather than appearing. */
 const ROW_STAGGER_MS = 110;
@@ -111,7 +111,6 @@ interface Row {
 function planRows(answers: SurveyAnswers): Row[] {
   const outcome = answers.outcome === SOMETHING_ELSE ? answers.outcomeOther.trim() : answers.outcome;
   const country = answers.country === OTHER ? answers.countryOther.trim() : answers.country;
-  const cadence = CHECK_IN_CADENCES.find((item) => item.value === answers.checkIn);
   const horizon = HORIZONS.find((item) => item.value === answers.horizon);
   const reaction = LOSS_REACTIONS.find((item) => item.value === answers.lossReaction);
 
@@ -151,8 +150,8 @@ function planRows(answers: SurveyAnswers): Row[] {
     },
     {
       emoji: '🔔',
-      label: 'Check-ins',
-      value: cadence?.label ?? 'Only when it matters',
+      label: 'Alerts',
+      value: 'When a position moves, or you hit a milestone',
     },
   ];
 }

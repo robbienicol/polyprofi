@@ -1,7 +1,7 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import { usePortfolioProgress } from '@/api/hooks/usePortfolioProgress';
 import { useMoney } from '@/api/hooks/usePreferences';
@@ -12,6 +12,7 @@ import { riskColor, riskLabel } from '@/components/molecules/RouteCard';
 import { effectiveEntryPrice, monitoredProfitGoal, positionTargetProfit } from '@/lib/bet-monitor-match';
 import { isPredictionMarketBet } from '@/lib/parse-bet-line';
 import { notifySellRecommendation } from '@/lib/notifications';
+import { useCelebrationArrival } from '@/hooks/use-celebration-arrival';
 import { isStockOrEtfCategory } from '@/lib/tracked-assets';
 import { Accent, Brand, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -34,6 +35,9 @@ function targetProfitFor(bet: TrackedBet): number {
 export default function PositionsScreen(): React.ReactElement {
   const theme = useTheme();
   const router = useRouter();
+  // Set when a good-news notification brought them here: which position moved,
+  // and whether the arrival is worth asking for a rating on the back of.
+  const { betId: highlightId, celebrate } = useLocalSearchParams<{ betId?: string; celebrate?: string }>();
   const money = useMoney();
   const { bets, resolveBet, dismissSellAlert } = useTrackedBets();
   const { history } = useSavedRoutes();
@@ -41,6 +45,22 @@ export default function PositionsScreen(): React.ReactElement {
   const progress = usePortfolioProgress(fallbackBalance);
   const [refreshing, setRefreshing] = useState(false);
   const notifiedRef = useRef<Set<string>>(new Set());
+  const scrollRef = useRef<ScrollView>(null);
+  const highlightY = useRef<number | null>(null);
+
+  useCelebrationArrival(celebrate === '1');
+
+  // Scroll the named position into view once it has been laid out. Measured
+  // rather than computed: the cards are different heights and the P&L hero above
+  // them changes size with the number of digits in it.
+  useEffect(() => {
+    if (!highlightId) return;
+    const timer = setTimeout(() => {
+      if (highlightY.current == null) return;
+      scrollRef.current?.scrollTo({ y: Math.max(0, highlightY.current - 12), animated: true });
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [highlightId, bets.length]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -88,6 +108,7 @@ export default function PositionsScreen(): React.ReactElement {
     <View className="flex-1" style={{ backgroundColor: theme.background }}>
       <SafeAreaView className="flex-1">
         <ScrollView
+          ref={scrollRef}
           showsVerticalScrollIndicator={false}
           contentContainerClassName="px-4 pt-6 pb-16 gap-3"
           refreshControl={
@@ -138,14 +159,20 @@ export default function PositionsScreen(): React.ReactElement {
               </View>
 
               {bets.map((bet) => (
-                <BetCard
+                <View
                   key={bet.id}
-                  bet={bet}
-                  liveStatus={progress.statusById[bet.id]}
-                  valuation={progress.positionById[bet.id]}
-                  onResolve={resolveBet}
-                  onDismissSell={() => dismissSellAlert(bet.id)}
-                />
+                  onLayout={bet.id === highlightId
+                    ? (event) => { highlightY.current = event.nativeEvent.layout.y; }
+                    : undefined}>
+                  <BetCard
+                    bet={bet}
+                    liveStatus={progress.statusById[bet.id]}
+                    valuation={progress.positionById[bet.id]}
+                    highlighted={bet.id === highlightId}
+                    onResolve={resolveBet}
+                    onDismissSell={() => dismissSellAlert(bet.id)}
+                  />
+                </View>
               ))}
 
               <ThemedText type="small" themeColor="textSecondary" className="text-center" style={{ opacity: 0.4 }}>
@@ -173,11 +200,13 @@ interface BetCardProps {
   bet: TrackedBet;
   liveStatus?: BetLiveStatus;
   valuation?: PositionValuation;
+  /** The position a notification pointed at — ringed so it is findable at a glance. */
+  highlighted?: boolean;
   onResolve: (args: { id: string; status: TrackedBet['status'] }) => void;
   onDismissSell: () => void;
 }
 
-function BetCardInner({ bet, liveStatus, valuation, onResolve, onDismissSell }: BetCardProps): React.ReactElement {
+function BetCardInner({ bet, liveStatus, valuation, highlighted, onResolve, onDismissSell }: BetCardProps): React.ReactElement {
   const theme = useTheme();
   const money = useMoney();
   const rc = riskColor(bet.riskLevel);
@@ -244,8 +273,10 @@ function BetCardInner({ bet, liveStatus, valuation, onResolve, onDismissSell }: 
           borderRadius: Radius.lg,
           overflow: 'hidden',
           backgroundColor: theme.backgroundElement,
-          borderWidth: 1,
-          borderColor: showSell ? Accent.gold + '55' : theme.border,
+          // A sell alert is louder than a "you're up" arrival, so it keeps the
+          // gold when both are true.
+          borderWidth: showSell || highlighted ? 1.5 : 1,
+          borderColor: showSell ? Accent.gold + '55' : highlighted ? Brand[500] : theme.border,
           ...Shadow.card,
         }}>
         <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, backgroundColor: rc }} />

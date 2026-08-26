@@ -1,6 +1,7 @@
 import { __selfCheck as checkPlaybook } from '@/api/client/playbook';
 import { __selfCheck as checkAssetSearch } from '@/lib/asset-search';
 import { __selfCheck as checkBetMonitorMatch } from '@/lib/bet-monitor-match';
+import { __selfCheck as checkGainAlerts } from '@/lib/gain-alerts';
 import { __selfCheck as checkEtfRoutes } from '@/lib/etf-routes';
 import { __selfCheck as checkMethodology } from '@/lib/methodology';
 import { __selfCheck as checkPolymarketMarketQuality } from '@/lib/polymarket-market-quality';
@@ -27,6 +28,7 @@ const checks = [
   ['playbook', checkPlaybook],
   ['asset search', checkAssetSearch],
   ['bet monitor matching', checkBetMonitorMatch],
+  ['gain alerts', checkGainAlerts],
   ['etf routes', checkEtfRoutes],
   ['methodology', checkMethodology],
   ['polymarket market quality', checkPolymarketMarketQuality],

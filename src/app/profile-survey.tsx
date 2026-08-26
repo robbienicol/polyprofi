@@ -28,7 +28,6 @@ import { ThemedText } from '@/components/themed-text';
 import { Brand, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import {
-  CHECK_IN_CADENCES,
   CONTRIBUTIONS,
   EMPTY_ANSWERS,
   HORIZONS,
@@ -538,22 +537,6 @@ function renderPageBody(props: BodyProps): React.ReactElement | null {
         />
       );
 
-    case 'check_in':
-      return (
-        <Options>
-          {CHECK_IN_CADENCES.map((option) => (
-            <Choice
-              key={option.value}
-              label={option.label}
-              note={option.note}
-              wide
-              selected={answers.checkIn === option.value}
-              onPress={() => set('checkIn', option.value)}
-            />
-          ))}
-        </Options>
-      );
-
     case 'review':
       return <ReviewPage answers={answers} onJumpTo={props.onJumpTo} />;
 
@@ -799,11 +782,6 @@ function ReviewPage({
       label: 'Never show',
       value: [...answers.avoidMarkets, ...platformLabels(answers.avoidPlatforms)].join(', ') || 'Nothing ruled out',
       page: 'avoid_markets',
-    },
-    {
-      label: 'Check-ins',
-      value: CHECK_IN_CADENCES.find((item) => item.value === answers.checkIn)?.label ?? '—',
-      page: 'check_in',
     },
   ];
 

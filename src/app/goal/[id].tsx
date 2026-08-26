@@ -4,6 +4,7 @@ import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useGoalProgress } from '@/api/hooks/useGoalProgress';
+import { useCelebrationArrival } from '@/hooks/use-celebration-arrival';
 import { useOnboardingProfile } from '@/api/hooks/useOnboardingProfile';
 import { useMoney, usePreferences } from '@/api/hooks/usePreferences';
 import { useQuizAnswers } from '@/api/hooks/useQuizAnswers';
@@ -25,11 +26,15 @@ export default function GoalDetailScreen(): React.ReactElement {
   const theme = useTheme();
   const router = useRouter();
   const money = useMoney();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  // `celebrate` is set only by a milestone notification: this arrival is good
+  // news, so it is a fair moment to ask for a rating.
+  const { id, celebrate } = useLocalSearchParams<{ id: string; celebrate?: string }>();
   const { goals, allGoals, isLoading, removeGoal } = useSavingsGoal();
   const { bets, reassignBets } = useTrackedBets();
   const { quizAnswers, saveAnswers } = useQuizAnswers();
   const { history } = useSavedRoutes();
+
+  useCelebrationArrival(celebrate === '1');
   // The quiz answers, for the searches that have no previous search to inherit from.
   const { profile: onboarding } = useOnboardingProfile();
   const { preferences } = usePreferences();

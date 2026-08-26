@@ -50,7 +50,6 @@ export const PAGE_IDS = [
   // The second pause, and the one doing real work on the markets just picked.
   'scan',
   'notifications',
-  'check_in',
   'review',
 ] as const;
 
@@ -135,7 +134,6 @@ export const CAN_CONTINUE: Record<PageId, (answers: SurveyAnswers) => boolean> =
   avoid_platforms: () => true,
   scan: () => true,
   notifications: () => true,
-  check_in: (a) => Boolean(a.checkIn),
   review: () => true,
 };
 
@@ -294,16 +292,6 @@ export function buildPageCopy(
       helper: outcome
         ? `"${outcome}" takes more than one visit, and nobody keeps checking on their own. We'll nudge you when something better shows up, and when it is time to sell.`
         : "Nobody keeps checking on their own. We'll nudge you when something better shows up, and when it is time to sell. Nothing else.",
-    },
-    check_in: {
-      ack:
-        notifications === 'enabled'
-          ? "Good — that is the bit that keeps people on track. Now, how often?"
-          : notifications === 'skipped'
-            ? "No alerts then, and that is fine. It will all still be here in the app."
-            : null,
-      title: 'How often should\nwe check in?',
-      helper: 'You can change this any time in Settings.',
     },
     review: {
       title: name ? `That's the hard part done, ${name}.` : "That's the hard part done.",

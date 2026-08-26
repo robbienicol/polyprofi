@@ -106,9 +106,13 @@ export default function BuildingPlanScreen(): React.ReactElement {
       preferredPlatforms: ACQUISITION_PLATFORMS.map((platform) => platform.value).filter(
         (value) => !answers.avoidPlatforms.includes(value)
       ) as AcquisitionPlatform[],
-      weeklyReminder: profile.notifications === 'enabled' && answers.checkIn !== 'events',
+      weeklyReminder: profile.notifications === 'enabled',
+      // What they said to the notification ask governs the good-news pushes too.
+      // The OS permission would block them anyway, but a Settings screen showing
+      // "Position alerts: on" to someone who declined is a lie about the app.
+      positionAlerts: profile.notifications === 'enabled',
     });
-    void syncWeeklyReminder(profile.notifications === 'enabled' && answers.checkIn !== 'events').catch(() => {});
+    void syncWeeklyReminder(profile.notifications === 'enabled').catch(() => {});
     // Reaching this screen means the funnel has been walked end to end, so a dev
     // replay is over and the router can go back to trusting the server.
     finishReplay();

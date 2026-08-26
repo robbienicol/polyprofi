@@ -144,3 +144,46 @@ export async function notifySellRecommendation(title: string, body: string): Pro
     // skip silently
   }
 }
+
+/**
+ * The one piece of good news for today: a position that has climbed into a new
+ * band, or a goal that has passed a milestone.
+ *
+ * Both carry a deep link, because the whole point is to land on the thing that
+ * moved rather than on a home screen that makes them go looking for it. The
+ * `celebrate` flag rides along so the destination knows this arrival was good
+ * news and can ask for a rating on the back of it — asking at any other moment
+ * is asking a stranger for a favour.
+ */
+export async function notifyPositionGain({ betId, title, body }: {
+  betId: string;
+  title: string;
+  body: string;
+}): Promise<void> {
+  await sendAlert({ title, body, url: `/positions?betId=${encodeURIComponent(betId)}&celebrate=1` });
+}
+
+export async function notifyGoalMilestone({ goalId, title, body }: {
+  goalId: string;
+  title: string;
+  body: string;
+}): Promise<void> {
+  await sendAlert({ title, body, url: `/goal/${encodeURIComponent(goalId)}?celebrate=1` });
+}
+
+async function sendAlert({ title, body, url }: { title: string; body: string; url: string }): Promise<void> {
+  try {
+    if (Platform.OS === 'web') return;
+    if (!(await getPreferences()).positionAlerts) return;
+    if (!(await ensurePermission())) return;
+
+    await Notifications.scheduleNotificationAsync({
+      // `data.url` is what the observer in _layout.tsx routes on — the same
+      // channel a tapped notification has always used.
+      content: { title, body, data: { url } },
+      trigger: null,
+    });
+  } catch {
+    // skip silently
+  }
+}

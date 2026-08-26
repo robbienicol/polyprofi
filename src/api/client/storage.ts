@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import type { SportsMatch } from '@/lib/sports-market-match';
+import { EMPTY_LEDGER, type AlertLedger } from '@/lib/gain-alerts';
 import { parsePortfolioHistory, serializePortfolioHistory } from '@/lib/portfolio-history';
 import { sanitizeOnboardingProfile, type OnboardingProfile } from '@/lib/onboarding-profile';
 import { sanitizePreferences, type Preferences } from '@/lib/preferences';
@@ -11,6 +12,7 @@ import {
   isArrayOf,
   isPortfolioProgressPoint,
   isQuizAnswers,
+  isRecord,
   isRecordOf,
   isRoute,
   isSavedRoutesBatch,
@@ -40,6 +42,7 @@ const KEYS = {
   DEV_REPLAY_FUNNEL: 'polyprofit:devReplayFunnel',
   PROFILE_COMPLETE: 'polyprofit:profileComplete',
   PROFILE_COMPLETE_OWNER: 'polyprofit:profileCompleteOwner',
+  ALERT_LEDGER: 'polyprofit:alertLedger',
 } as const;
 
 const MAX_SAVED_BATCHES = 10;
@@ -286,6 +289,36 @@ export async function setBiometricLockEnabled(enabled: boolean): Promise<void> {
 
 // ── Settings ─────────────────────────────────────────────────────────────────
 // One blob, sanitized on read, so a new setting needs no key and no migration.
+
+/**
+ * What good news has already been pushed. Local-only and deliberately so: it
+ * exists to stop the same alert firing twice on this device, and a fresh install
+ * announcing a milestone again is a far smaller problem than a server round-trip
+ * on every price refresh.
+ */
+export async function getAlertLedger(): Promise<AlertLedger> {
+  const raw = await AsyncStorage.getItem(KEYS.ALERT_LEDGER);
+  const parsed = raw ? parseJson(raw) : null;
+  if (!isRecord(parsed)) return EMPTY_LEDGER;
+  return {
+    lastSentDay: typeof parsed.lastSentDay === 'string' ? parsed.lastSentDay : null,
+    betTier: numberMap(parsed.betTier),
+    goalMilestone: numberMap(parsed.goalMilestone),
+  };
+}
+
+export async function saveAlertLedger(ledger: AlertLedger): Promise<void> {
+  await AsyncStorage.setItem(KEYS.ALERT_LEDGER, JSON.stringify(ledger));
+}
+
+/** Drops anything that is not a plain id → number pair, so a corrupt blob cannot
+ *  make a tier comparison return NaN and re-announce everything. */
+function numberMap(value: unknown): Record<string, number> {
+  if (!isRecord(value)) return {};
+  const entries = Object.entries(value)
+    .filter((entry): entry is [string, number] => typeof entry[1] === 'number' && Number.isFinite(entry[1]));
+  return Object.fromEntries(entries);
+}
 
 export async function getPreferences(): Promise<Preferences> {
   const raw = await AsyncStorage.getItem(KEYS.PREFERENCES);
