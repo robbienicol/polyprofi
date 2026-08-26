@@ -68,7 +68,10 @@ export default function PositionsScreen(): React.ReactElement {
   }, [sellAlerts, bets]);
 
   const stats = useMemo(() => {
-    const wagered = bets.reduce((s, b) => s + b.amountWagered, 0);
+    // Watched positions never had money in them, so they cannot count as wagered.
+    const wagered = bets
+      .filter((b) => b.status !== 'watching')
+      .reduce((s, b) => s + b.amountWagered, 0);
     const won = bets.filter((b) => b.status === 'won').reduce((s, b) => s + b.expectedReturn, 0);
     const lost = bets.filter((b) => b.status === 'lost').reduce((s, b) => s + b.amountWagered, 0);
     return {
@@ -361,20 +364,42 @@ function BetCardInner({ bet, liveStatus, valuation, onResolve, onDismissSell }: 
           </View>
 
           {isActive && !showSell && (
-            <View className="flex-row gap-2">
+            <View style={{ gap: 8 }}>
+              <View className="flex-row gap-2">
+                <Pressable
+                  onPress={() => onResolve({ id: bet.id, status: 'won' })}
+                  className="flex-1 items-center active:opacity-75"
+                  style={{ borderRadius: Radius.md, paddingVertical: 10, backgroundColor: Brand[500] + '20' }}>
+                  <ThemedText style={{ fontSize: 13, fontWeight: '700', color: Brand[500] }}>Won ✓</ThemedText>
+                </Pressable>
+                <Pressable
+                  onPress={() => onResolve({ id: bet.id, status: 'lost' })}
+                  className="flex-1 items-center active:opacity-70 border"
+                  style={{ borderRadius: Radius.md, paddingVertical: 10, borderColor: theme.border }}>
+                  <ThemedText style={{ fontSize: 13, fontWeight: '700', color: theme.textSecondary }}>Lost ✗</ThemedText>
+                </Pressable>
+              </View>
+              {/* Won/Lost both assume money went in. Tracking a route you decided
+                  against needs its own answer, or the only way out is a false one. */}
               <Pressable
-                onPress={() => onResolve({ id: bet.id, status: 'won' })}
-                className="flex-1 items-center active:opacity-75"
-                style={{ borderRadius: Radius.md, paddingVertical: 10, backgroundColor: Brand[500] + '20' }}>
-                <ThemedText style={{ fontSize: 13, fontWeight: '700', color: Brand[500] }}>Won ✓</ThemedText>
-              </Pressable>
-              <Pressable
-                onPress={() => onResolve({ id: bet.id, status: 'lost' })}
-                className="flex-1 items-center active:opacity-70 border"
-                style={{ borderRadius: Radius.md, paddingVertical: 10, borderColor: theme.border }}>
-                <ThemedText style={{ fontSize: 13, fontWeight: '700', color: theme.textSecondary }}>Lost ✗</ThemedText>
+                onPress={() => onResolve({ id: bet.id, status: 'watching' })}
+                className="items-center active:opacity-70"
+                style={{ borderRadius: Radius.md, paddingVertical: 9 }}>
+                <ThemedText style={{ fontSize: 12.5, fontWeight: '700', color: theme.textTertiary }}>
+                  I didn&apos;t invest — just watching
+                </ThemedText>
               </Pressable>
             </View>
+          )}
+          {bet.status === 'watching' && (
+            <Pressable
+              onPress={() => onResolve({ id: bet.id, status: 'active' })}
+              className="items-center active:opacity-75"
+              style={{ borderRadius: Radius.md, paddingVertical: 10, backgroundColor: Brand[500] + '20' }}>
+              <ThemedText style={{ fontSize: 13, fontWeight: '700', color: Brand[500] }}>
+                I invested after all
+              </ThemedText>
+            </Pressable>
           )}
         </View>
       </View>
@@ -395,6 +420,7 @@ function StatusBadge({
     active: { color: isLive ? Brand[500] : Accent.gold, label: isLive ? 'Live' : 'Active' },
     won: { color: Brand[500], label: 'Won ✓' },
     lost: { color: Accent.red, label: 'Lost ✗' },
+    watching: { color: Accent.blue, label: 'Watching' },
   };
   const { color, label } = map[status];
   return (

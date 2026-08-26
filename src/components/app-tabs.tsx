@@ -20,19 +20,19 @@ export default function AppTabs() {
         />
       </NativeTabs.Trigger>
 
-      <NativeTabs.Trigger name="routes">
-        <NativeTabs.Trigger.Label>Routes</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon
-          sf={{ default: 'list.bullet.rectangle', selected: 'list.bullet.rectangle.fill' }}
-          md={{ default: 'format_list_bulleted', selected: 'format_list_bulleted' }}
-        />
-      </NativeTabs.Trigger>
-
       <NativeTabs.Trigger name="goals">
         <NativeTabs.Trigger.Label>Goals</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
           sf={{ default: 'target', selected: 'target' }}
           md={{ default: 'flag', selected: 'flag' }}
+        />
+      </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger name="routes">
+        <NativeTabs.Trigger.Label>Routes</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon
+          sf={{ default: 'list.bullet.rectangle', selected: 'list.bullet.rectangle.fill' }}
+          md={{ default: 'format_list_bulleted', selected: 'format_list_bulleted' }}
         />
       </NativeTabs.Trigger>
 

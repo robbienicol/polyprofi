@@ -23,9 +23,9 @@ const RESOLUTION_WINDOWS: readonly { label: string; days: number }[] = [
 
 const SORT_OPTIONS: { label: string; value: RouteSort }[] = [
   { label: 'Default order', value: 'score' },
-  { label: 'Safest', value: 'safest' },
   { label: 'Best chance', value: 'chance' },
   { label: 'Biggest payout', value: 'payout' },
+  { label: 'Best expected value', value: 'value' },
 ];
 
 interface RouteFiltersProps {

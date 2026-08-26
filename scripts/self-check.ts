@@ -15,6 +15,7 @@ import { __selfCheck as checkPlatformFees } from '@/lib/platform-fees';
 import { __selfCheck as checkPortfolio } from '@/lib/portfolio';
 import { __selfCheck as checkPortfolioProgress } from '@/lib/portfolio-progress';
 import { __selfCheck as checkQuizProfile } from '@/lib/quiz-profile';
+import { __selfCheck as checkRouteExpectedValue } from '@/lib/route-expected-value';
 import { __selfCheck as checkSavingsTreasuryRoutes } from '@/lib/savings-treasury-routes';
 import { __selfCheck as checkScore } from '@/lib/score';
 import { __selfCheck as checkSavingsGoal } from '@/lib/savings-goal';
@@ -40,6 +41,7 @@ const checks = [
   ['portfolio math', checkPortfolio],
   ['portfolio goal progress', checkPortfolioProgress],
   ['quiz profile', checkQuizProfile],
+  ['route expected value', checkRouteExpectedValue],
   ['savings & treasury routes', checkSavingsTreasuryRoutes],
   ['goal score', checkScore],
   ['savings goal migration', checkSavingsGoal],

@@ -38,6 +38,8 @@ const KEYS = {
   PREFERENCES: 'polyprofit:preferences',
   ONBOARDING_PROFILE: 'polyprofit:onboardingProfile',
   DEV_REPLAY_FUNNEL: 'polyprofit:devReplayFunnel',
+  PROFILE_COMPLETE: 'polyprofit:profileComplete',
+  PROFILE_COMPLETE_OWNER: 'polyprofit:profileCompleteOwner',
 } as const;
 
 const MAX_SAVED_BATCHES = 10;
@@ -121,6 +123,29 @@ export async function setQuizAnswers(answers: QuizAnswers, userId?: string): Pro
 
 export async function clearQuizAnswers(): Promise<void> {
   await AsyncStorage.multiRemove([KEYS.QUIZ, KEYS.QUIZ_OWNER]);
+}
+
+/**
+ * Cached "this account finished the profile survey" flag.
+ *
+ * The survey's real home is the server, but a failed load must not read as
+ * "not completed" — that redirects a returning user back into the survey on
+ * every cold start. This cache is what the hook falls back to when /api/profile
+ * is unreachable, the same way savings goals fall back to local state.
+ */
+export async function getProfileCompleted(userId?: string): Promise<boolean> {
+  const owner = await AsyncStorage.getItem(KEYS.PROFILE_COMPLETE_OWNER);
+  if (userId && owner && owner !== userId) return false;
+  return (await AsyncStorage.getItem(KEYS.PROFILE_COMPLETE)) === 'true';
+}
+
+export async function setProfileCompleted(completed: boolean, userId?: string): Promise<void> {
+  const writes: Promise<void>[] = [
+    AsyncStorage.setItem(KEYS.PROFILE_COMPLETE, String(completed)),
+  ];
+  if (userId) writes.push(AsyncStorage.setItem(KEYS.PROFILE_COMPLETE_OWNER, userId));
+  else writes.push(AsyncStorage.removeItem(KEYS.PROFILE_COMPLETE_OWNER));
+  await Promise.all(writes);
 }
 
 export async function getSavingsGoalState(userId?: string): Promise<SavingsGoalState | null> {

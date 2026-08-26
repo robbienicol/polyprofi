@@ -13,7 +13,7 @@ export default function Index(): React.ReactElement {
   const { hasCompletedOnboarding, isLoading: onboardingLoading } = useOnboarding();
   const { isLoading: localProfileLoading } = useOnboardingProfile();
   const { replaying, isLoading: replayLoading } = useDevReplayFunnel();
-  const { hasCompletedProfile, isLoading: profileLoading } = useUserProfile();
+  const { hasCompletedProfile, checkFailed: profileCheckFailed, isLoading: profileLoading } = useUserProfile();
   const { hasGoal, isLoading: goalLoading } = useSavingsGoal();
 
   if (onboardingLoading) {
@@ -40,6 +40,11 @@ export default function Index(): React.ReactElement {
   // Straight into the quiz that builds their plan. The greeting is not here —
   // it is the second slide of the carousel, right after they give their name.
   //
+  // Skipped when the profile check itself failed: an unreachable API is not
+  // evidence the survey is outstanding, and forcing it on that made returning
+  // users retake it every launch. A replay is the deliberate exception — it asks
+  // for the funnel regardless of what the server thinks.
+  //
   // `replaying` is the dev button on the sign-in screen: the completion flag it
   // would otherwise have to beat lives on the server, so this is what lets the
   // funnel be walked again without touching the database.
@@ -47,7 +52,7 @@ export default function Index(): React.ReactElement {
     if (profileLoading || localProfileLoading || replayLoading) {
       return <BrandLoader subtitle="Loading your profile…" />;
     }
-    if (!hasCompletedProfile || replaying) {
+    if ((!hasCompletedProfile && !profileCheckFailed) || replaying) {
       return <Redirect href={'/profile-survey' as Href} />;
     }
   }

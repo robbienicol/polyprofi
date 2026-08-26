@@ -27,6 +27,7 @@ import { investmentSliderMaximum } from '@/lib/quiz-profile';
 import { openTradeDestination, preferredTradeDestination, tradeDestinationLabel } from '@/lib/route-actions';
 import { activeKeyword, buildRouteResults, groupRoutesByChance, predictionFacetsActive, resolveInvestmentAmount, routeMatchesKeyword, searchOutcome } from '@/lib/route-results';
 import type { RouteFilters as Filters } from '@/lib/route-results';
+import { rescoreForStake } from '@/lib/stake-rescore';
 import { trackedPositionFields } from '@/lib/tracked-assets';
 import type { Route, RouteParams, SavedRoutesBatch } from '@/types/routes';
 
@@ -180,22 +181,27 @@ export default function RoutesScreen(): React.ReactElement {
     const entryPrice = parseEntryPrice(route.line) ?? (predictionMarket && route.probability > 0 ? route.probability / 100 : undefined);
     const destination = preferredTradeDestination(route, sessionParams?.preferredPlatforms);
     const openedAt = new Date().toISOString();
+    // The card's figures belong to the slider's stake. The acquire form is only
+    // prefilled from it, so an edited amount would otherwise store a payout for a
+    // stake the user never took — inflating this position's return, the portfolio's
+    // expected profit, and its weighted return.
+    const [atAmount = route] = rescoreForStake([route], referenceStake, amount, sessionParams?.target ?? 0);
     trackBet({
       id: `${route.id}-${Date.now()}`,
       // The position works toward the goal this search was run for.
       goalId: sessionGoalId,
       category: route.category,
       emoji: route.emoji,
-      description: route.description,
+      description: atAmount.description,
       platform: route.platform,
       strategy: route.strategy,
       riskLevel: route.riskLevel,
       probability: route.probability,
-      expectedReturn: route.expectedReturn,
+      expectedReturn: atAmount.expectedReturn,
       amountWagered: amount,
       status: 'active',
       createdAt: openedAt,
-      profitGoal: sessionParams?.target || route.expectedReturn,
+      profitGoal: sessionParams?.target || atAmount.expectedReturn,
       line: route.line,
       entryPrice,
       monitorQuery: `${route.description} ${route.line ?? ''}`,
@@ -226,9 +232,13 @@ export default function RoutesScreen(): React.ReactElement {
     />;
   }
 
+  // The goal these routes serve, so the header can name what the user is choosing for.
+  const activeGoal = sessionGoalId ? allGoals.find((entry) => entry.id === sessionGoalId) ?? null : null;
   const goal = sessionParams ? {
     target: sessionParams.target,
     when: timeframeLabel(sessionParams.timeframe),
+    label: activeGoal?.label ?? null,
+    emoji: activeGoal?.emoji ?? null,
   } : null;
   const visibleRoutes = filtered.slice(0, visibleCount);
 

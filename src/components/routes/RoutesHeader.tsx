@@ -8,6 +8,9 @@ import { useTheme } from '@/hooks/use-theme';
 interface GoalSummary {
   target: number;
   when: string;
+  /** Name of the savings goal these routes serve. Null for a search with no goal attached. */
+  label: string | null;
+  emoji: string | null;
 }
 
 interface RoutesHeaderProps {
@@ -58,6 +61,15 @@ export function RoutesHeader({
             </Pressable>
           )}
         </View>
+
+        {goal.label && (
+          <View className="flex-row items-center" style={{ gap: 7 }}>
+            {goal.emoji && <ThemedText style={{ fontSize: 20 }}>{goal.emoji}</ThemedText>}
+            <ThemedText numberOfLines={1} style={{ flex: 1, fontSize: 18, fontWeight: '800', color: theme.text, letterSpacing: -0.2 }}>
+              {goal.label}
+            </ThemedText>
+          </View>
+        )}
 
         <View className="flex-row items-baseline gap-1.5">
           <ThemedText numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={{ fontSize: 32, fontWeight: '800', color: theme.text, letterSpacing: -0.8, fontVariant: ['tabular-nums'] }}>

@@ -11,10 +11,16 @@ export function clerkErrorMessage(
     ?.errors?.[0];
 
   switch (first?.code) {
+    // Kept distinct on purpose. Collapsing these into one password-flavoured
+    // message meant the reset-password screen — which has no password field —
+    // told users "that email and password don't match an account", which is
+    // both wrong and impossible to act on.
     case 'form_identifier_not_found':
+      return 'We couldn’t find an account with that email.';
     case 'form_password_incorrect':
+      return 'That password isn’t right. Try again or reset it.';
     case 'strategy_for_user_invalid':
-      return 'That email and password don’t match an account.';
+      return 'That account doesn’t use a password to sign in. Try the option you signed up with.';
     case 'form_identifier_exists':
       return 'You already have an account with that email. Sign in instead.';
     case 'form_password_pwned':

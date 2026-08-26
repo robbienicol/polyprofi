@@ -40,6 +40,60 @@ export interface PortfolioValueNow {
   projectedPositions: number;
 }
 
+/** Which figure the hero shows: measured worth today, or the odds-weighted outcome. */
+type ValueView = 'now' | 'expected';
+
+/**
+ * Two-segment switch for the hero figure. Doubles as the hero's label, so the
+ * number is always named by whichever segment is active.
+ */
+function ValueViewToggle({
+  value,
+  onChange,
+}: {
+  value: ValueView;
+  onChange: (next: ValueView) => void;
+}): React.ReactElement {
+  const theme = useTheme();
+  const segments: { key: ValueView; label: string }[] = [
+    { key: 'now', label: 'WORTH NOW' },
+    { key: 'expected', label: 'EXPECTED' },
+  ];
+  return (
+    <View
+      className="flex-row"
+      style={{ borderRadius: Radius.pill, backgroundColor: theme.backgroundSelected, padding: 2 }}>
+      {segments.map((segment) => {
+        const active = segment.key === value;
+        return (
+          <Pressable
+            key={segment.key}
+            onPress={() => onChange(segment.key)}
+            accessibilityRole="button"
+            accessibilityState={{ selected: active }}
+            className="active:opacity-70"
+            style={{
+              borderRadius: Radius.pill,
+              paddingHorizontal: 10,
+              paddingVertical: 5,
+              backgroundColor: active ? theme.backgroundElevated : 'transparent',
+            }}>
+            <ThemedText
+              style={{
+                fontSize: 10.5,
+                fontWeight: '800',
+                letterSpacing: 0.7,
+                color: active ? theme.text : theme.textTertiary,
+              }}>
+              {segment.label}
+            </ThemedText>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 export interface PortfolioOverviewProps {
   /** Positions in scope: every tracked position, or just one goal's. */
   bets: TrackedBet[];
@@ -89,6 +143,7 @@ export function PortfolioOverview({
   const { preferences, update } = usePreferences();
   const conservative = preferences.conservativeProjections;
   const [metric, setMetric] = useState<AllocationMetric>('share');
+  const [valueView, setValueView] = useState<ValueView>('now');
 
   const activeBets = useMemo(() => bets.filter((bet) => bet.status === 'active'), [bets]);
   const stats = useMemo(() => portfolioStats(bets, conservative), [bets, conservative]);
@@ -102,6 +157,11 @@ export function PortfolioOverview({
   const netPct = staked > 0 ? (netPnl / staked) * 100 : 0;
   const positive = netPnl >= 0;
   const expectedProfit = activeBets.length > 0 ? stats.totalEv : 0;
+  const showExpected = valueView === 'expected';
+  // Measured from entry, like the EV it is built from (p x payout − (1−p) x stake),
+  // so it is staked + EV rather than today's value + EV. Adding EV to a price that
+  // has already moved toward the outcome would count that move twice.
+  const projectedValue = staked + expectedProfit;
   // The horizon the expectation belongs to. Without it, a 3-day bet and a 5-month
   // bond get summed into one number with no date attached to it.
   const longestMaturity = activeBets.reduce(
@@ -131,10 +191,8 @@ export function PortfolioOverview({
           paddingBottom: 14,
           ...Shadow.card,
         }}>
-        <View className="flex-row items-center justify-between">
-          <ThemedText style={{ fontSize: 11, fontWeight: '800', color: theme.textTertiary, letterSpacing: 0.8 }}>
-            WORTH NOW
-          </ThemedText>
+        <View className="flex-row items-center justify-between" style={{ gap: 10 }}>
+          <ValueViewToggle value={valueView} onChange={setValueView} />
           <ThemedText style={{ fontSize: 11, fontWeight: '700', color: theme.textSecondary, ...MONO }}>
             {money(staked, { decimals: 0 })} put in
           </ThemedText>
@@ -143,15 +201,27 @@ export function PortfolioOverview({
         <ThemedText
           style={{ fontSize: 38, lineHeight: 46, fontWeight: '800', color: theme.text, letterSpacing: -1.3, marginTop: 8, ...MONO }}
           numberOfLines={1}>
-          {money(value)}
+          {money(showExpected ? projectedValue : value)}
         </ThemedText>
 
         <View className="flex-row items-center" style={{ gap: 7, marginTop: 1 }}>
-          <ThemedText style={{ fontSize: 14, fontWeight: '800', color: positive ? Brand[500] : Accent.red, ...MONO }}>
-            {money(netPnl, { signed: true })} ({positive ? '+' : '−'}{Math.abs(netPct).toFixed(1)}%)
+          <ThemedText
+            style={{
+              fontSize: 14,
+              fontWeight: '800',
+              color: (showExpected ? expectedProfit >= 0 : positive) ? Brand[500] : Accent.red,
+              ...MONO,
+            }}>
+            {money(showExpected ? expectedProfit : netPnl, { signed: true })} (
+            {(showExpected ? weightedReturn : netPct) >= 0 ? '+' : '−'}
+            {Math.abs(showExpected ? weightedReturn : netPct).toFixed(1)}%)
           </ThemedText>
           <ThemedText style={{ fontSize: 12, color: theme.textTertiary }}>
-            since you bought in
+            {showExpected
+              ? longestMaturity > 0
+                ? `expected over ${maturityWords(longestMaturity)}`
+                : 'expected, odds-weighted'
+              : 'since you bought in'}
           </ThemedText>
         </View>
 
