@@ -41,6 +41,12 @@ export interface RouteResults {
    * `minimumProbability` to reappear, or null if raising it would not help.
    */
   unlockInvestmentFor: (minimumProbability: number) => number | null;
+  /**
+   * Smallest amount the user would have to be willing to invest for a capital-preserving
+   * route to reach the goal, or null when raising it would not help — either no such
+   * route exists in the pool at any amount, or one is already affordable.
+   */
+  unlockCapitalSafeInvestment: number | null;
 }
 
 /** A run of routes that share a probability band, in descending order of chance. */
@@ -138,6 +144,93 @@ export function groupRoutesByChance(routes: Route[]): RouteGroup[] {
     .filter((group) => group.routes.length > 0);
 }
 
+/**
+ * Asset classes, as the routes list sections them.
+ *
+ * Prediction-market contracts and ETFs/treasuries answer different questions and carry
+ * different failure modes, so they are never blended into one ranked column: a binary
+ * contract sitting at the top of a mixed list reads as "our top pick", where the honest
+ * framing is "here is the best of each kind". Ranking is preserved *within* a section.
+ */
+export type RouteAssetClass = 'cash' | 'funds' | 'crypto' | 'other' | 'prediction';
+
+export interface RouteAssetSection {
+  assetClass: RouteAssetClass;
+  label: string;
+  /** One line under the header saying what kind of instrument the section holds. */
+  note: string;
+  routes: Route[];
+}
+
+/**
+ * Section order, safest instrument class first. Prediction markets sit last on purpose —
+ * not hidden, but never the thing the list opens with.
+ */
+const ASSET_SECTIONS: readonly { assetClass: RouteAssetClass; label: string; note: string }[] = [
+  {
+    assetClass: 'cash',
+    label: 'Treasuries & cash',
+    note: 'Contractual yields. The return is known if held to maturity.',
+  },
+  {
+    assetClass: 'funds',
+    label: 'Stocks & ETFs',
+    note: "Estimated from each fund's own recent volatility and long-run trend.",
+  },
+  {
+    assetClass: 'crypto',
+    label: 'Crypto',
+    note: 'Estimated from recent volatility. No contractual return.',
+  },
+  {
+    assetClass: 'other',
+    label: 'Other markets',
+    note: '',
+  },
+  {
+    assetClass: 'prediction',
+    label: 'Prediction markets',
+    note: 'Market-implied probabilities from live contract prices. A binary contract settles at its full value or at nothing.',
+  },
+];
+
+/** Which section a route belongs to, read off what it actually is. */
+export function routeAssetClass(route: Route): RouteAssetClass {
+  const text = `${route.category} ${route.platform}`;
+  if (/savings|treasur/i.test(text)) return 'cash';
+  if (/stock|etf|fund/i.test(text)) return 'funds';
+  if (/crypto|coin/i.test(text)) return 'crypto';
+  if (isPredictionCategory(route.category) || /polymarket|kalshi|prediction|sport/i.test(text)) {
+    return 'prediction';
+  }
+  // A route that risks everything on one outcome belongs with the contracts even when
+  // its category names no venue we recognise.
+  return route.lossProfile === 'binary' ? 'prediction' : 'other';
+}
+
+/**
+ * Splits a ranked list into asset-class sections, preserving each route's rank inside
+ * its own section. Empty sections are omitted.
+ */
+export function groupRoutesByAssetClass(routes: Route[]): RouteAssetSection[] {
+  return ASSET_SECTIONS
+    .map((section) => ({
+      ...section,
+      routes: routes.filter((route) => routeAssetClass(route) === section.assetClass),
+    }))
+    .filter((section) => section.routes.length > 0);
+}
+
+/**
+ * Whether the list should be sectioned by asset class. Only in the default view: once
+ * the user picks one asset class, or sorts by something else, or searches by name, they
+ * have asked for a single ordered list and headers repeating what they just chose are
+ * noise.
+ */
+export function assetSectionsActive(filters: RouteFilters): boolean {
+  return filters.category === null && filters.sort === 'score' && activeKeyword(filters) === '';
+}
+
 export function resolveInvestmentAmount(editedAmount: number | null, referenceStake: number): number {
   return editedAmount ?? referenceStake;
 }
@@ -175,6 +268,31 @@ export function isRelevantRoute({
     intendedInvestment > 0 &&
     requiredInvestment <= intendedInvestment * NEAR_MISS_MAX_STAKE_STRETCH;
   return closeToGoal && withinPriceRange;
+}
+
+/**
+ * Whether to offer the "invest more and capital-preserving routes appear" nudge.
+ *
+ * Three conditions, each of them about not misleading the user:
+ *  - nothing currently listed preserves capital, so the offer is news rather than nagging;
+ *  - some amount genuinely unlocks one, so it never promises a route that does not exist;
+ *  - the user has not asked for all-or-nothing, narrowed to a single asset class, or
+ *    searched for a market by name — in each case the absent safe routes are their own
+ *    choice rather than a budget problem, and "everything here is all-or-nothing" is
+ *    just a restatement of what they typed.
+ *
+ * Judged on the whole filtered list rather than the visible page: a capital-preserving
+ * route sitting on page two would make "everything here is all-or-nothing" a lie.
+ */
+export function shouldOfferCapitalSafe(
+  filters: RouteFilters,
+  filteredRoutes: Route[],
+  unlockAmount: number | null,
+): boolean {
+  if (unlockAmount == null) return false;
+  if (filters.lossProfile != null || filters.category != null) return false;
+  if (activeKeyword(filters) !== '') return false;
+  return !filteredRoutes.some((route) => route.lossProfile === 'partial');
 }
 
 export function buildRouteResults(
@@ -264,7 +382,29 @@ export function buildRouteResults(
     return needed.length > 0 ? Math.min(...needed) : null;
   };
 
-  return { ranked, filtered, requiredInvestmentById, scoreById, selectedStake, unlockInvestmentFor };
+  // The same question asked of capital preservation instead of probability. A user with a
+  // small budget and a big goal gets a list of nothing but binary contracts — not because
+  // the safe routes are missing, but because a T-bill needs real capital to clear a +$300
+  // goal and `isRelevantRoute` dropped it as unreachable. Silence there is what makes the
+  // app look like it only deals in all-or-nothing bets, so this is the number that answers
+  // it. Read off the whole pool, not the filtered list, since the point is what is absent.
+  const capitalSafeCandidates = routes
+    .filter((route) => route.lossProfile === 'partial')
+    .map((route) => requiredInvestmentById.get(route.id))
+    .filter((amount): amount is number => amount != null && amount > intendedInvestment);
+  const unlockCapitalSafeInvestment = capitalSafeCandidates.length > 0
+    ? Math.min(...capitalSafeCandidates)
+    : null;
+
+  return {
+    ranked,
+    filtered,
+    requiredInvestmentById,
+    scoreById,
+    selectedStake,
+    unlockInvestmentFor,
+    unlockCapitalSafeInvestment,
+  };
 }
 
 // ── self-check ──────────────────────────────────────────────────────────────
@@ -443,6 +583,96 @@ export function __selfCheck(): void {
     '84% sits in the 65-84 band, not the 85+ one',
   );
   console.assert(groupRoutesByChance([]).length === 0, 'no routes means no groups');
+
+  // ── capital-safe nudge ────────────────────────────────────────────────────
+  // The situation it exists for: a small budget against a real goal, where the only
+  // routes that survive are binary contracts and every capital-preserving one was
+  // dropped as unaffordable.
+  const smallBudget: RouteParams = { ...params, balance: 500, target: 300 };
+  const binaryContract: Route = {
+    ...reportedRoute, id: 'pm-cheap', probability: 60, expectedReturn: 300,
+    line: 'Yes 62¢', lossProfile: 'binary', meetsTarget: true,
+  };
+  const pricyTbill: Route = {
+    ...reportedRoute, id: 'tbill-pricy', category: 'Savings & Treasuries', platform: 'TreasuryDirect',
+    probability: 99, expectedReturn: 20, line: undefined, lossProfile: 'partial', meetsTarget: false,
+  };
+  const squeezed = buildRouteResults([binaryContract, pricyTbill], smallBudget, 500, filters);
+  console.assert(
+    squeezed.unlockCapitalSafeInvestment != null && squeezed.unlockCapitalSafeInvestment > 500,
+    'a T-bill priced out of the current budget reports the amount that reaches the goal',
+  );
+  console.assert(
+    !squeezed.filtered.some((route) => route.lossProfile === 'partial'),
+    'the same T-bill is genuinely absent from the list, which is what the nudge explains',
+  );
+  console.assert(
+    shouldOfferCapitalSafe(filters, squeezed.filtered, squeezed.unlockCapitalSafeInvestment),
+    'an all-binary list with a reachable safe route offers the nudge',
+  );
+
+  // Already affordable → nothing to unlock, and the safe route is on screen anyway.
+  const roomy = buildRouteResults([binaryContract, pricyTbill], smallBudget, 1_000_000, filters);
+  console.assert(
+    !shouldOfferCapitalSafe(filters, roomy.filtered, roomy.unlockCapitalSafeInvestment),
+    'no nudge once the capital-preserving route is affordable',
+  );
+
+  // No safe route in the pool at any price → never promise one.
+  const binaryOnly = buildRouteResults([binaryContract], smallBudget, 500, filters);
+  console.assert(
+    binaryOnly.unlockCapitalSafeInvestment === null
+      && !shouldOfferCapitalSafe(filters, binaryOnly.filtered, binaryOnly.unlockCapitalSafeInvestment),
+    'a pool with no capital-preserving route at any amount offers nothing',
+  );
+
+  // The user asked for all-or-nothing, or for one asset class: their choice, not a budget.
+  console.assert(
+    !shouldOfferCapitalSafe({ ...filters, lossProfile: 'binary' }, squeezed.filtered, 2_400)
+      && !shouldOfferCapitalSafe({ ...filters, category: 'Polymarket' }, squeezed.filtered, 2_400),
+    'no nudge when the user themselves excluded the safe routes',
+  );
+  console.assert(
+    !shouldOfferCapitalSafe(filters, [pricyTbill], 2_400),
+    'a capital-preserving route anywhere in the filtered list silences the nudge',
+  );
+  console.assert(
+    !shouldOfferCapitalSafe({ ...filters, keyword: 'messi' }, squeezed.filtered, 2_400),
+    'a named market search is not a budget problem — no nudge while a keyword is set',
+  );
+
+  // ── asset-class sections ──────────────────────────────────────────────────
+  const cashRoute: Route = { ...reportedRoute, id: 'tbill', category: 'Savings & Treasuries', platform: 'TreasuryDirect', lossProfile: 'partial' };
+  const fundRoute: Route = { ...reportedRoute, id: 'voo', category: 'Stocks & ETFs', platform: 'Brokerage', lossProfile: 'partial' };
+  const coinRoute: Route = { ...reportedRoute, id: 'btc', category: 'Crypto', platform: 'Coinbase', lossProfile: 'partial' };
+  const sections = groupRoutesByAssetClass([reportedRoute, coinRoute, cashRoute, fundRoute]);
+  console.assert(
+    sections.map((section) => section.assetClass).join(',') === 'cash,funds,crypto,prediction',
+    'sections run safest class first, with prediction markets last',
+  );
+  console.assert(
+    sections.every((section) => section.routes.length === 1),
+    'every route lands in exactly one section',
+  );
+  console.assert(
+    routeAssetClass({ ...reportedRoute, category: 'Sports Betting', platform: 'Sportsbook' }) === 'prediction',
+    'a legacy sports category still sections with prediction markets',
+  );
+  console.assert(
+    routeAssetClass({ ...reportedRoute, category: 'Forex', platform: 'Broker', lossProfile: 'partial' }) === 'other',
+    'an unrecognised non-binary category falls through to Other',
+  );
+  console.assert(
+    groupRoutesByAssetClass([cashRoute]).length === 1,
+    'sections with no routes are omitted rather than rendered empty',
+  );
+  console.assert(
+    assetSectionsActive(filters)
+      && !assetSectionsActive({ ...filters, category: 'Polymarket' })
+      && !assetSectionsActive({ ...filters, sort: 'chance' })
+      && !assetSectionsActive({ ...filters, keyword: 'messi' }),
+    'sections show only in the default unfiltered, unsorted, unsearched view',
+  );
 
   // ── keyword search ────────────────────────────────────────────────────────
   const messi: Route = { ...reportedRoute, id: 'pm-messi', description: 'Buy Yes on “Will Lionel Messi score in the final?” at 41¢', line: 'Yes 41¢' };

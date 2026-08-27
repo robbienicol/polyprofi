@@ -206,7 +206,7 @@ export function RouteOpportunityCard({
         />
       </View>
       <ThemedText style={{ fontSize: 13, color: theme.textSecondary }}>
-        Based on historical data & live market odds
+        Based on historical data & live market prices
       </ThemedText>
 
       {/* Only the two measures with real backing. Volatility fell back to
@@ -260,7 +260,7 @@ export function RouteOpportunityCard({
           <View className="flex-row gap-2">
             <Fact
               label="Most you can lose"
-              value={`~${Math.round(route.exitPlan.effectiveLossFraction * 100)}% of stake`}
+              value={`~${Math.round(route.exitPlan.effectiveLossFraction * 100)}% of capital`}
             />
             <Fact
               label="Typical exit"
@@ -277,7 +277,7 @@ export function RouteOpportunityCard({
               `${route.exitPlan.breakevenProbability}% just to cover the ` +
               `${route.exitPlan.roundTripCostCents}¢ round-trip spread — a ` +
               `${Math.abs(route.exitPlan.costEdgePts).toFixed(1)}-point drag. A busier market ` +
-              `does not improve those odds, only how fast you find out. What the plan buys is the ` +
+              `does not improve that probability, only how fast you find out. What the plan buys is the ` +
               `capped loss and the earlier exit.`}
           </ThemedText>
         </Section>
@@ -365,7 +365,7 @@ export function RouteOpportunityCard({
               value={
                 route.lossProfile === "partial"
                   ? "Capital preservation"
-                  : "Stake at risk"
+                  : "Capital at risk"
               }
             />
             <Fact
@@ -456,17 +456,26 @@ export function RouteOpportunityCard({
         </Section>
       )}
 
-      <Section title="Potential Outcome">
+      {/* A binary contract and a bond fund do not have the same shape of downside, and
+          showing both in one identical grey panel is what flattens the difference: a
+          T-bill's bad day is a decline in something you still hold, where a contract
+          resolving against you leaves nothing to hold at all. So the binary case gets
+          its own title, its own accent, and a closing line that says outright there is
+          no middle outcome — rather than being the same component with a redder dot. */}
+      <Section
+        title={binary ? "Settlement · two outcomes" : "Potential outcome"}
+        accent={binary ? Accent.red : undefined}
+      >
         <Outcome
           color={Brand[500]}
-          label="Target hit"
+          label={binary ? "Resolves in your favour" : "Target hit"}
           chance={`${route.probability}% chance`}
           value={`+$${route.expectedReturn}`}
         />
         {binary ? (
           <Outcome
             color={Accent.red}
-            label="Target missed — stake gone"
+            label="Resolves against you"
             chance={`${100 - route.probability}% chance`}
             value={`−$${stake}`}
           />
@@ -478,14 +487,21 @@ export function RouteOpportunityCard({
             value={`−$${Math.round(downsideAtStake(route, stake))}`}
           />
         )}
-        {/* Both legs weighted by the odds. Shown for every route, binaries most of
-            all: an all-or-nothing payout is the one that looks best unweighted. */}
+        {/* Both legs weighted by their probability. Shown for every route, binaries most
+            of all: an all-or-nothing return is the one that looks best unweighted. */}
         <Outcome
           color={routeExpectedValue >= 0 ? Accent.gold : Accent.red}
           label="Probability-weighted average"
           chance="what this is worth on average"
           value={`${routeExpectedValue >= 0 ? '+' : '−'}$${Math.abs(Math.round(routeExpectedValue))}`}
         />
+        <ThemedText
+          style={{ fontSize: 11.5, lineHeight: 17, color: theme.textSecondary }}
+        >
+          {binary
+            ? "There is no middle outcome. The contract settles at its full value or at nothing, so a wrong answer leaves no position to hold and nothing to recover."
+            : "You keep the position either way. A bad outcome here is a decline in something you still own, not a total loss."}
+        </ThemedText>
       </Section>
 
       <Pressable
@@ -503,28 +519,34 @@ export function RouteOpportunityCard({
           style={{ fontSize: 16, fontWeight: "900", color: "#06140C" }}
         >
           {added
-            ? "Acquisition saved"
+            ? "Saved to your plan"
             : adding
               ? "Saving..."
-              : "Acquire →"}
+              : "Add to plan →"}
         </ThemedText>
       </Pressable>
     </View>
   );
 }
 
+/**
+ * `accent` marks a section whose contents are a different kind of thing from the rest of
+ * the card, not merely a worse one — today that is the binary settlement block. Every
+ * other section stays neutral, so the tint means something when it appears.
+ */
 function Section({
   title,
+  accent,
   children,
-}: React.PropsWithChildren<{ title: string }>): React.ReactElement {
+}: React.PropsWithChildren<{ title: string; accent?: string }>): React.ReactElement {
   const theme = useTheme();
   return (
     <View
       style={{
         borderRadius: Radius.lg,
-        backgroundColor: theme.backgroundElement,
+        backgroundColor: accent ? accent + "0D" : theme.backgroundElement,
         borderWidth: 1,
-        borderColor: theme.border,
+        borderColor: accent ? accent + "40" : theme.border,
         padding: 13,
         gap: 12,
       }}

@@ -25,8 +25,8 @@ import { scheduleWeeklyReminder } from '@/lib/notifications';
 import { parseEntryPrice } from '@/lib/parse-bet-line';
 import { investmentSliderMaximum } from '@/lib/quiz-profile';
 import { openTradeDestination, preferredTradeDestination, tradeDestinationLabel } from '@/lib/route-actions';
-import { activeKeyword, buildRouteResults, groupRoutesByChance, predictionFacetsActive, resolveInvestmentAmount, routeMatchesKeyword, searchOutcome } from '@/lib/route-results';
-import type { RouteFilters as Filters } from '@/lib/route-results';
+import { activeKeyword, assetSectionsActive, buildRouteResults, groupRoutesByAssetClass, groupRoutesByChance, predictionFacetsActive, resolveInvestmentAmount, routeMatchesKeyword, searchOutcome, shouldOfferCapitalSafe } from '@/lib/route-results';
+import type { RouteAssetSection, RouteFilters as Filters } from '@/lib/route-results';
 import { rescoreForStake } from '@/lib/stake-rescore';
 import { trackedPositionFields } from '@/lib/tracked-assets';
 import type { Route, RouteParams, SavedRoutesBatch } from '@/types/routes';
@@ -159,6 +159,12 @@ export default function RoutesScreen(): React.ReactElement {
     shownCount: filtered.length,
     isSearching,
   });
+  // Non-null only when the whole list is all-or-nothing *and* more capital would bring a
+  // capital-preserving route back. That is a budget fact the user cannot otherwise see:
+  // the safe routes were dropped as unaffordable, not missing from the market.
+  const capitalSafeUnlock = results && shouldOfferCapitalSafe(filters, filtered, results.unlockCapitalSafeInvestment)
+    ? results.unlockCapitalSafeInvestment
+    : null;
 
   async function handleRefresh(): Promise<void> {
     if (isHistorical || !sessionParams) return;
@@ -303,6 +309,13 @@ export default function RoutesScreen(): React.ReactElement {
           />
         )}
         {error && <RoutesError message={error} onRetry={refresh} />}
+        {capitalSafeUnlock != null && sessionParams ? (
+          <CapitalSafeNudge
+            target={sessionParams.target}
+            amount={capitalSafeUnlock}
+            onRaiseInvestment={setInvestmentAndReset}
+          />
+        ) : null}
         {filters.groupByChance && predictionFacetsActive(filters)
           ? groupRoutesByChance(visibleRoutes).map((group) => (
             <View key={group.floor} className="gap-3">
@@ -310,7 +323,14 @@ export default function RoutesScreen(): React.ReactElement {
               {group.routes.map(renderRoute)}
             </View>
           ))
-          : visibleRoutes.map(renderRoute)}
+          : assetSectionsActive(filters)
+            ? groupRoutesByAssetClass(visibleRoutes).map((section) => (
+              <View key={section.assetClass} className="gap-3">
+                <AssetSectionHeader section={section} />
+                {section.routes.map(renderRoute)}
+              </View>
+            ))
+            : visibleRoutes.map(renderRoute)}
         {visibleCount < filtered.length && (
           <Pressable onPress={() => setVisibleCount((count) => count + 30)} className="items-center active:opacity-70" style={{ borderRadius: Radius.md, paddingVertical: 12, borderWidth: 1, borderColor: theme.border, backgroundColor: theme.backgroundElement }}>
             <ThemedText style={{ fontSize: 13, fontWeight: '800', color: Brand[500] }}>Show 30 more · {filtered.length - visibleCount} remaining</ThemedText>
@@ -332,9 +352,89 @@ export default function RoutesScreen(): React.ReactElement {
             onClear={() => setFiltersAndReset(DEFAULT_FILTERS)}
           />
         )}
-        {routes.length > 0 && <ThemedText type="small" themeColor="textSecondary" className="text-center" style={{ opacity: 0.4 }}>{isHistorical ? 'Saved search · ' : ''}Pull down to refresh · AI-generated · For entertainment only</ThemedText>}
+        {routes.length > 0 && <ThemedText type="small" themeColor="textSecondary" className="text-center" style={{ opacity: 0.4 }}>{isHistorical ? 'Saved search · ' : ''}Pull down to refresh · AI-generated · Informational only</ThemedText>}
       </ScrollView>
     </Screen>
+  );
+}
+
+/**
+ * Shown when every route on screen is all-or-nothing and the reason is the budget rather
+ * than the market.
+ *
+ * Without it the app reads as though contracts are all it deals in: the treasuries and
+ * funds were priced out by `isRelevantRoute` and dropped in silence, so a user with $500
+ * against a +$300 goal never learns that the safe options exist at all, let alone what
+ * they cost. Naming the amount turns "this app only shows bets" into a number the user
+ * can act on — and the button sets it, so the claim is testable in one tap.
+ */
+function CapitalSafeNudge({ target, amount, onRaiseInvestment }: {
+  target: number;
+  amount: number;
+  onRaiseInvestment: (amount: number) => void;
+}): React.ReactElement {
+  const theme = useTheme();
+
+  return (
+    <View
+      style={{
+        borderRadius: Radius.lg,
+        borderWidth: 1,
+        borderColor: Brand[500] + '3D',
+        backgroundColor: Brand[500] + '0F',
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        gap: 8,
+      }}>
+      <ThemedText style={{ fontSize: 13, fontWeight: '800', color: theme.text }}>
+        Everything here is all-or-nothing
+      </ThemedText>
+      <ThemedText style={{ fontSize: 12.5, lineHeight: 18, color: theme.textSecondary }}>
+        {`Routes that keep your capital — treasuries and funds — need more of it to reach `
+          + `+$${target.toLocaleString()}. $${amount.toLocaleString()} is where the first one hits your goal.`}
+      </ThemedText>
+      <Pressable
+        onPress={() => onRaiseInvestment(amount)}
+        accessibilityRole="button"
+        className="self-start active:opacity-85"
+        style={{ borderRadius: Radius.md, paddingHorizontal: 14, paddingVertical: 9, backgroundColor: Brand[500] }}>
+        <ThemedText style={{ fontSize: 13, fontWeight: '800', color: '#06140C' }}>
+          Invest up to ${amount.toLocaleString()}
+        </ThemedText>
+      </Pressable>
+    </View>
+  );
+}
+
+/**
+ * Header for one asset-class section.
+ *
+ * The list is sectioned rather than blended so the answer it gives reads as "here are
+ * your options in each kind of market" instead of "here is our top pick" — which, on a
+ * mixed ranking, can be a prediction-market contract sitting above every fund and bill.
+ * The note under the label says how that class's probability is arrived at, so a
+ * market-implied number is never mistaken for a modelled one, or the reverse.
+ */
+function AssetSectionHeader({ section }: { section: RouteAssetSection }): React.ReactElement {
+  const theme = useTheme();
+
+  return (
+    <View style={{ gap: 4, paddingHorizontal: 4, paddingTop: 10 }}>
+      <View className="flex-row items-center" style={{ gap: 8 }}>
+        <ThemedText style={{ fontSize: 13, fontWeight: '900', color: theme.text, letterSpacing: -0.2 }}>
+          {section.label}
+        </ThemedText>
+        <View style={{ flex: 1, height: 1, backgroundColor: theme.border }} />
+        <ThemedText style={{ fontSize: 11, color: theme.textTertiary, fontVariant: ['tabular-nums'] }}>
+          {section.routes.length} route{section.routes.length === 1 ? '' : 's'}
+        </ThemedText>
+      </View>
+      {section.note ? (
+        <ThemedText style={{ fontSize: 11, lineHeight: 16, color: theme.textTertiary }}>
+          {section.note}
+        </ThemedText>
+      ) : null}
+    </View>
   );
 }
 
