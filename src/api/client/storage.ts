@@ -30,6 +30,7 @@ const KEYS = {
   QUIZ_OWNER: 'polyprofit:quizOwner',
   BETS: 'polyprofit:bets',
   ONBOARDING: 'polyprofit:onboardingComplete',
+  EARLY_ACCESS: 'polyprofit:earlyAccessGranted',
   SAVED_ROUTES: 'polyprofit:savedRoutes',
   DAILY_POOL: 'polyprofit:dailyPool',
   PORTFOLIO_PROGRESS: 'polyprofit:portfolioProgress',
@@ -225,6 +226,19 @@ export async function getOnboardingComplete(): Promise<boolean> {
 
 export async function setOnboardingComplete(): Promise<void> {
   await AsyncStorage.setItem(KEYS.ONBOARDING, 'true');
+}
+
+// ── Early access ─────────────────────────────────────────────────────────────
+// Device-level, like the onboarding flag: the code is what buys entry, so once
+// it has been entered on a device it is not asked for again on that device —
+// including after a sign-out and back in as someone else.
+
+export async function getEarlyAccessGranted(): Promise<boolean> {
+  return (await AsyncStorage.getItem(KEYS.EARLY_ACCESS)) === 'true';
+}
+
+export async function setEarlyAccessGranted(): Promise<void> {
+  await AsyncStorage.setItem(KEYS.EARLY_ACCESS, 'true');
 }
 
 // ── First-run answers ────────────────────────────────────────────────────────
