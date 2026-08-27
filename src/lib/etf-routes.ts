@@ -69,8 +69,6 @@ export const ETF_UNIVERSE: EtfDefinition[] = [
   { symbol: 'TSLA', name: 'Tesla', bucket: 'US autos / growth', riskLevel: 5, expenseRatioPct: 0, kind: 'stock' },
 ];
 
-export const ETF_SYMBOLS: string[] = ETF_UNIVERSE.map((etf) => etf.symbol);
-
 /** Below this modeled hit-probability we still show the route but flag it as a reach for the goal. */
 const REALISTIC_HIT_THRESHOLD = 50;
 

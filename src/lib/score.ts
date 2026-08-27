@@ -239,22 +239,6 @@ export function sortByPatheyScore(
   });
 }
 
-export function scoreLabel(score: number): string {
-  if (score >= 80) return 'Excellent';
-  if (score >= 65) return 'Strong';
-  if (score >= 50) return 'Solid';
-  if (score >= 40) return 'Weak';
-  return 'Not viable';
-}
-
-export function scoreColor(score: number): string {
-  if (score >= 80) return '#22C55E';
-  if (score >= 65) return '#84CC16';
-  if (score >= 50) return '#F59E0B';
-  if (score >= 40) return '#F97316';
-  return '#EF4444';
-}
-
 function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n));
 }

@@ -25,7 +25,7 @@
 
 import type { PageCopy } from '@/components/onboarding/quiz-kit';
 import { deviceCountry } from '@/lib/device-region';
-import type { LossReaction, NotificationChoice, SurveyAnswers } from '@/lib/onboarding-profile';
+import type { LossReaction, SurveyAnswers } from '@/lib/onboarding-profile';
 
 export const PAGE_IDS = [
   'motivation',
@@ -53,16 +53,9 @@ export const PAGE_IDS = [
 
 export type PageId = (typeof PAGE_IDS)[number];
 
-/** Pages that are statements or permission asks rather than things we ask them. */
-const NON_QUESTIONS: readonly PageId[] = ['profiling', 'scan', 'notifications', 'review'];
-
-/** How many questions the welcome screen promises. Counted, never hardcoded. */
-export const SURVEY_QUESTION_COUNT = PAGE_IDS.filter((id) => !NON_QUESTIONS.includes(id)).length;
-
 /* ----------------------------------------------------------------- options */
 
 export const SKIP = 'Prefer not to say';
-export const OTHER = 'Other';
 export const SOMETHING_ELSE = 'Something else';
 
 export const AGE_RANGES = ['18-24', '25-34', '35-44', '45-54', '55-64', '65+', SKIP] as const;
@@ -179,7 +172,6 @@ const AMOUNT_ACKS: Record<string, string> = {
 export function buildPageCopy(
   answers: SurveyAnswers,
   name: string,
-  notifications: NotificationChoice
 ): Record<PageId, PageCopy> {
   // Not lowercased: these are written phrases, and "grow what i already have"
   // is what folding a sentence that contains "I" gets you.

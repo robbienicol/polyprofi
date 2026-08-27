@@ -126,10 +126,6 @@ export function predictionTopic(value: string | null | undefined): PredictionTop
   return PREDICTION_TOPICS.find((topic) => topic.value === value) ?? null;
 }
 
-export function predictionTopicLabel(value: string | null | undefined): string {
-  return predictionTopic(value)?.label ?? 'Other';
-}
-
 function invariant(condition: boolean, message: string): void {
   if (!condition) throw new Error(`[prediction-topics] ${message}`);
 }
@@ -174,6 +170,5 @@ export function __selfCheck(): void {
 
   invariant(predictionTopic('sports')?.label === 'Sports', 'a topic resolves to its label');
   invariant(predictionTopic('nope') === null, 'an unknown topic resolves to null');
-  invariant(predictionTopicLabel(null) === 'Other', 'an absent topic is labelled Other');
   invariant(new Set(PREDICTION_TOPICS.map((t) => t.value)).size === PREDICTION_TOPICS.length, 'topic values are unique');
 }

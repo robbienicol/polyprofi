@@ -39,8 +39,6 @@ export const CRYPTO_ALIASES: Record<string, string[]> = {
   'DOGE-USD': ['doge', 'dogecoin'],
 };
 
-export const CRYPTO_SYMBOLS: string[] = CRYPTO_UNIVERSE.map((coin) => coin.symbol);
-
 /** Calendar days → trading days. Crypto trades 24/7, but we keep the same unit as stocks for a comparable probability. */
 function tradingDays(calendarDays: number): number {
   return Math.max(1, Math.round((calendarDays * 252) / 365));

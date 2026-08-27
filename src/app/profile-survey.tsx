@@ -84,7 +84,7 @@ function SurveyForm({
   // buy the search most of a minute, late enough that someone who bounces off the
   // first question never triggers it.
   useRoutePrefetch(index >= PAGE_IDS.indexOf('profiling'));
-  const copy = buildPageCopy(answers, name, notifications);
+  const copy = buildPageCopy(answers, name);
   // One clock for the page's read-back line. Keyed on the page rather than the
   // text, which is rebuilt on every tap.
   const speech = useSpokenLine(copy[pageId].ack, pageId);
