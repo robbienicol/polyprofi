@@ -116,12 +116,12 @@ function RouteCardInner({ route, requiredInvestment, currentInvestment, onTrack,
           </View>
         </View>
 
-        {/* The line (sports / prediction-market bets) */}
+        {/* The contract price a prediction-market route trades at */}
         {route.line ? (
           <View
             className="flex-row items-center self-start gap-2"
             style={{ backgroundColor: rc + '14', borderRadius: Radius.sm, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: rc + '33' }}>
-            <ThemedText style={{ fontSize: 11 }}>🎟️</ThemedText>
+            <ThemedText style={{ fontSize: 11 }}>📊</ThemedText>
             <ThemedText style={{ fontSize: 13, fontWeight: '800', color: theme.text, letterSpacing: 0.2, ...MONO }}>
               {route.line}
             </ThemedText>
@@ -175,7 +175,7 @@ function RouteCardInner({ route, requiredInvestment, currentInvestment, onTrack,
               <DebtFact label="MATURITY" value={route.maturesInDays ? formatMaturity(route.maturesInDays) : 'Flexible'} />
             </View>
             <View className="flex-row justify-between gap-2">
-              <DebtFact label="DOWNSIDE" value={route.lossProfile === 'partial' ? 'Capital preservation' : 'Can lose stake'} />
+              <DebtFact label="DOWNSIDE" value={route.lossProfile === 'partial' ? 'Capital preservation' : 'Capital at risk'} />
               <DebtFact label="LIQUIDITY" value={debtLiquidity ?? 'Check terms'} />
             </View>
             {route.investmentFacts?.yieldSource ? (
@@ -215,7 +215,7 @@ function RouteCardInner({ route, requiredInvestment, currentInvestment, onTrack,
                 backgroundColor: '#22C55E', ...Shadow.card,
               }}
               className="active:opacity-80">
-              <ThemedText style={{ fontSize: 13, fontWeight: '800', color: '#06140C' }}>Acquire</ThemedText>
+              <ThemedText style={{ fontSize: 13, fontWeight: '800', color: '#06140C' }}>Add</ThemedText>
             </Pressable>
           )}
         </View>

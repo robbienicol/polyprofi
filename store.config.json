@@ -1,6 +1,7 @@
 {
   "configVersion": 0,
   "apple": {
+    "categories": ["FINANCE", "PRODUCTIVITY"],
     "version": "1.0",
     "release": {
       "automaticRelease": true

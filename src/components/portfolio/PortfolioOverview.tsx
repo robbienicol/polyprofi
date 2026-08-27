@@ -136,7 +136,7 @@ export function PortfolioOverview({
   onFindRoutes,
   onOpenPositions,
   emptyTitle = 'No portfolio yet',
-  emptyBody = 'Set a goal, pick a route, and what it is worth, where it sits, and your odds of hitting the target all show up here.',
+  emptyBody = 'Set a goal, pick a route, and what it is worth, where it sits, and your probability of hitting the target all show up here.',
 }: PortfolioOverviewProps): React.ReactElement {
   const theme = useTheme();
   const money = useMoney();
@@ -223,7 +223,7 @@ export function PortfolioOverview({
             {showExpected
               ? longestMaturity > 0
                 ? `expected over ${maturityWords(longestMaturity)}`
-                : 'expected, odds-weighted'
+                : 'expected, probability-weighted'
               : 'since you bought in'}
           </ThemedText>
         </View>
@@ -300,7 +300,7 @@ export function PortfolioOverview({
           caption={
             targetValue != null
               ? `To reach ${money(targetValue, { decimals: 0 })}`
-              : 'Stake-weighted average hit rate'
+              : 'Amount-weighted average hit rate'
           }
           meter={goalProbability / 100}
         />
@@ -331,8 +331,8 @@ export function PortfolioOverview({
           </View>
           <ThemedText style={{ fontSize: 11, color: theme.textTertiary }}>
             {metric === 'share'
-              ? 'Share of everything you have staked'
-              : 'Expected profit contribution, as % of total staked'}
+              ? 'Share of everything you have invested'
+              : 'Expected profit contribution, as % of total invested'}
           </ThemedText>
         </View>
 
@@ -340,7 +340,7 @@ export function PortfolioOverview({
           <AllocationDonut
             rows={rows}
             value={money(rows.reduce((sum, row) => sum + row.staked, 0), { decimals: 0 })}
-            caption={activeBets.length > 0 ? 'staked' : 'cash'}
+            caption={activeBets.length > 0 ? 'invested' : 'cash'}
           />
           <View className="flex-1" style={{ gap: 12 }}>
             {rows.map((row) => (

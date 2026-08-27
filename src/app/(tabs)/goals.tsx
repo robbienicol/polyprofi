@@ -174,7 +174,7 @@ function GoalRow({
             {money(netGain, { decimals: 0, signed: true })}
           </ThemedText>
           <ThemedText style={{ fontSize: 12, color: theme.textTertiary, ...MONO }}>
-            {staked > 0 ? `on ${money(staked, { decimals: 0 })} staked` : 'nothing staked yet'}
+            {staked > 0 ? `on ${money(staked, { decimals: 0 })} invested` : 'nothing invested yet'}
           </ThemedText>
         </View>
       ) : (

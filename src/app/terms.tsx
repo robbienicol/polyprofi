@@ -49,13 +49,13 @@ export default function TermsScreen(): React.ReactElement {
           <H>Not financial advice</H>
           <P>
             Nothing in the app is financial, investment, tax, or legal advice, and Pathey is not a
-            registered investment adviser or broker-dealer. Routes are for entertainment and informational
-            purposes only. Always do your own research before acting on anything you see here.
+            registered investment adviser or broker-dealer. Routes are informational only. Always do
+            your own research before acting on anything you see here.
           </P>
 
           <H>No trading or money movement in-app</H>
           <P>
-            Pathey does not execute trades, place bets, or move money on your behalf. Where a route
+            Pathey does not execute trades or move money on your behalf. Where a route
             points to an external platform (like Polymarket or a brokerage), tapping through takes you to
             that platform, where you decide whether to act, at your own risk and subject to that
             platform&apos;s own terms.

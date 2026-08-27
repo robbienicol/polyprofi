@@ -78,7 +78,7 @@ export const ONBOARDING_SLIDES: OnboardingSlide[] = [
     id: "scan",
     eyebrow: "ONE SWEEP",
     title: "We check every way\nto grow your money",
-    body: "Stocks, savings, crypto, prediction markets, sports. You would need ten apps and an afternoon. We do it in one look.",
+    body: "Stocks, savings, crypto, prediction markets. You would need ten apps and an afternoon. We do it in one look.",
     kind: "scan",
     cta: "Continue",
     footnote: null,
@@ -117,14 +117,17 @@ export const ONBOARDING_SLIDES: OnboardingSlide[] = [
  *
  * Deliberately no prices, counts, or yields: a number on a marketing slide reads
  * as a claim about what the app found today, and none of these are live. The
- * motion is the message — five markets, one pass, a tick on each.
+ * motion is the message — one pass, a tick on each.
+ *
+ * One row per class the search really routes to, and no more: a row here is a promise
+ * the quiz has to be able to keep. Sport is covered inside prediction markets rather
+ * than listed beside them, which is where the markets actually are.
  */
 export const SWEEP_MARKETS: { emoji: string; label: string; note: string }[] = [
   { emoji: "📈", label: "Stocks & ETFs", note: "Funds and shares" },
   { emoji: "🏦", label: "Savings & T-bills", note: "Fixed by contract" },
   { emoji: "₿", label: "Crypto", note: "Big swings" },
-  { emoji: "🔮", label: "Prediction markets", note: "Will it happen?" },
-  { emoji: "🏈", label: "Sports bets", note: "Live odds" },
+  { emoji: "🔮", label: "Prediction markets", note: "Politics, sports, world events" },
 ];
 
 /** Slide 2 — a compact cross-market comparison. */
@@ -156,7 +159,7 @@ export const RANKED_PREVIEW: RankedPreviewRow[] = [
     name: "Heat win · Yes 58¢",
     platform: "Polymarket",
     riskLevel: 3,
-    note: "All or nothing",
+    note: "58% market-implied",
   },
   {
     emoji: "₿",
@@ -166,11 +169,11 @@ export const RANKED_PREVIEW: RankedPreviewRow[] = [
     note: "Swings hard",
   },
   {
-    emoji: "🎲",
-    name: "4-leg parlay",
-    platform: "Sportsbook",
+    emoji: "🔮",
+    name: "Fed cuts in March · Yes 6¢",
+    platform: "Polymarket",
     riskLevel: 5,
-    note: "All four must land",
+    note: "6% market-implied",
   },
 ];
 
@@ -184,7 +187,7 @@ export const BREAKDOWN_FACTORS: BreakdownFactor[] = [
   { label: "Chance of hitting goal", value: "70%" },
   { label: "What could go wrong", value: "Market can drop" },
   { label: "Cash you need", value: "$286" },
-  { label: "Time to pay out", value: "12 months" },
+  { label: "Time to resolve", value: "12 months" },
 ];
 
 /** Slide 4 — scripted coach exchange. Mirrors what RouteCoach answers about. */
@@ -201,10 +204,10 @@ export const COACH_STARTERS: string[] = [
 ];
 
 export const COACH_SCRIPT: CoachTurn[] = [
-  { role: "user", text: "Why is VOO first and not the parlay?" },
+  { role: "user", text: "Why is VOO first and not the 6¢ contract?" },
   {
     role: "coach",
-    text: "The parlay pays more, but all four legs have to land — about a 6% shot, and a miss loses everything. VOO pays less and risks less.",
+    text: "The contract returns more, but the market only gives it a 6% chance, and if it resolves No the position is worth nothing. VOO returns less and risks less.",
   },
 ];
 

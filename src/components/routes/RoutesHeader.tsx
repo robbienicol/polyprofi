@@ -47,7 +47,7 @@ export function RoutesHeader({
       <View style={{ borderRadius: Radius.xl, backgroundColor: theme.backgroundElevated, borderWidth: 1, borderColor: theme.border, padding: 16, gap: 10, ...Shadow.card }}>
         <View className="flex-row justify-between items-center" style={{ gap: 10 }}>
           <ThemedText style={{ fontSize: 11, fontWeight: '700', color: Brand[500], letterSpacing: 0.8 }}>
-            {historical ? 'SAVED SEARCH' : 'YOUR PREDICTION ROUTES'}
+            {historical ? 'SAVED SEARCH' : 'YOUR ROUTES'}
           </ThemedText>
           {!historical && (
             <Pressable

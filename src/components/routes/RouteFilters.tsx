@@ -24,7 +24,7 @@ const RESOLUTION_WINDOWS: readonly { label: string; days: number }[] = [
 const SORT_OPTIONS: { label: string; value: RouteSort }[] = [
   { label: 'Default order', value: 'score' },
   { label: 'Best chance', value: 'chance' },
-  { label: 'Biggest payout', value: 'payout' },
+  { label: 'Biggest return', value: 'payout' },
   { label: 'Best expected value', value: 'value' },
 ];
 

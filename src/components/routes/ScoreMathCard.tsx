@@ -56,8 +56,8 @@ export function ScoreMathCard({ scoreBreakdown, requiredInvestment, availableInv
         <ThemedText style={{ fontSize: 11, color: Accent.gold, fontWeight: '700', ...MONO }}>
           Capital at risk: ×{scoreBreakdown.capitalSurvivalFactor.toFixed(2)} — a miss
           {scoreBreakdown.lossFraction != null && scoreBreakdown.lossFraction < 1
-            ? ` costs about ${Math.round(scoreBreakdown.lossFraction * 100)}% of your stake`
-            : ' loses your full stake'}
+            ? ` costs about ${Math.round(scoreBreakdown.lossFraction * 100)}% of your capital`
+            : ' loses your full capital'}
           {' '}({Math.round(100 - scoreBreakdown.reliability)}% chance)
         </ThemedText>
       ) : null}

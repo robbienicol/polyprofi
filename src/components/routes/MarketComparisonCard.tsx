@@ -61,7 +61,7 @@ export function MarketComparisonCard({
       </View>
 
       <ThemedText style={{ fontSize: 11.5, lineHeight: 16, color: theme.textTertiary }}>
-        Same-side price to enter this bet on each platform, net of an estimated
+        Same-side price to enter this position on each platform, net of an estimated
         Kalshi trading fee (Polymarket has no explicit trading fee, so its cost
         is really the bid/ask spread). Directional signal only, not exact.
       </ThemedText>

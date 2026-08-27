@@ -11,7 +11,7 @@ const WEEKLY = {
 } as const;
 
 const MESSAGES = [
-  { title: 'Your weekly routes are ready 💸', body: 'New goals, fresh odds. See the safest way to grow your money this week.' },
+  { title: 'Your weekly routes are ready 💸', body: 'New goals, fresh prices. See the safest way to grow your money this week.' },
   { title: 'Time to make a move 📈', body: 'Set a goal and get your ranked routes — safe to risky, all in one place.' },
   { title: "This week's plays are in 🎯", body: 'Check your highest-probability ways to hit your money goal.' },
 ];

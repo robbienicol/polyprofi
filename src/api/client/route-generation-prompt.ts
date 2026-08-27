@@ -32,7 +32,7 @@ export function buildRouteGenerationPrompt(input: RoutePromptInput): { system: s
   const riskNote = riskTolerance === 'conservative'
     ? 'CONSERVATIVE RISK: Polymarket prices must imply at least 80% probability; emphasize the safest liquid contracts.'
     : riskTolerance === 'aggressive'
-      ? 'AGGRESSIVE RISK: include higher-payout contracts with a data-backed edge and state full downside.'
+      ? 'AGGRESSIVE RISK: include lower-probability, higher-return contracts with a data-backed edge and state full downside.'
       : 'BALANCED RISK: mix mid-probability contracts with a few safer anchors.';
 
   const system = `You are a skeptical quant building PREDICTION-MARKET routes only.
@@ -49,7 +49,7 @@ ${riskNote}
 POLYMARKET IDEAS (validate every idea against a live price)
 ${blocks.picks}
 
-POLYMARKET ODDS
+POLYMARKET MARKET-IMPLIED PROBABILITIES
 ${blocks.polymarket}
 
 POPULAR POLYMARKET CONTRACTS

@@ -250,7 +250,7 @@ export default function GoalDetailScreen(): React.ReactElement {
             onFindRoutes={findRoutes}
             onOpenPositions={() => router.push('/positions')}
             emptyTitle="Nothing working on this goal yet"
-            emptyBody={`Take a route for ${goal.label} and its allocation, projected value, and odds of getting there all show up here.`}
+            emptyBody={`Take a route for ${goal.label} and its allocation, projected value, and probability of getting there all show up here.`}
           />
 
           {/* Delete, confirmed in place — an Alert would be a no-op on web. */}

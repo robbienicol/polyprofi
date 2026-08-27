@@ -79,7 +79,7 @@ export default function PortfolioScreen(): React.ReactElement {
           />
 
           <ThemedText style={{ fontSize: 11, color: theme.textTertiary, textAlign: 'center', opacity: 0.6 }}>
-            AI-generated · Not financial advice · For entertainment only
+            AI-generated · Not financial advice · Informational only
           </ThemedText>
         </ScrollView>
       </SafeAreaView>

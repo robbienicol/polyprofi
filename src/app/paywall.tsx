@@ -62,7 +62,7 @@ export default function PaywallScreen(): React.ReactElement {
               Your routes are ready
             </ThemedText>
             <ThemedText type="small" themeColor="textSecondary" className="text-center" style={{ maxWidth: 290, lineHeight: 20 }}>
-              We ran the numbers across thousands of live data points to build your plays. Unlock Pro to see every one.
+              We ran the numbers across thousands of live data points to build your plan. Unlock Pro to see every route.
             </ThemedText>
           </View>
 

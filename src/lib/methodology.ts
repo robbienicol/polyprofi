@@ -52,28 +52,30 @@ export const METHODOLOGY: Record<ProbabilityMethod, MethodologyCopy> = {
       'timeframe. It combines how much the fund has moved day-to-day over roughly the last 90 ' +
       'trading days with a modest assumed return equal to the fund’s own long-run (5-year) trend — ' +
       'capped at 8% per year so we credit its upward tendency without assuming it repeats a recent ' +
-      'boom. It is an estimate of the odds, not a forecast of what will happen.',
+      'boom. It is an estimate of the probability, not a forecast of what will happen.',
     caveats: [
       'The assumed return is capped at 8%/yr — we credit a fund’s long-run tendency but never project a hot streak forward. A fund whose own trend is lower (e.g. bonds) is credited less.',
       'It assumes a normal spread of daily returns, so it understates rare crashes and sharp rallies (real markets have fatter tails).',
       'It is based on recent volatility and past trend, neither of which is a guarantee of the future.',
-      'You keep your capital minus any price decline — this is not a bet you lose entirely.',
+      'You keep your capital minus any price decline — this is not an all-or-nothing position.',
     ],
   },
 
-  // Polymarket, sportsbook lines — a live market consensus, de-vigged.
+  // Polymarket and other prediction markets — a live market consensus, with the
+  // exchange margin removed.
   'market-implied': {
     method: 'market-implied',
-    badge: 'Market consensus',
-    short: "The market's own consensus price, with the house margin stripped out.",
+    badge: 'Market-implied',
+    short: "The market's own consensus price, with the exchange margin removed.",
     long:
-      'This probability comes from live market prices, not from us. We strip out the bookmaker or ' +
-      'exchange margin (the "vig") so the number reflects the true implied probability that real ' +
-      'money currently assigns to the outcome. It updates continuously as the market moves.',
+      'This probability comes from live market prices, not from us. A contract trading at 62¢ is the ' +
+      'market saying the outcome has roughly a 62% chance. We remove the exchange margin so the ' +
+      'number reflects the implied probability that real money currently assigns to the outcome. ' +
+      'It updates continuously as the market moves.',
     caveats: [
       'It reflects the current crowd consensus, which can be wrong and can swing quickly.',
-      'A binary market pays out or it does not — if the outcome misses, you lose the entire stake.',
-      'Thinly-traded markets can have unreliable prices even after de-vigging.',
+      'A binary contract settles at 100 or at 0 — if the outcome resolves against you, the position is worth nothing.',
+      'Thinly-traded markets can have unreliable prices even after the margin is removed.',
     ],
   },
 
@@ -83,7 +85,7 @@ export const METHODOLOGY: Record<ProbabilityMethod, MethodologyCopy> = {
   'bracket-barrier': {
     method: 'bracket-barrier',
     badge: 'Barrier math',
-    short: 'The odds of hitting your sell price before your stop — set by the two prices, not by a forecast.',
+    short: 'The probability of hitting your sell price before your stop — set by the two prices, not by a forecast.',
     long:
       'This probability is not a prediction. A market price is already the market’s best guess at the ' +
       'outcome, so the chance of reaching your sell price before your stop is fixed by where those two ' +
@@ -91,7 +93,7 @@ export const METHODOLOGY: Record<ProbabilityMethod, MethodologyCopy> = {
       'Volatility does not change it. Nor does time — a market that swings wildly touches your sell price ' +
       'more often and your stop more often, in equal measure. We then reduce that number by the chance ' +
       'the trade simply hasn’t closed by your deadline. What the plan actually gives you is a capped ' +
-      'loss and a faster exit, not better odds.',
+      'loss and a faster exit, not a better probability.',
     caveats: [
       'Before costs this plan breaks even by definition — the chance of hitting your sell price first is exactly the chance you need. After the spread it is slightly negative. It is only worth taking if you believe the market price is wrong.',
       'A wilder market is not a better trade. Volatility makes the exit arrive sooner, not more often in your favour.',

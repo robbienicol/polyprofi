@@ -388,7 +388,7 @@ function BetCardInner({ bet, liveStatus, valuation, highlighted, onResolve, onDi
           <View className="flex-row items-baseline gap-1.5">
             <ThemedText style={{ fontSize: 18, fontWeight: '800', color: theme.text, ...MONO }}>{money(valuation?.costBasis ?? bet.amountWagered, { decimals: 0 })}</ThemedText>
             <ThemedText className="flex-1" style={{ fontSize: 12, color: theme.textTertiary }} numberOfLines={1}>
-              {isStock ? 'cost basis' : 'staked'}
+              {isStock ? 'cost basis' : 'invested'}
             </ThemedText>
             <ThemedText style={{ fontSize: 12, color: theme.textTertiary }}>target</ThemedText>
             <ThemedText style={{ fontSize: 13, fontWeight: '700', color: Brand[500], ...MONO }}>{money(targetProfitFor(bet), { decimals: 0, signed: true })}</ThemedText>

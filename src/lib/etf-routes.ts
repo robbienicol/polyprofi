@@ -134,8 +134,8 @@ export function buildEtfRoutes({
         expectedReturn: target, // profit if it hits the target move; capital preserved minus any decline otherwise
         platform: 'Brokerage',
         strategy: realistic
-          ? `A ${etf.bucket} ${instrument} — one of the largest, most liquid names in its class. Odds use its own long-run trend as a modest assumed return (${driftPct.toFixed(1)}%/yr, capped at ${MAX_ASSUMED_ANNUAL_DRIFT_PCT}%), not a promise it repeats.${expenseClause}`
-          : `A ${etf.bucket} ${instrument} — one of the largest, most liquid names in its class. Even crediting a ${driftPct.toFixed(1)}%/yr long-run trend, hitting +${targetPct.toFixed(1)}% this fast is a reach; a longer timeframe raises the odds.${expenseClause}`,
+          ? `A ${etf.bucket} ${instrument} — one of the largest, most liquid names in its class. The probability uses its own long-run trend as a modest assumed return (${driftPct.toFixed(1)}%/yr, capped at ${MAX_ASSUMED_ANNUAL_DRIFT_PCT}%), not a promise it repeats.${expenseClause}`
+          : `A ${etf.bucket} ${instrument} — one of the largest, most liquid names in its class. Even crediting a ${driftPct.toFixed(1)}%/yr long-run trend, hitting +${targetPct.toFixed(1)}% this fast is a reach; a longer timeframe raises the probability.${expenseClause}`,
         maturesInDays: deadlineDays,
         lossProfile: 'partial',
         meetsTarget: realistic,

@@ -240,7 +240,7 @@ export default function HomeScreen(): React.ReactElement {
             Polymarket and supported stocks use refreshed market prices. Savings and Treasury movement is estimated from tracked yield and time to maturity.
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary" className="text-center" style={{ opacity: 0.38 }}>
-            AI-generated · Not financial advice · For entertainment only
+            AI-generated · Not financial advice · Informational only
           </ThemedText>
         </ScrollView>
       </SafeAreaView>

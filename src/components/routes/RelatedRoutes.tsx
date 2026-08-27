@@ -14,7 +14,7 @@ export function RelatedRoutes({ routes, onSelect }: { routes: Route[]; onSelect:
   if (routes.length === 0) return null;
   return (
     <View className="gap-2.5">
-      <ThemedText style={{ fontSize: 15, fontWeight: '800', color: theme.text }}>Related bets</ThemedText>
+      <ThemedText style={{ fontSize: 15, fontWeight: '800', color: theme.text }}>Related routes</ThemedText>
       {routes.map((route) => (
         <Pressable key={route.id} onPress={() => onSelect(route)} className="flex-row items-center gap-3 active:opacity-75" style={{ borderRadius: Radius.lg, backgroundColor: theme.backgroundElement, borderWidth: 1, borderColor: theme.border, padding: 13 }}>
           <ThemedText style={{ fontSize: 22 }}>{route.emoji}</ThemedText>

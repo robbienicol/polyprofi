@@ -329,7 +329,7 @@ function RankPreview({ active }: PreviewProps): React.ReactElement {
         })}
       </Panel>
       <ThemedText style={{ fontSize: 10.5, color: theme.textTertiary, textAlign: 'center', marginTop: 10 }}>
-        Chance · downside · cash required · time to payout
+        Chance · downside · cash required · time to resolve
       </ThemedText>
     </View>
   );

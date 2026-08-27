@@ -60,7 +60,7 @@ function toRoute(candidate: Candidate, params: RouteParams, quality: MarketQuali
     maturesInDays: maturityDays(market.endDate, params.timeframe),
     lossProfile: 'binary',
     meetsTarget: expectedReturn >= params.target,
-    strategy: `Buy ${outcome} near ${cents}¢ and hold to resolution. Maximum loss is the full $${Math.round(params.balance).toLocaleString()} stake. No independent edge is assumed; this score uses the live market price and loss profile.`,
+    strategy: `Buy ${outcome} near ${cents}¢ and hold to resolution. Maximum loss is the full $${Math.round(params.balance).toLocaleString()} you put in. No independent edge is assumed; this score uses the live market price and loss profile.`,
     marketQuality: quality,
     sourceSlug: market.slug,
     sourceEndDate: market.endDate,
@@ -99,7 +99,7 @@ function toSwingRoute(
   // the risk level printed next to it on the same card.
   const lossProfile = bracketLossProfile(plan.effectiveLossFraction);
   const maxLossPct = Math.round(plan.effectiveLossFraction * 100);
-  const stake = Math.round(params.balance).toLocaleString();
+  const capital = Math.round(params.balance).toLocaleString();
 
   return {
     id: `${stableId(market, outcome)}-swing`,
@@ -109,8 +109,8 @@ function toSwingRoute(
       `Trade ${outcome} on “${market.question}”: buy near ${plan.entryCents}¢, sell at ` +
       `${plan.takeProfitCents}¢, stop at ${plan.stopCents}¢ — the stop caps the loss at about ` +
       (lossProfile === 'partial'
-        ? `${maxLossPct}% of your stake instead of all of it.`
-        : `${maxLossPct}% of your stake — the book is too thin for the stop to be relied on.`),
+        ? `${maxLossPct}% of your capital instead of all of it.`
+        : `${maxLossPct}% of your capital — the book is too thin for the stop to be relied on.`),
     riskLevel,
     probability: Math.round(plan.successProbability),
     expectedReturn,
@@ -126,7 +126,7 @@ function toSwingRoute(
       `you need ${plan.breakevenProbability}% just to break even, so the ${plan.roundTripCostCents}¢ round-trip ` +
       `spread is a ${Math.abs(plan.costEdgePts).toFixed(1)}-point drag and there is no edge here without a view ` +
       `the market is wrong. What the plan does buy you: the stop caps the loss near ` +
-      `$${Math.round(params.balance * plan.effectiveLossFraction).toLocaleString()} of your $${stake} ` +
+      `$${Math.round(params.balance * plan.effectiveLossFraction).toLocaleString()} of your $${capital} ` +
       `instead of all of it, and the position typically closes in about ${plan.expectedExitDays}d rather ` +
       `than waiting for the contract to resolve.`,
     marketQuality: quality,
@@ -213,7 +213,7 @@ export function buildPolymarketRoutes(
 export function __selfCheck(): void {
   console.assert(polymarketRiskLevel(90) === 2, '90% contract belongs in the high-confidence band');
   console.assert(polymarketRiskLevel(70) === 3, '70% contract belongs in the balanced-high band');
-  console.assert(polymarketRiskLevel(50) === 4, '50% contract is aggressive because the full stake is at risk');
+  console.assert(polymarketRiskLevel(50) === 4, '50% contract is aggressive because the full amount is at risk');
   console.assert(polymarketRiskLevel(20) === 5, '20% contract is a long shot');
 
   // Relative, not a literal date: a hard-coded end date silently drifts into the past and

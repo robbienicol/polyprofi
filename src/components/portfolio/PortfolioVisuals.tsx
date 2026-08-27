@@ -63,7 +63,7 @@ export function AllocationDonut({
   rows: AllocationRow[];
   size?: number;
   thickness?: number;
-  /** Small label under the centred value, e.g. "staked". */
+  /** Small label under the centred value, e.g. "invested". */
   caption?: string;
   value?: string;
 }): React.ReactElement {
