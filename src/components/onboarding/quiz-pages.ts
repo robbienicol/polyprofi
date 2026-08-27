@@ -92,13 +92,16 @@ export const AMOUNTS = [
   { label: SKIP, note: "We'll ask on each search instead" },
 ] as const;
 
+/**
+ * Only classes the search can actually route to. Sports markets and Currencies used to
+ * sit here and mapped onto categories nothing builds, so picking either narrowed the
+ * search to nothing — see SEARCH_CATEGORY_BY_MARKET in @/lib/onboarding-profile.
+ */
 export const MARKETS = [
   { label: 'Stocks & ETFs', emoji: '📈' },
   { label: 'Savings & T-bills', emoji: '🏦' },
   { label: 'Crypto', emoji: '₿' },
   { label: 'Prediction markets', emoji: '🔮' },
-  { label: 'Sports markets', emoji: '🏈' },
-  { label: 'Currencies', emoji: '💱' },
 ] as const;
 
 /** Both mid-quiz loaders fill three bars. Labels are built from the answers. */
@@ -151,7 +154,7 @@ const EXPERIENCE_ACKS: Record<string, string> = {
 };
 
 const LOSS_ACKS: Record<LossReaction, string> = {
-  sell: "Knowing that about yourself is worth a lot. We'll start where the payout is fixed.",
+  sell: "Knowing that about yourself is worth a lot. We'll start where the return is fixed.",
   hold: "That patience is an advantage. Slower picks suit you.",
   buy: "You can sit through a swing, so the sharper end stays on the table.",
   unsure: "Nobody knows until it happens. We'll show you the downside before you commit, not after.",

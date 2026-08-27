@@ -61,13 +61,19 @@ const UNNAMED_GOAL_EMOJI = '⚡';
 /**
  * `value` must stay in sync with QUIZ_TO_ROUTE_CATEGORIES in lib/quiz-profile —
  * it's the string the route filter matches on.
+ *
+ * Only classes something actually builds routes for belong here. Sports and Forex were
+ * offered for a long time and nothing ever emitted a route in either: Forex has no
+ * builder at all, and "Sports" mapped onto the whole Polymarket pool, so picking it
+ * narrowed nothing. Sport is still reachable — as a topic facet on prediction markets,
+ * where the routes genuinely are — but it is not an asset class of its own.
  */
 const MARKETS = [
-  { value: 'Polymarket', word: 'Polymarket', label: 'Polymarket', emoji: '🔮' },
-  { value: 'Sports Predictions', word: 'sports', label: 'Sports', emoji: '🏈' },
+  // `word` goes into the sentence, which joins picks with "&" — so no entry may
+  // carry its own conjunction, or two markets read as "stocks & treasuries & crypto".
+  { value: 'Stocks', word: 'stocks', label: 'Stocks, ETFs & T-bills', emoji: '📈' },
   { value: 'Crypto', word: 'crypto', label: 'Crypto', emoji: '₿' },
-  { value: 'Stocks', word: 'stocks', label: 'Stocks', emoji: '📈' },
-  { value: 'Forex', word: 'forex', label: 'Forex', emoji: '💱' },
+  { value: 'Polymarket', word: 'prediction markets', label: 'Prediction markets', emoji: '🔮' },
 ] as const;
 
 /** One tap to the amounts most people actually pick, so the keyboard is optional. */
@@ -380,6 +386,8 @@ function QuizForm({
                 phone and simply collapse to nothing on a short one. */}
             <View style={{ flexGrow: 1, minHeight: 4 }} />
 
+            <SectionRule label="Your plan" />
+
             <Group label="Willing to invest" hint="Your ceiling — a route never uses more">
               <View
                 className="flex-row items-center"
@@ -485,6 +493,11 @@ function QuizForm({
               </View>
             </Group>
 
+            {/* Money questions above the rule, market questions below it. They were one
+                unbroken run of identical pills, which read as a single form: how much,
+                then what to put it on. They are different decisions and the rule says so. */}
+            <SectionRule label="Where we look" />
+
             <Group label="Markets" hint="Leave blank for everything">
               <View className="flex-row flex-wrap" style={{ gap: 8 }}>
                 <Chip
@@ -545,6 +558,24 @@ function QuizForm({
 /** A value the pickers wrote into the sentence. */
 function Answer({ children }: React.PropsWithChildren): React.ReactElement {
   return <ThemedText style={{ fontSize: 24, lineHeight: 34, fontWeight: '800', color: Brand[500] }}>{children}</ThemedText>;
+}
+
+/**
+ * A labelled divider between the two halves of the form. The money questions and the
+ * market question are separate decisions, and running them together as one column of
+ * identical pills made "how much" and "what on" read as a single ticket being filled in.
+ */
+function SectionRule({ label }: { label: string }): React.ReactElement {
+  const theme = useTheme();
+  return (
+    <View className="flex-row items-center" style={{ gap: 10, marginTop: 2 }}>
+      <View style={{ flex: 1, height: 1, backgroundColor: theme.border }} />
+      <ThemedText style={{ fontSize: 10.5, fontWeight: '900', letterSpacing: 1, color: theme.textTertiary }}>
+        {label.toUpperCase()}
+      </ThemedText>
+      <View style={{ flex: 1, height: 1, backgroundColor: theme.border }} />
+    </View>
+  );
 }
 
 function Group({ label, hint, children }: React.PropsWithChildren<{ label: string; hint?: string }>): React.ReactElement {

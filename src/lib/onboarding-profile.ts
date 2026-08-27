@@ -165,14 +165,17 @@ function sanitizeAnswers(value: unknown): SurveyAnswers {
  * Onboarding market labels mapped onto the values the route filter matches on
  * (see QUIZ_TO_ROUTE_CATEGORIES in lib/quiz-profile). Savings and stocks share a
  * bucket because the route category "Stocks" already covers treasuries.
+ *
+ * Every key must map to a class a builder emits. A profile saved before Sports markets
+ * and Currencies were dropped still carries those labels; they map to nothing now and
+ * `filter(Boolean)` below drops them, which is the right answer — the search widens to
+ * everything rather than narrowing to a class that has no routes.
  */
 const SEARCH_CATEGORY_BY_MARKET: Record<string, string> = {
   'Stocks & ETFs': 'Stocks',
   'Savings & T-bills': 'Stocks',
   Crypto: 'Crypto',
   'Prediction markets': 'Polymarket',
-  'Sports markets': 'Sports Predictions',
-  Currencies: 'Forex',
 };
 
 /**

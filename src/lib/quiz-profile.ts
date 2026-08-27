@@ -31,13 +31,17 @@ export function enforceRouteIntegrity(routes: Route[], target: number): Route[] 
   });
 }
 
-/** Map quiz market picks → route card categories from the AI. */
+/**
+ * Map quiz market picks → the route categories the builders actually emit.
+ *
+ * One entry per class that produces routes, and no more. An unmapped pick falls through
+ * to matching on its own name, which for a class nothing builds means an empty list —
+ * so a category listed here that no builder emits is a promise the search cannot keep.
+ */
 const QUIZ_TO_ROUTE_CATEGORIES: Record<string, string[]> = {
-  'Sports Predictions': ['Sports Betting', 'Sports', 'Polymarket'],
   Polymarket: ['Polymarket'],
   Crypto: ['Crypto'],
   Stocks: ['Stocks & ETFs', 'Stocks', 'Savings & Treasuries'],
-  Forex: ['Forex'],
 };
 
 const LONG_TIMEFRAMES = new Set<QuizAnswers['timeframe']>(['1year', '5years']);
@@ -213,10 +217,11 @@ function routeMatchesCategories(route: Route, quizCategories: string[]): boolean
  *   1) riskLevel ascending — the primary sort key.
  *   2) lossProfile — at the same riskLevel, capital-preserved ('partial') always beats
  *      all-or-nothing ('binary'). A stock that doesn't hit target still has your money;
- *      a losing sports/Polymarket bet doesn't. That asymmetry outranks raw odds.
+ *      a contract that resolves against you doesn't. That asymmetry outranks raw
+ *      probability.
  *   3) probability descending — last tiebreaker (and what the bar graph shows).
  * Exported so every screen that lists routes ranks them identically — duplicating this
- * comparator elsewhere is how a screen quietly ends up sorted "best odds first" instead.
+ * comparator elsewhere is how a screen quietly ends up sorted "highest chance first".
  */
 function sortSafestFirst(routes: Route[]): Route[] {
   return [...routes].sort((a, b) => {
