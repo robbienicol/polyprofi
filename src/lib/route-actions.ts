@@ -4,8 +4,8 @@ import { tradeUrlsFor } from '@/lib/acquisition-routing';
 import type { TradeDestination, TradeDestinationOptions } from '@/lib/acquisition-routing';
 import type { Route } from '@/types/routes';
 
-export { preferredTradeDestination, tradeDestinationLabel } from '@/lib/acquisition-routing';
-export type { TradeDestination, TradeDestinationOptions } from '@/lib/acquisition-routing';
+export { preferredTradeDestination, tradeDestinationLabel, tradeVenuesForRoute } from '@/lib/acquisition-routing';
+export type { TradeDestination, TradeDestinationOptions, TradeVenue } from '@/lib/acquisition-routing';
 
 export async function openTradeDestination(
   route: Route,

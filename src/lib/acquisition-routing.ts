@@ -115,6 +115,67 @@ function kalshiCategoryUrl(route: Route): string {
   return 'https://kalshi.com/browse';
 }
 
+/** One place the user can open this route, and what it costs there. */
+export interface TradeVenue {
+  destination: TradeDestination;
+  label: string;
+  /**
+   * Net-of-fee price to enter this side at this venue, in cents. Null when we hold no
+   * comparable quote — a single-venue route has nothing to be cheap or expensive against.
+   */
+  priceCents: number | null;
+  /** Cheapest venue carrying a quote. Never set when there is only one venue, or on a tie. */
+  cheapest: boolean;
+}
+
+/**
+ * Every venue that can actually fill this route, cheapest first.
+ *
+ * Only a Polymarket contract we have matched to a Kalshi market has a second venue: the
+ * same outcome, two order books, two prices. Everything else has exactly one place it can
+ * be bought, and returning a one-entry list keeps the caller from special-casing that.
+ *
+ * The ordering IS the recommendation, and it is safe to make because it ranks venues on a
+ * like-for-like price for an identical contract — not instruments against each other. Note
+ * that neither Polymarket nor Kalshi carries an affiliate link (only Robinhood does, and it
+ * is never a venue here), so nothing but price decides the order.
+ *
+ * `comparison` is structural on purpose: @/lib/market-comparison pulls in network clients,
+ * and this module has no business importing those to describe its own return type.
+ */
+export function tradeVenuesForRoute(
+  route: Route,
+  preferredPlatforms: AcquisitionPlatform[] | undefined,
+  comparison: {
+    polymarketPrice: number;
+    kalshiPrice: number;
+    betterPlatform: 'polymarket' | 'kalshi' | 'tie';
+  } | null,
+): TradeVenue[] {
+  const single = (destination: TradeDestination): TradeVenue[] => [
+    { destination, label: tradeDestinationLabel(destination), priceCents: null, cheapest: false },
+  ];
+  if (!comparison || nativeVenue(route) !== 'polymarket') {
+    return single(preferredTradeDestination(route, preferredPlatforms));
+  }
+  const venues: TradeVenue[] = [
+    {
+      destination: 'polymarket',
+      label: tradeDestinationLabel('polymarket'),
+      priceCents: Math.round(comparison.polymarketPrice * 100),
+      cheapest: comparison.betterPlatform === 'polymarket',
+    },
+    {
+      destination: 'kalshi',
+      label: tradeDestinationLabel('kalshi'),
+      priceCents: Math.round(comparison.kalshiPrice * 100),
+      cheapest: comparison.betterPlatform === 'kalshi',
+    },
+  ];
+  // Cheapest first, and a tie leaves the native venue in front rather than shuffling.
+  return [...venues].sort((a, b) => Number(b.cheapest) - Number(a.cheapest));
+}
+
 export function tradeUrlsFor(
   route: Route,
   destination: TradeDestination,
@@ -191,6 +252,41 @@ export function __selfCheck(): void {
   console.assert(
     tradeUrlsFor(stock, 'robinhood')[0].includes('/stocks/VOO'),
     'stock routes open the exact Robinhood symbol',
+  );
+
+  // ── venue list ────────────────────────────────────────────────────────────
+  const cheaperOnKalshi = { polymarketPrice: 0.62, kalshiPrice: 0.59, betterPlatform: 'kalshi' as const };
+  const bothVenues = tradeVenuesForRoute(prediction, undefined, cheaperOnKalshi);
+  console.assert(
+    bothVenues.length === 2 && bothVenues[0].destination === 'kalshi' && bothVenues[0].cheapest,
+    'a matched contract lists both venues with the cheaper one first',
+  );
+  console.assert(
+    bothVenues[0].priceCents === 59 && bothVenues[1].priceCents === 62,
+    'each venue reports its own net price in cents',
+  );
+  console.assert(
+    bothVenues.filter((venue) => venue.cheapest).length === 1,
+    'exactly one venue is flagged cheapest',
+  );
+  const tied = tradeVenuesForRoute(prediction, undefined, {
+    polymarketPrice: 0.6, kalshiPrice: 0.6, betterPlatform: 'tie',
+  });
+  console.assert(
+    tied.length === 2 && tied[0].destination === 'polymarket' && tied.every((venue) => !venue.cheapest),
+    'a tie flags nothing and leaves the native venue first',
+  );
+  console.assert(
+    tradeVenuesForRoute(prediction, undefined, null).length === 1,
+    'with no cross-platform match the route keeps its single venue',
+  );
+  console.assert(
+    tradeVenuesForRoute(stock, ['robinhood'], cheaperOnKalshi)[0].destination === 'robinhood',
+    'a stock is never given prediction-market venues, even when a comparison is passed',
+  );
+  console.assert(
+    tradeVenuesForRoute(stock, ['robinhood'], null)[0].priceCents === null,
+    'a single-venue route quotes no price — there is nothing to compare it against',
   );
 
   // ── cash instruments ──────────────────────────────────────────────────────

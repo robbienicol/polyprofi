@@ -23,7 +23,9 @@ import {
   openTradeDestination,
   preferredTradeDestination,
   tradeDestinationLabel,
+  tradeVenuesForRoute,
 } from "@/lib/route-actions";
+import type { TradeVenue } from "@/lib/route-actions";
 import { rescoreForStake, stakeNeededForReturn } from "@/lib/stake-rescore";
 import { trackedPositionFields } from "@/lib/tracked-assets";
 
@@ -129,6 +131,13 @@ export default function RouteDetailScreen(): React.ReactElement {
     kalshiEventTicker: comparison?.kalshiEventTicker,
     kalshiSeriesTicker: comparison?.kalshiSeriesTicker,
   };
+  // One entry for most routes; two when the same contract is listed on Kalshi as well,
+  // cheapest first.
+  const venues = tradeVenuesForRoute(
+    route,
+    batch?.quizSnapshot.preferredPlatforms,
+    comparison,
+  );
 
   function beginAcquire(): void {
     if (added || isTracking) return;
@@ -151,7 +160,9 @@ export default function RouteDetailScreen(): React.ReactElement {
     const openedAt = new Date().toISOString();
     trackBet(
       {
-        id: `${route.id}-${Date.now()}`,
+        // Derived from openedAt rather than a second clock read, so the id and the
+        // recorded open time can never disagree.
+        id: `${route.id}-${new Date(openedAt).getTime()}`,
         // The goal comes from the saved search that produced this route, so a
         // position opened from a deep link days later still lands on the right one.
         goalId: routeGoalId,
@@ -271,7 +282,7 @@ export default function RouteDetailScreen(): React.ReactElement {
                 marginBottom: 4,
               }}
             >
-              THE PLAY
+              THE PLAN
             </ThemedText>
             <ThemedText
               style={{ fontSize: 13.5, color: theme.text, lineHeight: 20 }}
@@ -280,11 +291,28 @@ export default function RouteDetailScreen(): React.ReactElement {
             </ThemedText>
           </View>
 
-          <View className="flex-row gap-2">
-            <TradeLink
-              label={`Open ${tradeDestinationLabel(destination)} ↗`}
-              onPress={() => openTradeDestination(route, destination, destinationOptions)}
-            />
+          {/* Every venue that lists this exact contract, not just the one we would have
+              picked. Two order books on the same outcome genuinely differ in price, and
+              showing both turns the CTA from "act here" into "here is where you can look
+              at this, and here is what it costs at each". */}
+          <View style={{ gap: 8 }}>
+            <View className="flex-row" style={{ gap: 8 }}>
+              {venues.map((venue) => (
+                <TradeLink
+                  key={venue.destination}
+                  venue={venue}
+                  onPress={() => openTradeDestination(route, venue.destination, destinationOptions)}
+                />
+              ))}
+            </View>
+            {venues.length > 1 ? (
+              <ThemedText
+                style={{ fontSize: 11, lineHeight: 16, color: theme.textTertiary, textAlign: "center" }}
+              >
+                Same contract on both venues, priced net of estimated fees. Ranked on price
+                alone — Pathey earns nothing from either.
+              </ThemedText>
+            ) : null}
           </View>
 
           <RouteCoach route={route} />
@@ -314,7 +342,7 @@ export default function RouteDetailScreen(): React.ReactElement {
               marginTop: 4,
             }}
           >
-            AI-generated · Not financial advice · For entertainment only
+            AI-generated · Not financial advice · Informational only
           </ThemedText>
         </ScrollView>
       </SafeAreaView>
@@ -323,31 +351,51 @@ export default function RouteDetailScreen(): React.ReactElement {
 }
 
 function TradeLink({
-  label,
+  venue,
   onPress,
 }: {
-  label: string;
+  venue: TradeVenue;
   onPress: () => void;
 }): React.ReactElement {
   const theme = useTheme();
   return (
     <Pressable
       onPress={onPress}
+      accessibilityRole="link"
+      accessibilityLabel={
+        venue.priceCents != null
+          ? `Open ${venue.label}, ${venue.priceCents} cents${venue.cheapest ? ", cheapest" : ""}`
+          : `Open ${venue.label}`
+      }
       className="flex-1 active:opacity-75"
       style={{
         borderRadius: Radius.md,
-        paddingVertical: 11,
+        paddingVertical: 10,
+        paddingHorizontal: 8,
         alignItems: "center",
-        backgroundColor: theme.backgroundElement,
+        gap: 2,
+        backgroundColor: venue.cheapest ? Brand[500] + "14" : theme.backgroundElement,
         borderWidth: 1,
-        borderColor: theme.border,
+        borderColor: venue.cheapest ? Brand[500] : theme.border,
       }}
     >
       <ThemedText
         style={{ fontSize: 13, fontWeight: "800", color: Brand[500] }}
       >
-        {label}
+        Open {venue.label} ↗
       </ThemedText>
+      {venue.priceCents != null ? (
+        <ThemedText
+          style={{
+            fontSize: 11,
+            fontWeight: "700",
+            color: venue.cheapest ? Brand[500] : theme.textTertiary,
+            fontVariant: ["tabular-nums"],
+          }}
+        >
+          {venue.priceCents}¢{venue.cheapest ? " · cheapest" : ""}
+        </ThemedText>
+      ) : null}
     </Pressable>
   );
 }
