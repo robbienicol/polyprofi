@@ -1,4 +1,4 @@
-import { useAuth } from '@clerk/clerk-expo';
+import { useAuth, useUser } from '@clerk/clerk-expo';
 import { Href, Redirect } from 'expo-router';
 
 import { useOnboarding } from '@/api/hooks/useOnboarding';
@@ -8,9 +8,11 @@ import { useEarlyAccess } from '@/api/hooks/useEarlyAccess';
 import { useSavingsGoal } from '@/api/hooks/useSavingsGoal';
 import { useUserProfile } from '@/api/hooks/useUserProfile';
 import { BrandLoader } from '@/components/ui/loaders';
+import { isTesterEmail } from '@/lib/early-access';
 
 export default function Index(): React.ReactElement {
   const { isLoaded, isSignedIn } = useAuth();
+  const { user } = useUser();
   const { hasCompletedOnboarding, isLoading: onboardingLoading } = useOnboarding();
   const { isLoading: localProfileLoading } = useOnboardingProfile();
   const { replaying, isLoading: replayLoading } = useDevReplayFunnel();
@@ -42,7 +44,10 @@ export default function Index(): React.ReactElement {
   // Invite wall. Deliberately after sign-in: an account on its own does not open
   // the app during early access, the code does. Skipped under the dev auth
   // bypass, which exists precisely to get past gates like this one.
-  if (!bypassAuth) {
+  // Tester accounts on our own domain skip it too — getting straight in is the
+  // entire reason those accounts exist.
+  const isTester = isTesterEmail(user?.primaryEmailAddress?.emailAddress);
+  if (!bypassAuth && !isTester) {
     if (earlyAccessLoading) return <BrandLoader subtitle="Loading…" />;
     if (!hasEarlyAccess) return <Redirect href={'/early-access' as Href} />;
   }
