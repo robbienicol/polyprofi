@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { clearDevReplayFunnel, getDevReplayFunnel } from '@/api/client/storage';
+import { deviceQuery } from '@/api/query-client';
 
 function replayKey() {
   return ['DEV_REPLAY_FUNNEL'] as const;
@@ -22,11 +23,14 @@ export function useDevReplayFunnel() {
     queryFn: getDevReplayFunnel,
     // Never true outside a dev build — the flag can only be set from one.
     enabled: __DEV__,
+    ...deviceQuery,
   });
 
   const { mutate: finishReplay } = useMutation({
     mutationFn: clearDevReplayFunnel,
-    onSuccess: () => queryClient.setQueryData(replayKey(), false),
+    onMutate: () => {
+      queryClient.setQueryData(replayKey(), false);
+    },
   });
 
   return {

@@ -8,7 +8,7 @@ import {
   useFonts,
 } from '@expo-google-fonts/plus-jakarta-sans';
 import { ClerkProvider } from '@clerk/clerk-expo';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import * as Notifications from 'expo-notifications';
 import * as SplashScreen from 'expo-splash-screen';
 import { Stack, router, usePathname, type Href } from 'expo-router';
@@ -21,13 +21,13 @@ import { useSavingsGoal } from '@/api/hooks/useSavingsGoal';
 import { AppLockGate } from '@/components/auth/AppLockGate';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { OfflineBanner } from '@/components/OfflineBanner';
+import { getQueryClient } from '@/api/query-client';
 import { clerkTokenCache } from '@/lib/clerk-cache';
 import { useGainAlerts } from '@/api/hooks/useGainAlerts';
 import { shouldPresentCelebration } from '@/lib/savings-goal';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
-const queryClient = new QueryClient();
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ?? '';
 
 function useNotificationObserver() {
@@ -85,6 +85,7 @@ function GoalCelebrationGate(): null {
 
 export default function RootLayout(): React.ReactElement | null {
   useColorScheme(); // subscribe to color scheme changes
+  const queryClient = getQueryClient();
   useNotificationObserver();
 
   // The display face ships with the bundle, so this resolves on the first frame

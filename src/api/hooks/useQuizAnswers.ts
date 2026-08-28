@@ -2,6 +2,7 @@ import { useAuth } from '@clerk/clerk-expo';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { clearQuizAnswers, getQuizAnswers, setQuizAnswers } from '@/api/client/storage';
+import { deviceQuery } from '@/api/query-client';
 import { apiBaseUrl } from '@/lib/api-base-url';
 import { isQuizAnswers, isRecord, responseJson } from '@/lib/runtime-validation';
 import type { QuizAnswers } from '@/types/bets';
@@ -62,6 +63,9 @@ export function useQuizAnswers() {
         return local;
       }
     },
+    // Answers only change through the mutations below, both of which write the
+    // cache themselves. Refetching on every mount just re-ran the backend sync.
+    ...deviceQuery,
   });
 
   const { mutate: saveAnswers } = useMutation({
@@ -85,7 +89,17 @@ export function useQuizAnswers() {
       }
       return answers;
     },
-    onSuccess: (answers) => queryClient.setQueryData(queryKey, answers),
+    // The routes screen reads these answers the instant the quiz navigates away,
+    // and the backend sync inside mutationFn can take a second on a bad network.
+    onMutate: async (answers) => {
+      await queryClient.cancelQueries({ queryKey });
+      const previous = queryClient.getQueryData<QuizAnswers | null>(queryKey);
+      queryClient.setQueryData(queryKey, answers);
+      return { previous };
+    },
+    onError: (_error, _answers, context) => {
+      queryClient.setQueryData(queryKey, context?.previous ?? null);
+    },
   });
 
   const { mutate: resetQuiz } = useMutation({
@@ -96,7 +110,16 @@ export function useQuizAnswers() {
         if (!response.ok) throw new Error(`Failed to reset quiz answers (${response.status})`);
       }
     },
-    onSuccess: () => queryClient.setQueryData(queryKey, null),
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey });
+      const previous = queryClient.getQueryData<QuizAnswers | null>(queryKey);
+      queryClient.setQueryData(queryKey, null);
+      return { previous };
+    },
+    // A failed reset must not leave the app claiming the quiz was never taken.
+    onError: (_error, _input, context) => {
+      queryClient.setQueryData(queryKey, context?.previous ?? null);
+    },
   });
 
   return {

@@ -122,11 +122,11 @@ export default function QuizScreen(): React.ReactElement {
   const goalsProgress = useGoalsProgress(allGoals);
   // What the user said they can put in, from the profile survey. Null when they
   // skipped it, which leaves the stake goal-derived exactly as before.
-  const { profile } = useUserProfile();
+  const { profile, isLoading: profileLoading } = useUserProfile();
   // The markets they said they were drawn to, minus the ones they ruled out.
   // Only a starting point for the first search — a prefill from a previous
   // search is what they last actually chose, so it wins.
-  const { profile: onboarding } = useOnboardingProfile();
+  const { profile: onboarding, isLoading: onboardingLoading } = useOnboardingProfile();
 
   const prefill = quizAnswers ?? history[0]?.quizSnapshot;
   // The goal of the last search, so returning to the quiz resumes what you were
@@ -134,7 +134,11 @@ export default function QuizScreen(): React.ReactElement {
   const lastSearchGoalId = goalId ?? history[0]?.goalId;
   const startingGoal = defaultQuizGoal(allGoals, lastSearchGoalId);
 
-  if (quizLoading || historyLoading || preferencesLoading || goalsLoading) return <View className="flex-1" />;
+  // The survey answers seed the form's own state, and `formKey` does not name
+  // them — so a form mounted before they arrive keeps the defaults for good.
+  if (quizLoading || historyLoading || preferencesLoading || goalsLoading || profileLoading || onboardingLoading) {
+    return <View className="flex-1" />;
+  }
   const formKey = `${startingGoal?.id ?? 'none'}-${prefill?.target ?? 0}-${prefill?.timeframe ?? ''}`;
   return (
     <QuizForm

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { getProfileCompleted, setProfileCompleted } from '@/api/client/storage';
 import type { UserProfilePayload } from '@/app/api/profile+api';
+import { deviceQuery } from '@/api/query-client';
 import { apiBaseUrl } from '@/lib/api-base-url';
 
 export interface UserProfileInput {
@@ -13,6 +14,12 @@ export interface UserProfileInput {
   marketsInterested: string[];
   signupReason: string | null;
   investmentAmount: string | null;
+}
+
+interface ProfileQueryData {
+  payload: UserProfilePayload | null;
+  completed: boolean;
+  reachable: boolean;
 }
 
 function profileQueryKey(userId: string | null | undefined) {
@@ -47,7 +54,7 @@ export function useUserProfile() {
 
   const { data, status } = useQuery({
     queryKey: profileQueryKey(userId),
-    queryFn: async (): Promise<{ payload: UserProfilePayload | null; completed: boolean; reachable: boolean }> => {
+    queryFn: async (): Promise<ProfileQueryData> => {
       const cached = await getProfileCompleted(userId ?? undefined);
       try {
         const response = await authedFetch('/api/profile', await getToken());
@@ -62,6 +69,9 @@ export function useUserProfile() {
       }
     },
     enabled: ready,
+    // Completion only moves one way, and it moves through saveProfile below.
+    // Re-asking the server on every mount is what made the survey gate blink.
+    ...deviceQuery,
   });
 
   const { mutate: saveProfile, isPending: isSaving } = useMutation({
@@ -74,13 +84,31 @@ export function useUserProfile() {
       if (!response.ok) throw new Error(`Failed to save profile (${response.status})`);
       return response.json();
     },
+    // The survey navigates straight to the next gate on submit, and that gate
+    // reads `hasCompletedProfile`. Marking it done here is what stops the user
+    // being handed back the survey they just finished.
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: profileQueryKey(userId) });
+      const previous = queryClient.getQueryData<ProfileQueryData>(profileQueryKey(userId));
+      queryClient.setQueryData(profileQueryKey(userId), {
+        payload: previous?.payload ?? null,
+        completed: true,
+        // Not an answer from the server yet — say so, so a failure downstream
+        // is treated as "unknown" rather than as a confirmed incomplete.
+        reachable: previous?.reachable ?? false,
+      } satisfies ProfileQueryData);
+      return { previous };
+    },
+    onError: (_error, _input, context) => {
+      queryClient.setQueryData(profileQueryKey(userId), context?.previous);
+    },
     onSuccess: async (payload) => {
       if (payload.completed) await setProfileCompleted(true, userId ?? undefined);
       queryClient.setQueryData(profileQueryKey(userId), {
         payload,
         completed: payload.completed,
         reachable: true,
-      });
+      } satisfies ProfileQueryData);
     },
   });
 

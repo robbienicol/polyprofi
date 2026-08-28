@@ -92,11 +92,27 @@ function ProgressTrack({
   );
 }
 
+/**
+ * Holds the carousel until the stored profile has been read.
+ *
+ * The name slide seeds a text input from that profile, and `useState` only ever
+ * looks at its argument on the first render — so mounting before the read
+ * resolved left a returning user looking at an empty field with their name
+ * already on disk. The wait is a local read, not a network one.
+ */
 export default function OnboardingScreen(): React.ReactElement {
+  const theme = useTheme();
+  const { profile, isLoading } = useOnboardingProfile();
+
+  if (isLoading) return <View className="flex-1" style={{ backgroundColor: theme.background }} />;
+  return <OnboardingCarousel initialName={profile.name} />;
+}
+
+function OnboardingCarousel({ initialName }: { initialName: string }): React.ReactElement {
   const theme = useTheme();
   const router = useRouter();
   const { completeOnboarding, isCompleting } = useOnboarding();
-  const { profile, patchProfile } = useOnboardingProfile();
+  const { patchProfile } = useOnboardingProfile();
   // Slides live side by side on one long track, and advancing carries the track
   // sideways. This used to be a paging ScrollView, which reads better — you can
   // swipe it — but three separate React Native Web behaviours make a scroll-driven
@@ -109,7 +125,7 @@ export default function OnboardingScreen(): React.ReactElement {
   const [listHeight, setListHeight] = useState(0);
   // Held locally through the carousel and written on the way out, so a keystroke
   // is not a disk write.
-  const [name, setName] = useState(profile.name);
+  const [name, setName] = useState(initialName);
   // Width has to come from the hook, not module-level Dimensions: on web's static
   // render pass it is 0, which collapses every slide and breaks the interpolations.
   const { width, height } = useWindowDimensions();

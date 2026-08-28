@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as LocalAuthentication from 'expo-local-authentication';
 
 import { getBiometricLockEnabled, setBiometricLockEnabled } from '@/api/client/storage';
+import { deviceQuery } from '@/api/query-client';
 
 function biometricLockQueryKey() {
   return ['BIOMETRIC_LOCK'] as const;
@@ -20,15 +21,27 @@ export function useBiometricLock() {
   const { data: capability } = useQuery({
     queryKey: ['BIOMETRIC_CAPABILITY'],
     queryFn: getCapability,
+    // Hardware doesn't change while the app is open.
+    ...deviceQuery,
   });
 
   const { data: enabled, status } = useQuery({
     queryKey: biometricLockQueryKey(),
     queryFn: getBiometricLockEnabled,
+    ...deviceQuery,
   });
 
   const { mutate: setEnabled } = useMutation({
     mutationFn: setBiometricLockEnabled,
+    // The Switch has to move on the frame it is tapped, not when the disk agrees.
+    onMutate: (enabled) => {
+      const previous = queryClient.getQueryData<boolean>(biometricLockQueryKey());
+      queryClient.setQueryData(biometricLockQueryKey(), enabled);
+      return { previous };
+    },
+    onError: (_error, _enabled, context) => {
+      queryClient.setQueryData(biometricLockQueryKey(), context?.previous ?? false);
+    },
     onSettled: () => queryClient.invalidateQueries({ queryKey: biometricLockQueryKey() }),
   });
 

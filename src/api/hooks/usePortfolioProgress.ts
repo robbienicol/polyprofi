@@ -7,6 +7,7 @@ import {
   PortfolioProgressPoint,
   recordPortfolioProgress,
 } from '@/api/client/storage';
+import { deviceQuery } from '@/api/query-client';
 import { useBetMonitoring } from '@/api/hooks/useBetMonitoring';
 import { useTrackedBets } from '@/api/hooks/useTrackedBets';
 import { calculatePortfolioProgress, stockIdentity } from '@/lib/portfolio-progress';
@@ -93,6 +94,9 @@ export function usePortfolioProgress(fallbackBalance: number, options: Portfolio
   const historyQuery = useQuery({
     queryKey: PROGRESS_QUERY_KEY,
     queryFn: getPortfolioProgress,
+    // The series only ever grows through the recorder below, which writes the
+    // cache itself. Re-reading it from disk on every mount redrew the chart.
+    ...deviceQuery,
   });
 
   const snapshot = useMemo(() => {

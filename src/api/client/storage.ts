@@ -46,7 +46,9 @@ const KEYS = {
   ALERT_LEDGER: 'polyprofit:alertLedger',
 } as const;
 
-const MAX_SAVED_BATCHES = 10;
+/** How many generated batches the device keeps. Exported so the optimistic
+ * cache write in useSavedRoutes trims to exactly what the disk will hold. */
+export const MAX_SAVED_BATCHES = 10;
 
 export interface PortfolioProgressPoint {
   time: number;
