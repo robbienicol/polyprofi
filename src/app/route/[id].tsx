@@ -5,6 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { timeframeCalendarDays } from "@/api/client/playbook";
 import { useMarketComparison } from "@/api/hooks/useMarketComparison";
+import { useRoutePreview } from "@/api/hooks/useRoutePreview";
 import { useSavedRoutes } from "@/api/hooks/useSavedRoutes";
 import { usePreferences } from "@/api/hooks/usePreferences";
 import { useSavingsGoal } from "@/api/hooks/useSavingsGoal";
@@ -16,6 +17,7 @@ import { RouteOpportunityCard } from "@/components/routes/RouteOpportunityCard";
 import { ScoreMathCard } from "@/components/routes/ScoreMathCard";
 import { TrackRouteForm } from "@/components/routes/TrackRouteForm";
 import { ThemedText } from "@/components/themed-text";
+import { BrandLoader } from "@/components/ui/loaders";
 import { KEYBOARD_AWARE_SCROLL_PROPS } from "@/constants/keyboard";
 import { Brand, Radius, Semantic } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
@@ -44,7 +46,8 @@ export default function RouteDetailScreen(): React.ReactElement {
     stake?: string;
     available?: string;
   }>();
-  const { history } = useSavedRoutes();
+  const { history, isLoading: historyLoading } = useSavedRoutes();
+  const { preview } = useRoutePreview();
   const { allGoals, confirmGoal } = useSavingsGoal();
   const { trackBet, isTracking } = useTrackedBets();
   const { preferences } = usePreferences();
@@ -52,9 +55,11 @@ export default function RouteDetailScreen(): React.ReactElement {
   const [showAcquireForm, setShowAcquireForm] = useState(false);
   const [acquireAmount, setAcquireAmount] = useState("");
 
-  const batch = history.find((item) =>
-    item.routes.some((route) => route.id === id),
-  );
+  // Saved history first, then the list this row was tapped from: a keyword search
+  // merges live Polymarket and asset hits into that list, and those were never
+  // saved to a batch.
+  const batch = history.find((item) => item.routes.some((route) => route.id === id))
+    ?? (preview?.routes.some((route) => route.id === id) ? preview : undefined);
   const savedRoute = batch?.routes.find((route) => route.id === id);
   // A goal swept away since the search is dropped rather than left dangling on a
   // position that would then belong to nothing.
@@ -62,6 +67,11 @@ export default function RouteDetailScreen(): React.ReactElement {
     ? batch.goalId
     : undefined;
   const { comparison } = useMarketComparison(savedRoute);
+  // History is read from disk, so a cold open here starts with an empty list. Calling
+  // that a missing pick shows the dead end before we have looked.
+  if (!savedRoute && historyLoading) {
+    return <BrandLoader subtitle="Loading this pick…" />;
+  }
   if (!savedRoute) {
     return (
       <View

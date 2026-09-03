@@ -8,6 +8,7 @@ import { useQuizAnswers } from '@/api/hooks/useQuizAnswers';
 import { useRoutes } from '@/api/hooks/useRoutes';
 import { usePredictionSearch } from '@/api/hooks/usePredictionSearch';
 import { useAssetSearch } from '@/api/hooks/useAssetSearch';
+import { useRoutePreview } from '@/api/hooks/useRoutePreview';
 import { useSavedRoutes } from '@/api/hooks/useSavedRoutes';
 import { useSavingsGoal } from '@/api/hooks/useSavingsGoal';
 import { useTrackedBets } from '@/api/hooks/useTrackedBets';
@@ -54,6 +55,7 @@ export default function RoutesScreen(): React.ReactElement {
   const { batchId, generate, goalId } = useLocalSearchParams<{ batchId?: string; generate?: string; goalId?: string }>();
   const { quizAnswers, isLoading: quizLoading } = useQuizAnswers();
   const { history, saveGeneratedRoutes } = useSavedRoutes();
+  const { setPreview } = useRoutePreview();
   const { preferences, update: updatePreferences } = usePreferences();
   const { allGoals, confirmGoal } = useSavingsGoal();
   const { trackBet } = useTrackedBets();
@@ -285,7 +287,20 @@ export default function RoutesScreen(): React.ReactElement {
             setTrackingId(route.id);
             setTrackingAmount(String(results?.selectedStake(route) ?? referenceStake));
           } : undefined}
-          onPress={() => router.push(`/route/${route.id}?stake=${results?.selectedStake(route) ?? referenceStake}&available=${displayedInvestment}`)}
+          onPress={() => {
+            // Hand the detail screen the list it was tapped from. Search hits are
+            // merged in live and never saved, so history alone cannot find them.
+            if (sessionParams) {
+              setPreview({
+                id: `preview-${Date.now()}`,
+                generatedAt: new Date().toISOString(),
+                quizSnapshot: sessionParams,
+                routes: searchPool,
+                ...(sessionGoalId ? { goalId: sessionGoalId } : null),
+              });
+            }
+            router.push(`/route/${route.id}?stake=${results?.selectedStake(route) ?? referenceStake}&available=${displayedInvestment}`);
+          }}
         />
         {trackingId === route.id && (
           <TrackRouteForm
