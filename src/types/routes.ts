@@ -75,6 +75,13 @@ export interface Route {
   strategy: string;
   // For sports/binary bets: the actual line, e.g. "France ML -200", "Over 2.5 +110". Optional.
   line?: string;
+  /**
+   * Exact contract price, 0–1, for a prediction-market route. The `line` rounds to whole
+   * cents for display, and re-deriving the payout from that rounding is wrong where it
+   * matters most: a contract at 97.56¢ pays +$25 per $1,000, but "98¢" says +$20. Every
+   * payout calculation reads this first and falls back to the line only when it is absent.
+   */
+  entryPrice?: number;
   // Calendar days until the position resolves / pays out (Polymarket end date,
   // bond term, or the goal timeframe). Drives the "matures in Nd" label + sort.
   maturesInDays?: number;

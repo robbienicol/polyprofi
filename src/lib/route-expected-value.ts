@@ -27,11 +27,22 @@ export function winProfit(route: Route): number {
 /** The downside in dollars if the route fails at this stake. */
 export function downsideAtStake(route: Route, stake: number): number {
   if (stake <= 0) return 0;
+  // A bracketed position knows its own worst case — the stop level, widened for a book
+  // too thin to honour it. The detail screen prints that fraction in the exit plan, so
+  // deriving a second, different downside from the risk level put two answers to the
+  // same question on one screen.
+  if (route.exitPlan) return stake * route.exitPlan.effectiveLossFraction;
   // An all-or-nothing contract loses the whole stake; a held asset takes a
   // drawdown scaled to its risk level rather than going to zero.
   return route.lossProfile === 'binary'
     ? stake
     : stake * route.riskLevel * DRAWDOWN_PER_RISK_LEVEL;
+}
+
+/** The downside as a percentage of the stake, from the same source as the dollars. */
+export function downsidePercent(route: Route): number {
+  if (route.exitPlan) return Math.round(route.exitPlan.effectiveLossFraction * 100);
+  return route.lossProfile === 'binary' ? 100 : Math.round(route.riskLevel * DRAWDOWN_PER_RISK_LEVEL * 100);
 }
 
 /**
@@ -61,6 +72,20 @@ export function __selfCheck(): void {
   const longshot: Route = { ...base, id: 'longshot', probability: 3, expectedReturn: 32_333, lossProfile: 'binary', riskLevel: 5 };
   console.assert(Math.abs(expectedValue(longshot, 1000)) < 5, '3c longshot is also ~zero EV at fair odds');
   console.assert(winProfit(longshot) === 32_333, 'winProfit reports the unweighted payout');
+
+  // A bracket's worst case is its own stop, not a drawdown guessed off the risk level —
+  // the detail screen prints both, and they have to be the same number.
+  const bracketed: Route = {
+    ...base, id: 'bracketed', probability: 55, expectedReturn: 300, lossProfile: 'partial', riskLevel: 3,
+    exitPlan: { kind: 'bracket', effectiveLossFraction: 0.35 } as Route['exitPlan'],
+  };
+  console.assert(downsideAtStake(bracketed, 1000) === 350, 'a bracket loses what its stop says, not riskLevel × 8%');
+  console.assert(downsidePercent(bracketed) === 35, 'the percentage and the dollars come from one source');
+  console.assert(downsidePercent({ ...bracketed, exitPlan: undefined }) === 24, 'without a plan it falls back to the drawdown scale');
+  console.assert(
+    downsidePercent({ ...bracketed, exitPlan: undefined, lossProfile: 'binary' }) === 100,
+    'an all-or-nothing contract loses the lot',
+  );
 
   // An underpriced contract is genuinely positive; an overpriced one negative.
   const good: Route = { ...base, id: 'good', probability: 80, expectedReturn: 613, lossProfile: 'binary', riskLevel: 3 };

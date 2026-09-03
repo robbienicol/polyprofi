@@ -210,7 +210,11 @@ export default function RoutesScreen(): React.ReactElement {
     const amount = Number(trackingAmount);
     if (!Number.isFinite(amount) || amount <= 0) return;
     const predictionMarket = /polymarket|prediction/i.test(`${route.category} ${route.platform}`);
-    const entryPrice = parseEntryPrice(route.line) ?? (predictionMarket && route.probability > 0 ? route.probability / 100 : undefined);
+    // The route's own exact price first: the line is rounded to the cent, and a position
+    // opened at "98¢" prices its own P&L against a contract it never bought.
+    const entryPrice = route.entryPrice
+      ?? parseEntryPrice(route.line)
+      ?? (predictionMarket && route.probability > 0 ? route.probability / 100 : undefined);
     const destination = preferredTradeDestination(route, sessionParams?.preferredPlatforms);
     const openedAt = new Date().toISOString();
     // The card's figures belong to the slider's stake. The acquire form is only

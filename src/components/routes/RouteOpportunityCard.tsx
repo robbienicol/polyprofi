@@ -14,7 +14,11 @@ import {
   pricePositionLabel,
   routeDisplayTitle,
 } from "@/lib/route-detail";
-import { downsideAtStake, expectedValue } from "@/lib/route-expected-value";
+import {
+  downsideAtStake,
+  downsidePercent,
+  expectedValue,
+} from "@/lib/route-expected-value";
 import {
   deadlineFitLabel,
   debtLiquidityLabel,
@@ -49,6 +53,10 @@ export function RouteOpportunityCard({
   const color = riskColor(route.riskLevel);
   const binary = route.lossProfile === "binary";
   const returnPct = stake > 0 ? (route.expectedReturn / stake) * 100 : 0;
+  // The holding period this profit is earned over, so the return can say so. A T-bill
+  // showing "+$6 (0.6% return)" beside "3.87% yield" reads as broken arithmetic: one is
+  // the 56-day return, the other is annualised, and neither said which.
+  const returnPeriodDays = route.maturesInDays ?? deadlineDays ?? null;
   const routeExpectedValue = expectedValue(route, stake);
   const liquidity = liquidityLabel(route);
   const marketQuality = route.marketQuality;
@@ -182,7 +190,11 @@ export function RouteOpportunityCard({
         <Metric
           value={`+$${route.expectedReturn}`}
           label={debt ? "Projected profit" : "Potential profit"}
-          subLabel={`(${returnPct.toFixed(1)}% return)`}
+          subLabel={
+            returnPeriodDays != null
+              ? `(${returnPct.toFixed(1)}% over ${formatMaturity(returnPeriodDays)})`
+              : `(${returnPct.toFixed(1)}% return)`
+          }
           valueColor={Semantic.positive}
         />
         <Divider />
@@ -347,8 +359,9 @@ export function RouteOpportunityCard({
         <Section title="Investment Facts">
           <View className="flex-row gap-2">
             <Fact
-              label="Yield"
+              label="Yield (annual)"
               value={debtYieldLabel(route, stake) ?? "Check quote"}
+              subLabel={route.investmentFacts?.projectionBasis}
             />
             <Fact
               label="Maturity"
@@ -483,7 +496,7 @@ export function RouteOpportunityCard({
           <Outcome
             color={Semantic.negative}
             label="Rough downside if it goes wrong"
-            chance={`~${route.riskLevel * 8}% drawdown`}
+            chance={`~${downsidePercent(route)}% drawdown`}
             value={`−$${Math.round(downsideAtStake(route, stake))}`}
           />
         )}

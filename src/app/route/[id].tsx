@@ -178,7 +178,10 @@ export default function RouteDetailScreen(): React.ReactElement {
     const predictionMarket = /polymarket|prediction/i.test(
       `${route.category} ${route.platform}`,
     );
+    // The exact price first — the line is rounded to the cent, and the position would
+    // otherwise track its P&L against a contract it never bought.
     const entryPrice =
+      route.entryPrice ??
       parseEntryPrice(route.line) ??
       (predictionMarket && route.probability > 0
         ? route.probability / 100

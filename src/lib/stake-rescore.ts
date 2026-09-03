@@ -9,13 +9,18 @@ import { projectedProfitFromAnnualYield } from '@/lib/factual-route-data';
  * chosen stake, then HIDE avenues that can't reach the target (product decision).
  *
  * Native rate recovery (rate is stake-invariant, so any nonzero reference works):
- *   binary  → decimal odds. Prefer the live line price ("Yes 62¢" → 1/0.62);
- *             else derive from generation: 1 + expectedReturn/refStake.
- *   partial → return fraction over the timeframe: expectedReturn/refStake.
+ *   bracketed → the exit plan's own winReturnRate: it is closed at the take-profit,
+ *               never at resolution, whatever its loss profile.
+ *   binary    → decimal odds, from the exact entryPrice, else the line ("Yes 62¢" →
+ *               1/0.62), else derived from generation: 1 + expectedReturn/refStake.
+ *   partial   → return fraction over the timeframe: expectedReturn/refStake.
  */
 
 function decimalOddsFor(route: Route, refStake: number): number {
-  const price = parseEntryPrice(route.line); // 0–1 contract price, if present
+  // The exact price first, then the line. The line is rounded to the cent for display,
+  // and reading the payout back out of that rounding is worst exactly where the money
+  // is thinnest: a contract at 97.56¢ pays +$25 per $1,000, but "98¢" reads as +$20.
+  const price = route.entryPrice ?? parseEntryPrice(route.line); // 0–1 contract price, if present
   if (price && price > 0 && price < 1) return 1 / price;
   if (refStake > 0 && route.expectedReturn > 0) return 1 + route.expectedReturn / refStake;
   return route.probability > 0 ? 100 / route.probability : 2; // fair-odds fallback
@@ -51,6 +56,13 @@ function returnAtStake(route: Route, refStake: number, stake: number): number {
   const days = sourcedYieldDays(route);
   if (sourcedYield != null && days != null) {
     return projectedProfitFromAnnualYield(stake, sourcedYield, days);
+  }
+  // A bracketed position is closed at its take-profit, not at resolution, so its payout
+  // is the plan's own rate. Without this a thin-book bracket — which is `binary`, since
+  // the stop cannot be relied on — was priced as if it paid out at $1: a 52.5¢ entry
+  // read as +90% when the plan's sell level pays +57%.
+  if (route.exitPlan != null) {
+    return stake * route.exitPlan.winReturnRate;
   }
   if (route.lossProfile === 'binary') {
     return stake * (decimalOddsFor(route, refStake) - 1);
@@ -116,6 +128,28 @@ export function __selfCheck(): void {
   // 62¢ → decimal 1.613; $100 stake → ~$61 profit
   console.assert(Math.round(returnAtStake(bin, 100, 100)) === 61, 'binary from line price');
   console.assert(Math.round(returnAtStake(bin, 100, 200)) === 123, 'binary scales with stake');
+
+  // The line is rounded for display; the payout must come off the real price. At 97.56¢
+  // a $1,000 stake pays +$25, and "98¢" would have said +$20.
+  const precise: Route = { ...bin, id: '1b', probability: 98, line: 'No 98¢', entryPrice: 0.9756 };
+  console.assert(Math.round(returnAtStake(precise, 1000, 1000)) === 25, 'payout uses the exact price, not the rounded line');
+  console.assert(
+    Math.round(returnAtStake({ ...precise, entryPrice: undefined }, 1000, 1000)) === 20,
+    'without an exact price it still falls back to the line',
+  );
+
+  // A bracket is closed at its take-profit. Priced as if it paid out at resolution, a
+  // 52.5¢ entry reads +90% where the plan pays +57% — and a thin book makes that route
+  // binary, so the loss profile cannot be what decides this.
+  const bracketed: Route = {
+    ...bin, id: '1c', line: 'No 52.5¢ → 83.8¢', entryPrice: 0.525,
+    exitPlan: { kind: 'bracket', winReturnRate: 0.572 } as Route['exitPlan'],
+  };
+  console.assert(Math.round(returnAtStake(bracketed, 1000, 1000)) === 572, 'a bracket pays its plan rate, not resolution odds');
+  console.assert(
+    Math.round(returnAtStake({ ...bracketed, lossProfile: 'partial' }, 1000, 1000)) === 572,
+    'the same is true whichever loss profile the bracket carries',
+  );
 
   const part: Route = {
     id: '2', category: 'Stocks & ETFs', emoji: '', description: '', riskLevel: 1,

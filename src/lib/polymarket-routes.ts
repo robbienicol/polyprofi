@@ -58,6 +58,8 @@ function toRoute(candidate: Candidate, params: RouteParams, quality: MarketQuali
     expectedReturn,
     platform: 'Polymarket',
     line: `${outcome} ${cents}¢`,
+    // The exact price, since the line above is rounded to the cent for display.
+    entryPrice: price,
     maturesInDays: maturityDays(market.endDate, params.timeframe),
     lossProfile: 'binary',
     meetsTarget: expectedReturn >= params.target,
