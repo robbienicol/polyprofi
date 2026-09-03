@@ -1,11 +1,12 @@
-import { useRouter } from 'expo-router';
-import React from 'react';
+import { useRouter, type Href } from 'expo-router';
+import React, { useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { GoalProgress, useGoalsProgress } from '@/api/hooks/useGoalProgress';
 import { useMoney } from '@/api/hooks/usePreferences';
 import { useSavingsGoal } from '@/api/hooks/useSavingsGoal';
+import { useTrackedBets } from '@/api/hooks/useTrackedBets';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, OnBrand, Radius, Semantic, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -17,8 +18,52 @@ const MONO = { fontVariant: ['tabular-nums' as const] };
 export default function GoalsScreen(): React.ReactElement {
   const theme = useTheme();
   const router = useRouter();
-  const { goals, achievedCount, isLoading } = useSavingsGoal();
+  const { goals, achievedCount, isLoading, removeGoals } = useSavingsGoal();
+  const { reassignBets } = useTrackedBets();
   const progress = useGoalsProgress(goals);
+
+  // Ticked goals, for looking at their combined portfolio or clearing several out
+  // at once. Ids rather than indexes, so a goal disappearing under the selection
+  // (deleted, swept) takes itself out of it.
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const selected = goals.filter((goal) => selectedIds.includes(goal.id));
+
+  const toggleSelected = (goalId: string): void => {
+    setConfirmingDelete(false);
+    setSelectedIds((prev) => (
+      prev.includes(goalId) ? prev.filter((id) => id !== goalId) : [...prev, goalId]
+    ));
+  };
+
+  const clearSelection = (): void => {
+    setSelectedIds([]);
+    setConfirmingDelete(false);
+  };
+
+  const viewSelectedPortfolio = (): void => {
+    router.push(`/(tabs)/portfolio?goalIds=${selected.map((goal) => goal.id).join(',')}` as Href);
+  };
+
+  // Positions move first, exactly as the single-goal delete does: a goal that
+  // disappears must not take the record of real money with it. They land on a goal
+  // that is not itself being deleted, or on nothing if every goal was selected.
+  const deleteSelected = async (): Promise<void> => {
+    if (deleting || selected.length === 0) return;
+    setDeleting(true);
+    const doomed = selected.map((goal) => goal.id);
+    const fallback = goals.find((goal) => !doomed.includes(goal.id))?.id;
+    try {
+      for (const goalId of doomed) {
+        await reassignBets({ fromGoalId: goalId, toGoalId: fallback });
+      }
+      removeGoals(doomed);
+      clearSelection();
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const addGoal = (): void => router.push('/goal-setup');
 
@@ -68,6 +113,19 @@ export default function GoalsScreen(): React.ReactElement {
             </Pressable>
           </View>
 
+          {selected.length > 0 ? (
+            <SelectionBar
+              count={selected.length}
+              confirming={confirmingDelete}
+              deleting={deleting}
+              onClear={clearSelection}
+              onViewPortfolio={viewSelectedPortfolio}
+              onAskDelete={() => setConfirmingDelete(true)}
+              onCancelDelete={() => setConfirmingDelete(false)}
+              onConfirmDelete={() => void deleteSelected()}
+            />
+          ) : null}
+
           {isLoading ? null : goals.length === 0 ? (
             <EmptyGoals onAdd={addGoal} />
           ) : (
@@ -76,6 +134,8 @@ export default function GoalsScreen(): React.ReactElement {
                 key={goal.id}
                 goal={goal}
                 progress={progress.byGoalId[goal.id]}
+                selected={selectedIds.includes(goal.id)}
+                onToggleSelected={() => toggleSelected(goal.id)}
                 onPress={() => router.push(`/goal/${goal.id}`)}
               />
             ))
@@ -95,10 +155,14 @@ export default function GoalsScreen(): React.ReactElement {
 function GoalRow({
   goal,
   progress,
+  selected,
+  onToggleSelected,
   onPress,
 }: {
   goal: SavingsGoal;
   progress: GoalProgress | undefined;
+  selected: boolean;
+  onToggleSelected: () => void;
   onPress: () => void;
 }): React.ReactElement {
   const theme = useTheme();
@@ -126,13 +190,37 @@ function GoalRow({
       style={{
         borderRadius: Radius.xl,
         backgroundColor: theme.backgroundElevated,
-        borderWidth: achieved ? 1.5 : 1,
-        borderColor: achieved ? Semantic.positive : theme.border,
+        borderWidth: achieved || selected ? 1.5 : 1,
+        borderColor: selected ? Brand[500] : achieved ? Semantic.positive : theme.border,
         padding: 16,
         gap: 14,
         ...Shadow.card,
       }}>
       <View className="flex-row items-center" style={{ gap: 12 }}>
+        {/* The tick sits inside the row but takes its own taps, so selecting a goal
+            and opening it stay separate gestures. */}
+        <Pressable
+          onPress={onToggleSelected}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: selected }}
+          accessibilityLabel={`Select ${goal.label}`}
+          hitSlop={10}
+          className="active:opacity-60"
+          style={{
+            width: 24,
+            height: 24,
+            borderRadius: Radius.sm,
+            borderWidth: 1.5,
+            borderColor: selected ? Brand[500] : theme.borderStrong,
+            backgroundColor: selected ? Brand[500] : 'transparent',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}>
+          {selected ? (
+            <ThemedText style={{ fontSize: 13, fontWeight: '900', color: OnBrand, lineHeight: 16 }}>✓</ThemedText>
+          ) : null}
+        </Pressable>
+
         <View
           style={{
             width: 48,
@@ -209,6 +297,100 @@ function GoalRow({
         </View>
       )}
     </Pressable>
+  );
+}
+
+/**
+ * What you can do with the ticked goals. Delete confirms in place rather than in an
+ * Alert, which is a no-op on web — the same reason the single-goal delete does.
+ */
+function SelectionBar({
+  count,
+  confirming,
+  deleting,
+  onClear,
+  onViewPortfolio,
+  onAskDelete,
+  onCancelDelete,
+  onConfirmDelete,
+}: {
+  count: number;
+  confirming: boolean;
+  deleting: boolean;
+  onClear: () => void;
+  onViewPortfolio: () => void;
+  onAskDelete: () => void;
+  onCancelDelete: () => void;
+  onConfirmDelete: () => void;
+}): React.ReactElement {
+  const theme = useTheme();
+  const goalWord = `${count} goal${count === 1 ? '' : 's'}`;
+
+  return (
+    <View
+      style={{
+        borderRadius: Radius.lg,
+        backgroundColor: theme.backgroundElevated,
+        borderWidth: 1,
+        borderColor: Brand[500] + '4D',
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        gap: 10,
+      }}>
+      <View className="flex-row items-center justify-between">
+        <ThemedText style={{ fontSize: 13, fontWeight: '800', color: theme.text }}>
+          {goalWord} selected
+        </ThemedText>
+        <Pressable onPress={onClear} accessibilityRole="button" hitSlop={8} className="active:opacity-60">
+          <ThemedText style={{ fontSize: 12, fontWeight: '700', color: theme.textSecondary }}>Clear</ThemedText>
+        </Pressable>
+      </View>
+
+      {confirming ? (
+        <View style={{ gap: 8 }}>
+          <ThemedText style={{ fontSize: 12, lineHeight: 17, color: theme.textSecondary }}>
+            Delete {goalWord}? Any positions move to another goal — nothing about the money
+            is lost.
+          </ThemedText>
+          <View className="flex-row" style={{ gap: 8 }}>
+            <Pressable
+              onPress={onCancelDelete}
+              accessibilityRole="button"
+              className="flex-1 items-center active:opacity-70"
+              style={{ borderRadius: Radius.md, borderWidth: 1, borderColor: theme.border, paddingVertical: 10 }}>
+              <ThemedText style={{ fontSize: 13, fontWeight: '700', color: theme.textSecondary }}>Cancel</ThemedText>
+            </Pressable>
+            <Pressable
+              onPress={onConfirmDelete}
+              disabled={deleting}
+              accessibilityRole="button"
+              className="flex-1 items-center active:opacity-70"
+              style={{ borderRadius: Radius.md, backgroundColor: Semantic.negative, paddingVertical: 10, opacity: deleting ? 0.6 : 1 }}>
+              <ThemedText style={{ fontSize: 13, fontWeight: '800', color: '#FFFFFF' }}>
+                {deleting ? 'Deleting…' : `Delete ${goalWord}`}
+              </ThemedText>
+            </Pressable>
+          </View>
+        </View>
+      ) : (
+        <View className="flex-row" style={{ gap: 8 }}>
+          <Pressable
+            onPress={onViewPortfolio}
+            accessibilityRole="button"
+            className="flex-1 items-center active:opacity-80"
+            style={{ borderRadius: Radius.md, backgroundColor: Brand[500], paddingVertical: 10 }}>
+            <ThemedText style={{ fontSize: 13, fontWeight: '800', color: OnBrand }}>View portfolio</ThemedText>
+          </Pressable>
+          <Pressable
+            onPress={onAskDelete}
+            accessibilityRole="button"
+            className="items-center active:opacity-70"
+            style={{ borderRadius: Radius.md, borderWidth: 1, borderColor: Semantic.negative + '66', paddingVertical: 10, paddingHorizontal: 18 }}>
+            <ThemedText style={{ fontSize: 13, fontWeight: '800', color: Semantic.negative }}>Delete</ThemedText>
+          </Pressable>
+        </View>
+      )}
+    </View>
   );
 }
 

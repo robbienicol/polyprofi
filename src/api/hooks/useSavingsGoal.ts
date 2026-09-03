@@ -211,22 +211,28 @@ export function useSavingsGoal() {
     },
   });
 
-  // Drop a goal. Its positions are reassigned by the caller before this runs —
+  // Drop goals. Their positions are reassigned by the caller before this runs —
   // see reassignBets in useTrackedBets — so nothing is left pointing at nothing.
-  const { mutate: removeGoal } = useMutation({
-    mutationFn: async (goalId: string): Promise<SavingsGoalState | null> =>
-      mutateState((prev) => {
-        const goals = prev.goals.filter((goal) => goal.id !== goalId);
-        return goals.length === prev.goals.length ? null : { ...prev, goals };
-      }),
-    ...optimistic<string>((prev, goalId) => {
-      const goals = prev.goals.filter((goal) => goal.id !== goalId);
-      return goals.length === prev.goals.length ? null : { ...prev, goals };
-    }),
+  //
+  // Takes a list rather than one id: every write here is a read-modify-write against
+  // storage, so removing three goals with three calls can interleave and resurrect
+  // the ones whose read happened before the others' writes landed.
+  const dropGoals = (prev: SavingsGoalState, goalIds: string[]): SavingsGoalState | null => {
+    const drop = new Set(goalIds);
+    const goals = prev.goals.filter((goal) => !drop.has(goal.id));
+    return goals.length === prev.goals.length ? null : { ...prev, goals };
+  };
+
+  const { mutate: removeGoals } = useMutation({
+    mutationFn: async (goalIds: string[]): Promise<SavingsGoalState | null> =>
+      mutateState((prev) => dropGoals(prev, goalIds)),
+    ...optimistic<string[]>(dropGoals),
     onSuccess: (next) => {
       if (next) queryClient.setQueryData(queryKey, next);
     },
   });
+
+  const removeGoal = useCallback((goalId: string): void => removeGoals([goalId]), [removeGoals]);
 
   // Mark one goal reached (idempotent) and bump the lifetime count once.
   const { mutate: markAchieved } = useMutation({
@@ -307,6 +313,8 @@ export function useSavingsGoal() {
     addGoalAsync,
     confirmGoal,
     removeGoal,
+    /** Several at once, in one write — see dropGoals. */
+    removeGoals,
     markAchieved,
     markCelebrated,
   };
