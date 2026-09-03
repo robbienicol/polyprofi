@@ -38,6 +38,11 @@ type ValueView = 'now' | 'expected';
 /**
  * Two-segment switch for the hero figure. Doubles as the hero's label, so the
  * number is always named by whichever segment is active.
+ *
+ * It switches the return under the number as well as the number itself, which is
+ * what most people come here to compare — so the segments are named for the state
+ * they show ("current", "expected") rather than for the value alone, and the line
+ * beneath says the word "return" in both.
  */
 function ValueViewToggle({
   value,
@@ -47,9 +52,9 @@ function ValueViewToggle({
   onChange: (next: ValueView) => void;
 }): React.ReactElement {
   const theme = useTheme();
-  const segments: { key: ValueView; label: string }[] = [
-    { key: 'now', label: 'WORTH NOW' },
-    { key: 'expected', label: 'EXPECTED' },
+  const segments: { key: ValueView; label: string; hint: string }[] = [
+    { key: 'now', label: 'CURRENT', hint: 'what your positions are worth now, and the return so far' },
+    { key: 'expected', label: 'EXPECTED', hint: 'the probability-weighted outcome, and the return it implies' },
   ];
   return (
     <View
@@ -63,11 +68,13 @@ function ValueViewToggle({
             onPress={() => onChange(segment.key)}
             accessibilityRole="button"
             accessibilityState={{ selected: active }}
+            accessibilityHint={segment.hint}
+            hitSlop={6}
             className="active:opacity-70"
             style={{
               borderRadius: Radius.pill,
-              paddingHorizontal: 10,
-              paddingVertical: 5,
+              paddingHorizontal: 12,
+              paddingVertical: 7,
               backgroundColor: active ? theme.backgroundElevated : 'transparent',
             }}>
             <ThemedText
@@ -214,9 +221,9 @@ export function PortfolioOverview({
           <ThemedText style={{ fontSize: 12, color: theme.textTertiary }}>
             {showExpected
               ? longestMaturity > 0
-                ? `expected over ${maturityWords(longestMaturity)}`
-                : 'expected, probability-weighted'
-              : 'since you bought in'}
+                ? `expected return over ${maturityWords(longestMaturity)}`
+                : 'expected return, probability-weighted'
+              : 'return since you bought in'}
           </ThemedText>
         </View>
 
