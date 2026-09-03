@@ -1,7 +1,13 @@
 import { timeframeCalendarDays } from '@/api/client/playbook';
 import { isPredictionCategory } from '@/lib/prediction-topics';
-import { goalEffectivenessScore, sortByPatheyScore } from '@/lib/score';
-import type { GoalScoreBreakdown, GoalScoreContext } from '@/lib/score';
+import {
+  DEFAULT_SCORE_WEIGHTS,
+  goalEffectivenessScore,
+  sortByPatheyScore,
+  type GoalScoreBreakdown,
+  type GoalScoreContext,
+  type ScoreWeights,
+} from '@/lib/score';
 import { expectedValue } from '@/lib/route-expected-value';
 import { rescoreForStake, stakeNeededForReturn } from '@/lib/stake-rescore';
 import type { Route, RouteParams } from '@/types/routes';
@@ -299,7 +305,9 @@ export function buildRouteResults(
   routes: Route[],
   params: RouteParams,
   investment: number,
-  filters: RouteFilters
+  filters: RouteFilters,
+  /** The user's own weighting of the four score components. See `@/lib/score`. */
+  weights: ScoreWeights = DEFAULT_SCORE_WEIGHTS,
 ): RouteResults {
   const referenceStake = params.balance || 1;
   const target = params.target || 1;
@@ -342,9 +350,9 @@ export function buildRouteResults(
     deadlineDays: timeframeCalendarDays(params.timeframe),
   });
   const scoreById = new Map(
-    rescored.map((route) => [route.id, goalEffectivenessScore(route, scoreContext(route))] as const)
+    rescored.map((route) => [route.id, goalEffectivenessScore(route, scoreContext(route), weights)] as const)
   );
-  const ranked = sortByPatheyScore(rescored, scoreContext);
+  const ranked = sortByPatheyScore(rescored, scoreContext, weights);
 
   let filtered = ranked;
   if (filters.category) filtered = filtered.filter((route) => route.category === filters.category);

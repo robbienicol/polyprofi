@@ -2,7 +2,7 @@ import { memo } from 'react';
 import { Pressable, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { Accent, Radius, RiskScale, Shadow } from '@/constants/theme';
+import { Brand, Colors, OnBrand, Radius, RiskScale, Semantic, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { predictionTopic } from '@/lib/prediction-topics';
 import { debtLiquidityLabel, debtYieldLabel, isDebtRoute } from '@/lib/route-investment-metrics';
@@ -11,9 +11,9 @@ import { Route } from '@/types/routes';
 const RISK_LABELS = ['Very Safe', 'Safe', 'Moderate', 'Aggressive', 'Very Aggressive'] as const;
 
 export const riskLabel = (level: number) => RISK_LABELS[level - 1] ?? 'Unknown';
-export const riskColor = (level: number) => RiskScale[level - 1] ?? '#808080';
+export const riskColor = (level: number) => RiskScale[level - 1] ?? Colors.light.textSecondary;
 
-const probColor = (p: number) => (p >= 75 ? '#22C55E' : p >= 50 ? Accent.gold : '#EF4444');
+const probColor = (p: number) => (p >= 75 ? Semantic.positive : p >= 50 ? Semantic.caution : Semantic.negative);
 const MONO = { fontVariant: ['tabular-nums' as const] };
 
 /** Compact maturity label: 1d, 9d, 3w, 5mo, 1.5y. */
@@ -30,15 +30,25 @@ interface RouteCardProps {
   route: Route;
   requiredInvestment?: number | null;
   currentInvestment?: number | null;
+  /**
+   * The route's score out of 100 under the user's own weighting. Omitted where there
+   * is no goal to score against — a score with no context behind it is a number
+   * pretending to mean something.
+   */
+  score?: number | null;
   onTrack?: () => void;
   onPress?: () => void;
 }
+
+/** Bands, not a gradient: a 61 and a 64 are the same answer. */
+const scoreColor = (score: number): string =>
+  score >= 75 ? Semantic.positive : score >= 50 ? Semantic.caution : Semantic.negative;
 
 function formatMoney(amount: number): string {
   return amount.toLocaleString(undefined, { maximumFractionDigits: 0 });
 }
 
-function RouteCardInner({ route, requiredInvestment, currentInvestment, onTrack, onPress }: RouteCardProps) {
+function RouteCardInner({ route, requiredInvestment, currentInvestment, score, onTrack, onPress }: RouteCardProps) {
   const theme = useTheme();
   const rc = riskColor(route.riskLevel);
   const pc = probColor(route.probability);
@@ -56,7 +66,7 @@ function RouteCardInner({ route, requiredInvestment, currentInvestment, onTrack,
   const probabilityLabel = route.meetsTarget ? 'Chance of hitting goal' : 'Current amount hits goal';
   const probabilityValue = route.meetsTarget ? `${route.probability}%` : 'No';
   const probabilityWidth = route.meetsTarget ? Math.min(route.probability, 100) : 0;
-  const probabilityColor = route.meetsTarget ? pc : Accent.red;
+  const probabilityColor = route.meetsTarget ? pc : Semantic.negative;
 
   const Container = onPress ? Pressable : View;
 
@@ -106,13 +116,34 @@ function RouteCardInner({ route, requiredInvestment, currentInvestment, onTrack,
               </ThemedText>
             </View>
           </View>
-          <View style={{ alignItems: 'flex-end' }}>
+          <View style={{ alignItems: 'flex-end', gap: 4 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
               <View style={{ width: 6, height: 6, borderRadius: 999, backgroundColor: rc }} />
               <ThemedText style={{ fontSize: 10, color: rc, fontWeight: '700' }}>
                 {riskLabel(route.riskLevel)}
               </ThemedText>
             </View>
+            {score != null ? (
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'baseline',
+                  gap: 3,
+                  paddingHorizontal: 8,
+                  paddingVertical: 3,
+                  borderRadius: Radius.pill,
+                  backgroundColor: scoreColor(score) + '1A',
+                  borderWidth: 1,
+                  borderColor: scoreColor(score) + '3D',
+                }}>
+                <ThemedText style={{ fontSize: 13, fontWeight: '900', color: scoreColor(score), ...MONO }}>
+                  {score}
+                </ThemedText>
+                <ThemedText style={{ fontSize: 9, fontWeight: '800', color: theme.textTertiary, letterSpacing: 0.3 }}>
+                  /100
+                </ThemedText>
+              </View>
+            ) : null}
           </View>
         </View>
 
@@ -190,15 +221,15 @@ function RouteCardInner({ route, requiredInvestment, currentInvestment, onTrack,
         <View className="flex-row justify-between items-end">
           <View>
             <View className="flex-row items-center gap-1.5">
-              <ThemedText style={{ fontSize: 27, fontWeight: '800', color: '#22C55E', letterSpacing: -0.6, ...MONO }}>
+              <ThemedText style={{ fontSize: 27, fontWeight: '800', color: Semantic.positive, letterSpacing: -0.6, ...MONO }}>
                 +${route.expectedReturn}
               </ThemedText>
               <View
                 style={{
                   paddingHorizontal: 6, paddingVertical: 2, borderRadius: Radius.sm,
-                  backgroundColor: binary ? Accent.red + '15' : '#22C55E15',
+                  backgroundColor: (binary ? Semantic.negative : Semantic.positive) + '15',
                 }}>
-                <ThemedText style={{ fontSize: 9.5, fontWeight: '700', color: binary ? Accent.red : '#22C55E', letterSpacing: 0.2 }}>
+                <ThemedText style={{ fontSize: 9.5, fontWeight: '700', color: binary ? Semantic.negative : Semantic.positive, letterSpacing: 0.2 }}>
                   {binary ? 'ALL-OR-NOTHING' : 'CAPITAL PRESERVATION'}
                 </ThemedText>
               </View>
@@ -212,10 +243,10 @@ function RouteCardInner({ route, requiredInvestment, currentInvestment, onTrack,
               onPress={onTrack}
               style={{
                 borderRadius: Radius.md, paddingHorizontal: 16, paddingVertical: 10,
-                backgroundColor: '#22C55E', ...Shadow.card,
+                backgroundColor: Brand[500], ...Shadow.card,
               }}
               className="active:opacity-80">
-              <ThemedText style={{ fontSize: 13, fontWeight: '800', color: '#06140C' }}>Add</ThemedText>
+              <ThemedText style={{ fontSize: 13, fontWeight: '800', color: OnBrand }}>Add</ThemedText>
             </Pressable>
           )}
         </View>

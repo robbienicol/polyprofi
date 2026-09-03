@@ -3,7 +3,7 @@ import { Pressable, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
-import { Brand, Radius, Shadow } from '@/constants/theme';
+import { Brand, OnBrand, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 interface Props {
@@ -47,7 +47,7 @@ function ErrorFallback({ error, onRetry }: { error: Error; onRetry: () => void }
           onPress={onRetry}
           className="mt-2 px-6 py-3 active:opacity-80"
           style={{ borderRadius: Radius.lg, backgroundColor: Brand[500], ...Shadow.card }}>
-          <ThemedText style={{ fontWeight: '800', fontSize: 15, color: '#06140C' }}>Try again</ThemedText>
+          <ThemedText style={{ fontWeight: '800', fontSize: 15, color: OnBrand }}>Try again</ThemedText>
         </Pressable>
       </SafeAreaView>
     </View>

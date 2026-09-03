@@ -2,6 +2,7 @@ import { PolymarketEntry } from '@/api/client/market-data';
 import { polymarketMarketQuality } from '@/lib/polymarket-market-quality';
 import { bracketLossProfile, bracketRiskLevel, buildSwingPlan } from '@/lib/prediction-swing';
 import { topicForTags } from '@/lib/prediction-topics';
+import { timeframeMaturityLimit } from '@/lib/quiz-profile';
 import { ExitPlan, MarketQualityFacts, Route, RouteParams } from '@/types/routes';
 
 type RiskBand = 2 | 3 | 4 | 5;
@@ -178,6 +179,29 @@ export function buildPolymarketRoutes(
     })
   );
 
+  // Quotas used to be filled purely by volume, and the deadline was only applied
+  // afterwards by filterRoutesForQuiz — so on a short search the highest-volume
+  // (and mostly long-dated) contracts took every slot and were then all discarded,
+  // leaving zero prediction routes while the short-dated markets that would have
+  // qualified were never selected. Resolution date is part of the selection now.
+  const horizon = timeframeMaturityLimit(params.timeframe);
+  const fitCache = new Map<string, boolean>();
+  const fitsHorizon = (candidate: Candidate): boolean => {
+    const key = candidate.market.slug || candidate.market.question;
+    const cached = fitCache.get(key);
+    if (cached !== undefined) return cached;
+    const fits = maturityDays(candidate.market.endDate, params.timeframe) <= horizon;
+    fitCache.set(key, fits);
+    return fits;
+  };
+  // Preference, not exclusion: a long-dated contract can still yield a route that
+  // fits — its bracketed swing exits well before resolution — and a horizon wide
+  // enough for everything must not lose the volume ordering.
+  const byHorizonThenVolume = (a: Candidate, b: Candidate): number =>
+    Number(fitsHorizon(b)) - Number(fitsHorizon(a))
+    || b.market.volumeM - a.market.volumeM
+    || b.probability - a.probability;
+
   const bands: RiskBand[] = [2, 3, 4, 5];
   const baseQuota = Math.floor(limit / bands.length);
   const usedMarkets = new Set<string>();
@@ -187,7 +211,7 @@ export function buildPolymarketRoutes(
     const quota = baseQuota + (index < limit % bands.length ? 1 : 0);
     const choices = candidates
       .filter((candidate) => candidate.riskLevel === band)
-      .sort((a, b) => b.market.volumeM - a.market.volumeM || b.probability - a.probability);
+      .sort(byHorizonThenVolume);
 
     for (const candidate of choices) {
       if (selected.filter((item) => item.riskLevel === band).length >= quota) break;
@@ -198,7 +222,7 @@ export function buildPolymarketRoutes(
   }
 
   if (selected.length < limit) {
-    const remaining = [...candidates].sort((a, b) => b.market.volumeM - a.market.volumeM);
+    const remaining = [...candidates].sort(byHorizonThenVolume);
     for (const candidate of remaining) {
       if (selected.length >= limit) break;
       if (usedMarkets.has(candidate.market.question)) continue;
@@ -279,4 +303,28 @@ export function __selfCheck(): void {
     'the traded position frees capital before the contract resolves',
   );
   console.assert(swung.id !== held.id, 'the two ways to play one contract need distinct ids');
+
+  // The reported bug: a week-long search returned no prediction routes at all,
+  // because selection filled its quotas with the highest-volume contracts and the
+  // deadline was only applied afterwards. A short-dated market must win a slot
+  // over a long-dated one with more volume.
+  const longDated: PolymarketEntry = { ...market, question: 'Long-dated', slug: 'long-dated', volumeM: 500, endDate: inDays(180) };
+  const shortDated: PolymarketEntry = { ...market, question: 'Short-dated', slug: 'short-dated', volumeM: 1, endDate: inDays(5) };
+  const weekPicks = buildPolymarketRoutes([longDated, shortDated], params, 1);
+  console.assert(
+    weekPicks.some((route) => route.sourceSlug === 'short-dated'),
+    'a market resolving inside the deadline outranks a higher-volume one that resolves past it',
+  );
+  // Preference, not exclusion: with room for both, volume still orders them.
+  const bothPicks = buildPolymarketRoutes([longDated, shortDated], params, 8);
+  console.assert(
+    bothPicks.some((route) => route.sourceSlug === 'long-dated'),
+    'a long-dated contract is still offered when there is room — its bracketed swing can still fit',
+  );
+  // A horizon wide enough for everything must not reshuffle by fit.
+  const yearPicks = buildPolymarketRoutes([longDated, shortDated], { ...params, timeframe: '1year' }, 1);
+  console.assert(
+    yearPicks.every((route) => route.sourceSlug === 'long-dated'),
+    'with both inside the horizon the highest-volume market leads again',
+  );
 }

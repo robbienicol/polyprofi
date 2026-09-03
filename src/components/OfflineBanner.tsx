@@ -3,7 +3,7 @@ import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
-import { Accent } from '@/constants/theme';
+import { Semantic } from '@/constants/theme';
 import { useNetworkStatus } from '@/hooks/use-network-status';
 
 /** Thin banner shown app-wide while the device has no connection. */
@@ -21,7 +21,7 @@ export function OfflineBanner(): React.ReactElement | null {
         left: 0,
         right: 0,
         zIndex: 50,
-        backgroundColor: Accent.red,
+        backgroundColor: Semantic.negative,
         paddingTop: insets.top + 6,
         paddingBottom: 8,
         alignItems: 'center',

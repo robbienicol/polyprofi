@@ -1,7 +1,7 @@
 import { View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { Accent, Radius } from '@/constants/theme';
+import { Radius, Semantic } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { GoalScoreBreakdown } from '@/lib/score';
 
@@ -43,8 +43,12 @@ export function ScoreMathCard({ scoreBreakdown, requiredInvestment, availableInv
           {score}/100
         </ThemedText>
       </View>
+      {/* Read off the breakdown, not hard-coded: these are the user's own weights now. */}
       <ThemedText style={{ fontSize: 10, color: theme.textTertiary, fontWeight: '700' }}>
-        35% chance · 25% safety · 30% capital · 10% time
+        {Math.round(scoreBreakdown.weights.reliability * 100)}% chance
+        {' · '}{Math.round(scoreBreakdown.weights.principalProtection * 100)}% safety
+        {' · '}{Math.round(scoreBreakdown.weights.capitalEfficiency * 100)}% capital
+        {' · '}{Math.round(scoreBreakdown.weights.timeEfficiency * 100)}% time
       </ThemedText>
       <ThemedText style={{ fontSize: 11, color: theme.textSecondary, ...MONO }}>
         Chance / safety / capital / time: {formatScoreNumber(scoreBreakdown.reliability)} · {formatScoreNumber(scoreBreakdown.principalProtection)} · {formatScoreNumber(scoreBreakdown.capitalEfficiency)} · {formatScoreNumber(scoreBreakdown.timeEfficiency)}
@@ -53,7 +57,7 @@ export function ScoreMathCard({ scoreBreakdown, requiredInvestment, availableInv
         {formatScoreNumber(scoreBreakdown.contributions.reliability)} + {formatScoreNumber(scoreBreakdown.contributions.principalProtection)} + {formatScoreNumber(scoreBreakdown.contributions.capitalEfficiency)} + {formatScoreNumber(scoreBreakdown.contributions.timeEfficiency)} = {formatScoreNumber(scoreBreakdown.rawScore)}{scoreBreakdown.rawScore !== score ? ` → ${score}` : ''}
       </ThemedText>
       {scoreBreakdown.capitalSurvivalFactor != null && scoreBreakdown.capitalSurvivalFactor < 1 ? (
-        <ThemedText style={{ fontSize: 11, color: Accent.gold, fontWeight: '700', ...MONO }}>
+        <ThemedText style={{ fontSize: 11, color: Semantic.caution, fontWeight: '700', ...MONO }}>
           Capital at risk: ×{scoreBreakdown.capitalSurvivalFactor.toFixed(2)} — a miss
           {scoreBreakdown.lossFraction != null && scoreBreakdown.lossFraction < 1
             ? ` costs about ${Math.round(scoreBreakdown.lossFraction * 100)}% of your capital`
@@ -62,7 +66,7 @@ export function ScoreMathCard({ scoreBreakdown, requiredInvestment, availableInv
         </ThemedText>
       ) : null}
       {scoreBreakdown.marketQualityAdjustment ? (
-        <ThemedText style={{ fontSize: 11, color: Accent.gold, fontWeight: '700', ...MONO }}>
+        <ThemedText style={{ fontSize: 11, color: Semantic.caution, fontWeight: '700', ...MONO }}>
           Market quality: ×{scoreBreakdown.marketQualityAdjustment.factor.toFixed(3)}
           {scoreBreakdown.marketQualityAdjustment.executionScore != null
             ? ` · execution ${formatScoreNumber(scoreBreakdown.marketQualityAdjustment.executionScore)}/100`
@@ -76,7 +80,7 @@ export function ScoreMathCard({ scoreBreakdown, requiredInvestment, availableInv
         </ThemedText>
       ) : null}
       {scoreBreakdown.capReason ? (
-        <ThemedText style={{ fontSize: 11, color: Accent.red, fontWeight: '700' }}>
+        <ThemedText style={{ fontSize: 11, color: Semantic.negative, fontWeight: '700' }}>
           {scoreBreakdown.capReason === 'over_budget'
             ? `Needs $${formatMoney(requiredInvestment ?? 0)} but your current limit is $${formatMoney(availableInvestment)} · capped at 49`
             : scoreBreakdown.capReason === 'misses_deadline'

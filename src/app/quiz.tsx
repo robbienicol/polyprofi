@@ -13,7 +13,7 @@ import { useUserProfile } from '@/api/hooks/useUserProfile';
 import { useSavingsGoal, type SavingsGoalInput } from '@/api/hooks/useSavingsGoal';
 import { OnboardingGlow } from '@/components/onboarding/OnboardingPreviews';
 import { ThemedText } from '@/components/themed-text';
-import { Brand, Radius, Shadow } from '@/constants/theme';
+import { Brand, OnBrand, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { requestAppRating } from '@/lib/app-rating';
 import { ACQUISITION_PLATFORMS } from '@/lib/preferences';
@@ -548,7 +548,7 @@ function QuizForm({
               accessibilityState={{ disabled: targetValue <= 0 || isSaving }}
               className="py-4 items-center active:opacity-85"
               style={{ borderRadius: Radius.lg, backgroundColor: Brand[500], opacity: targetValue > 0 && !isSaving ? 1 : 0.4, ...Shadow.card }}>
-              <ThemedText style={{ fontSize: 16, fontWeight: '900', color: '#06140C' }}>
+              <ThemedText style={{ fontSize: 16, fontWeight: '900', color: OnBrand }}>
                 {isSaving ? 'Finding routes…' : 'Find my routes →'}
               </ThemedText>
             </Pressable>

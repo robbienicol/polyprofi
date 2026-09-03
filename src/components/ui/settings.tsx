@@ -1,9 +1,16 @@
 import React from 'react';
-import { Platform, Pressable, Switch, View } from 'react-native';
+import { Platform, Pressable, Switch, View, type SwitchProps } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { Accent, Brand, Radius, Shadow } from '@/constants/theme';
+import { Brand, Colors, Radius, Semantic, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+
+/**
+ * react-native-web names the checked knob `activeThumbColor` and defaults it to
+ * its own teal, which `thumbColor` never overrides. The prop is missing from the
+ * React Native types, so the component is retyped rather than cast at each use.
+ */
+const ThemedSwitch = Switch as React.ComponentType<SwitchProps & { activeThumbColor?: string }>;
 
 const ICON_TILE = 32;
 const ROW_PADDING = 14;
@@ -96,8 +103,8 @@ export function SettingsRow({
   disabled = false,
 }: SettingsRowProps): React.ReactElement {
   const theme = useTheme();
-  const tint = tone === 'danger' ? Accent.red : tone === 'brand' ? Brand[500] : theme.textSecondary;
-  const labelColor = tone === 'danger' ? Accent.red : theme.text;
+  const tint = tone === 'danger' ? Semantic.negative : tone === 'brand' ? Brand[500] : theme.textSecondary;
+  const labelColor = tone === 'danger' ? Semantic.negative : theme.text;
 
   const body = (
     <View
@@ -184,12 +191,15 @@ export function SettingsSwitchRow({
       description={description}
       disabled={disabled}
       accessory={
-        <Switch
+        <ThemedSwitch
           value={value}
           onValueChange={onValueChange}
           disabled={disabled}
           trackColor={{ false: theme.backgroundSelected, true: Brand[500] }}
-          thumbColor={Platform.OS === 'android' ? (value ? '#FFFFFF' : theme.textTertiary) : undefined}
+          // iOS draws its own white knob; Android and web both default to a teal
+          // one that fights the brand track, so they get an explicit thumb.
+          thumbColor={Platform.OS === 'ios' ? undefined : value ? Colors.light.backgroundElevated : theme.textTertiary}
+          activeThumbColor={Colors.light.backgroundElevated}
           ios_backgroundColor={theme.backgroundSelected}
           accessibilityLabel={label}
         />

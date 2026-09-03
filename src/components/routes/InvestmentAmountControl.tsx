@@ -1,4 +1,5 @@
 import Slider from '@react-native-community/slider';
+import { useState } from 'react';
 import { TextInput, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -41,9 +42,16 @@ export function InvestmentAmountControl({
 }: InvestmentAmountControlProps): React.ReactElement {
   const theme = useTheme();
   const step = stepFor(maximum);
+  // Where the thumb is *right now*, while a drag is in flight. Committing every
+  // intermediate value re-ranked and re-scored the whole route pool on each of the
+  // many events a drag fires, which is what made the slider feel stuck: the thumb
+  // was waiting on a full re-render before it could move again. The number on
+  // screen still tracks the drag; only the re-rank waits for the finger to lift.
+  const [dragging, setDragging] = useState<number | null>(null);
+  const displayed = dragging ?? amount;
   // Typing can exceed the slider's range, so the track ends at whichever is
   // larger rather than snapping a deliberately bigger number back down.
-  const trackMaximum = Math.max(step, Math.round(maximum), amount);
+  const trackMaximum = Math.max(step, Math.round(maximum), displayed);
 
   return (
     <View style={{ borderRadius: Radius.xl, backgroundColor: theme.backgroundElevated, borderWidth: 1, borderColor: theme.border, paddingHorizontal: 16, paddingVertical: 14, gap: 8, ...Shadow.card }}>
@@ -58,8 +66,11 @@ export function InvestmentAmountControl({
         style={{ borderRadius: Radius.md, borderWidth: 1.5, borderColor: theme.borderStrong, backgroundColor: theme.background, paddingHorizontal: 14 }}>
         <ThemedText style={{ fontSize: 20, fontWeight: '800', color: Brand[500], marginRight: 4 }}>$</ThemedText>
         <TextInput
-          value={amount > 0 ? amount.toLocaleString('en-US') : ''}
-          onChangeText={(text) => onAmountChange(Number(text.replace(/[^0-9]/g, '')) || 0)}
+          value={displayed > 0 ? displayed.toLocaleString('en-US') : ''}
+          onChangeText={(text) => {
+            setDragging(null);
+            onAmountChange(Number(text.replace(/[^0-9]/g, '')) || 0);
+          }}
           onBlur={() => amount < 1 && onAmountChange(1)}
           keyboardType="number-pad"
           inputMode="numeric"
@@ -77,8 +88,12 @@ export function InvestmentAmountControl({
         minimumValue={step}
         maximumValue={trackMaximum}
         step={step}
-        value={Math.min(Math.max(amount, step), trackMaximum)}
-        onValueChange={(value) => onAmountChange(Math.round(value))}
+        value={Math.min(Math.max(displayed, step), trackMaximum)}
+        onValueChange={(value) => setDragging(Math.round(value))}
+        onSlidingComplete={(value) => {
+          setDragging(null);
+          onAmountChange(Math.round(value));
+        }}
         accessibilityLabel="Amount you are willing to invest"
         minimumTrackTintColor={Brand[500]}
         maximumTrackTintColor={theme.backgroundSelected}

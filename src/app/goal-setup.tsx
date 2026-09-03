@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSavingsGoal } from '@/api/hooks/useSavingsGoal';
 import { OnboardingGlow } from '@/components/onboarding/OnboardingPreviews';
 import { ThemedText } from '@/components/themed-text';
-import { Brand, Radius, Shadow } from '@/constants/theme';
+import { Brand, OnBrand, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 interface GoalPreset {
@@ -133,7 +133,7 @@ export default function GoalSetupScreen(): React.ReactElement {
                       </View>
                       {selected ? (
                         <View style={{ width: 22, height: 22, borderRadius: 999, backgroundColor: Brand[500], alignItems: 'center', justifyContent: 'center' }}>
-                          <ThemedText style={{ fontSize: 12, fontWeight: '900', color: '#06140C' }}>✓</ThemedText>
+                          <ThemedText style={{ fontSize: 12, fontWeight: '900', color: OnBrand }}>✓</ThemedText>
                         </View>
                       ) : null}
                     </View>
@@ -176,7 +176,7 @@ export default function GoalSetupScreen(): React.ReactElement {
                   </View>
                   {isOpenEnded ? (
                     <View style={{ width: 22, height: 22, borderRadius: 999, backgroundColor: Brand[500], alignItems: 'center', justifyContent: 'center' }}>
-                      <ThemedText style={{ fontSize: 12, fontWeight: '900', color: '#06140C' }}>✓</ThemedText>
+                      <ThemedText style={{ fontSize: 12, fontWeight: '900', color: OnBrand }}>✓</ThemedText>
                     </View>
                   ) : null}
                 </View>
@@ -207,7 +207,7 @@ export default function GoalSetupScreen(): React.ReactElement {
                   </View>
                   {isCustom ? (
                     <View style={{ width: 22, height: 22, borderRadius: 999, backgroundColor: Brand[500], alignItems: 'center', justifyContent: 'center' }}>
-                      <ThemedText style={{ fontSize: 12, fontWeight: '900', color: '#06140C' }}>✓</ThemedText>
+                      <ThemedText style={{ fontSize: 12, fontWeight: '900', color: OnBrand }}>✓</ThemedText>
                     </View>
                   ) : null}
                 </View>
@@ -266,7 +266,7 @@ export default function GoalSetupScreen(): React.ReactElement {
               accessibilityRole="button"
               className="py-4 items-center active:opacity-85"
               style={{ borderRadius: Radius.lg, backgroundColor: Brand[500], opacity: chosen ? 1 : 0.4, ...Shadow.card }}>
-              <ThemedText style={{ fontSize: 16, fontWeight: '900', color: '#06140C' }}>
+              <ThemedText style={{ fontSize: 16, fontWeight: '900', color: OnBrand }}>
                 {isFirstGoal ? (chosen ? 'Start saving →' : 'Start saving') : chosen ? 'Add goal →' : 'Add goal'}
               </ThemedText>
             </Pressable>

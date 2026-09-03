@@ -61,15 +61,29 @@ export async function fetchRoutes(
       const cached = await getDailyPool(goalKey).catch(() => null);
       if (cached?.length) return cached;
     }
-    const routes = await generateRoutes(params, options.getToken);
-    await setDailyPool(goalKey, routes).catch(() => undefined);
+    const { routes, degraded } = await generateRoutes(params, options.getToken);
+    // A pool built without the live prediction-market feed is not a result worth
+    // keeping: the daily cache treats any non-empty pool as a hit, so caching one
+    // pinned every search in this band to the deterministic stock/treasury routes
+    // for the rest of the day after a single slow feed.
+    if (degraded) {
+      console.warn('[routes] prediction-market feed unavailable — serving this pool without caching it');
+    } else {
+      await setDailyPool(goalKey, routes).catch(() => undefined);
+    }
     return routes;
   })().finally(() => inflightRoutes.delete(requestKey));
   inflightRoutes.set(requestKey, request);
   return request;
 }
 
-async function generateRoutes(params: RouteParams, getToken?: TokenProvider): Promise<Route[]> {
+interface GeneratedPool {
+  routes: Route[];
+  /** True when the live prediction-market feed came back empty, so the pool is stocks-only. */
+  degraded: boolean;
+}
+
+async function generateRoutes(params: RouteParams, getToken?: TokenProvider): Promise<GeneratedPool> {
   const { balance, target, timeframe } = params;
   const returnPct = balance > 0 ? (target / balance) * 100 : 0;
   const fallbackMaturity = timeframeCalendarDays(timeframe);
@@ -114,7 +128,10 @@ async function generateRoutes(params: RouteParams, getToken?: TokenProvider): Pr
     },
   });
   const aiRoutes = await requestAiRoutes(prompt.system, prompt.user, fallbackMaturity, getToken);
-  return mergeAndRankRoutes(aiRoutes, polymarketUniverse, marketContext, params, returnPct, fallbackMaturity);
+  return {
+    routes: mergeAndRankRoutes(aiRoutes, polymarketUniverse, marketContext, params, returnPct, fallbackMaturity),
+    degraded: polymarketUniverse.length === 0,
+  };
 }
 
 // AI generation now only SUPPLEMENTS Polymarket routes — the deterministic builders

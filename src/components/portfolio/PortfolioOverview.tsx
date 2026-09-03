@@ -10,9 +10,9 @@ import {
   PerformanceChart,
 } from '@/components/portfolio/PortfolioVisuals';
 import { ThemedText } from '@/components/themed-text';
-import { Accent, Brand, Radius, Shadow } from '@/constants/theme';
+import { Brand, OnBrand, Radius, Semantic, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { portfolioStats } from '@/lib/portfolio';
+import { maturityWords, portfolioStats } from '@/lib/portfolio';
 import type { TrackedBet } from '@/types/bets';
 
 const MONO = { fontVariant: ['tabular-nums' as const] };
@@ -20,14 +20,6 @@ const MONO = { fontVariant: ['tabular-nums' as const] };
 type AllocationMetric = 'share' | 'return';
 
 /** Plain-language horizon for the expectation: "3 days", "5 weeks", "4 months". */
-function maturityWords(days: number): string {
-  if (days <= 1) return 'a day';
-  if (days < 14) return `${days} days`;
-  if (days < 60) return `${Math.round(days / 7)} weeks`;
-  if (days < 365) return `${Math.round(days / 30)} months`;
-  return `${(days / 365).toFixed(1)} years`;
-}
-
 /** What the positions are worth right now, measured rather than modelled. */
 export interface PortfolioValueNow {
   /** Principal plus current gains and losses, from live prices where they exist. */
@@ -212,7 +204,7 @@ export function PortfolioOverview({
               // Red stays for the real P&L view — that is money actually down.
               // The expected view is a model average, so it never goes red: a
               // fairly-priced book sits near zero and crosses it on spread alone.
-              color: showExpected ? theme.text : positive ? Brand[500] : Accent.red,
+              color: showExpected ? theme.text : positive ? Semantic.positive : Semantic.negative,
               ...MONO,
             }}>
             {money(showExpected ? expectedProfit : netPnl, { signed: true })} (
@@ -262,11 +254,11 @@ export function PortfolioOverview({
               paddingVertical: 6,
               borderRadius: Radius.pill,
               borderWidth: 1,
-              borderColor: conservative ? Accent.gold + '66' : theme.border,
-              backgroundColor: conservative ? Accent.gold + '18' : 'transparent',
+              borderColor: conservative ? Semantic.caution + '66' : theme.border,
+              backgroundColor: conservative ? Semantic.caution + '18' : 'transparent',
             }}>
             <ThemedText
-              style={{ fontSize: 11, fontWeight: '800', color: conservative ? Accent.gold : theme.textSecondary }}>
+              style={{ fontSize: 11, fontWeight: '800', color: conservative ? Semantic.caution : theme.textSecondary }}>
               {conservative ? '🛡 Conservative' : 'Conservative off'}
             </ThemedText>
           </Pressable>
@@ -296,7 +288,7 @@ export function PortfolioOverview({
         <MetricTile
           label="Goal probability"
           value={`${goalProbability.toFixed(0)}%`}
-          valueColor={Brand[500]}
+          valueColor={Semantic.positive}
           caption={
             targetValue != null
               ? `To reach ${money(targetValue, { decimals: 0 })}`
@@ -375,7 +367,7 @@ export function PortfolioOverview({
           onPress={onFindRoutes}
           className="py-4 items-center active:opacity-85"
           style={{ borderRadius: Radius.lg, backgroundColor: Brand[500], ...Shadow.card }}>
-          <ThemedText style={{ fontSize: 14, fontWeight: '800', color: '#06140C' }}>
+          <ThemedText style={{ fontSize: 14, fontWeight: '800', color: OnBrand }}>
             Put your cash to work →
           </ThemedText>
         </Pressable>
@@ -429,7 +421,7 @@ export function PortfolioOverview({
                 <ThemedText style={{ fontSize: 14, fontWeight: '800', color: theme.text, ...MONO }}>
                   {money(bet.amountWagered, { decimals: 0 })}
                 </ThemedText>
-                <ThemedText style={{ fontSize: 11, fontWeight: '700', color: Brand[500], ...MONO }}>
+                <ThemedText style={{ fontSize: 11, fontWeight: '700', color: Semantic.positive, ...MONO }}>
                   {money(bet.expectedReturn, { decimals: 0, signed: true })}
                 </ThemedText>
               </View>
@@ -586,7 +578,7 @@ function EmptyPortfolio({
         onPress={onFindRoutes}
         className="items-center active:opacity-85"
         style={{ borderRadius: Radius.lg, backgroundColor: Brand[500], paddingVertical: 13, paddingHorizontal: 22, marginTop: 4 }}>
-        <ThemedText style={{ fontSize: 14, fontWeight: '800', color: '#06140C' }}>Find routes →</ThemedText>
+        <ThemedText style={{ fontSize: 14, fontWeight: '800', color: OnBrand }}>Find routes →</ThemedText>
       </Pressable>
     </View>
   );

@@ -1,7 +1,7 @@
 import { Platform, Pressable, TextInput, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { Brand, Radius } from '@/constants/theme';
+import { Brand, OnBrand, Radius } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 interface TrackRouteFormProps {
@@ -25,7 +25,7 @@ export function TrackRouteForm({ amount, destinationLabel, onAmountChange, onCon
           <TextInput value={amount} onChangeText={onAmountChange} keyboardType="numeric" placeholder="0" placeholderTextColor={theme.textTertiary} className="flex-1" style={{ color: theme.text, fontSize: 16, fontWeight: '700', fontVariant: ['tabular-nums'] }} autoFocus />
         </View>
         <Pressable disabled={!canConfirm} onPress={onConfirm} className="px-4 active:opacity-80" style={{ borderRadius: Radius.md, backgroundColor: Brand[500], paddingVertical: buttonPadding, opacity: canConfirm ? 1 : 0.4 }}>
-          <ThemedText style={{ fontSize: 14, fontWeight: '800', color: '#06140C' }}>Open {destinationLabel}</ThemedText>
+          <ThemedText style={{ fontSize: 14, fontWeight: '800', color: OnBrand }}>Open {destinationLabel}</ThemedText>
         </Pressable>
         <Pressable onPress={onCancel} className="px-3 border active:opacity-70" style={{ borderRadius: Radius.md, borderColor: theme.border, paddingVertical: buttonPadding }}>
           <ThemedText type="small" themeColor="textSecondary">Cancel</ThemedText>

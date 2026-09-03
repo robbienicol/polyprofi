@@ -22,7 +22,7 @@ import {
 import { ONBOARDING_SLIDES } from "@/components/onboarding/onboarding-data";
 import { useSpokenLine } from "@/components/onboarding/quiz-kit";
 import { ThemedText } from "@/components/themed-text";
-import { Brand, Radius, Shadow } from "@/constants/theme";
+import { Brand, OnBrand, Radius, Shadow } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 
 const SLIDE_COUNT = ONBOARDING_SLIDES.length;
@@ -226,7 +226,7 @@ function OnboardingCarousel({ initialName }: { initialName: string }): React.Rea
                     style={{
                       fontSize: 14,
                       fontWeight: "900",
-                      color: "#06140C",
+                      color: OnBrand,
                     }}
                   >
                     $
@@ -456,7 +456,7 @@ function OnboardingCarousel({ initialName }: { initialName: string }): React.Rea
                 style={{
                   fontSize: 16,
                   fontWeight: "800",
-                  color: "#06140C",
+                  color: OnBrand,
                   letterSpacing: -0.2,
                 }}
               >
@@ -557,7 +557,7 @@ function WelcomeSlide({
           style={{
             fontSize: short ? 32 : 38,
             fontWeight: "900",
-            color: "#06140C",
+            color: OnBrand,
           }}
         >
           $

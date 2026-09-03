@@ -10,7 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
-import { Accent, Brand, Radius, Shadow } from '@/constants/theme';
+import { Brand, OnBrand, Radius, Semantic, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 /**
@@ -57,7 +57,7 @@ export function AuthScreen({
                   justifyContent: 'center',
                   ...Shadow.float,
                 }}>
-                <ThemedText style={{ fontSize: 34, fontWeight: '900', color: '#06140C' }}>$</ThemedText>
+                <ThemedText style={{ fontSize: 34, fontWeight: '900', color: OnBrand }}>$</ThemedText>
               </View>
               <ThemedText
                 style={{ fontSize: 30, fontWeight: '800', letterSpacing: -0.8, color: theme.text }}>
@@ -104,9 +104,9 @@ export function AuthButton({
         ...Shadow.card,
       }}>
       {loading ? (
-        <ActivityIndicator color="#06140C" />
+        <ActivityIndicator color={OnBrand} />
       ) : (
-        <ThemedText style={{ fontWeight: '800', fontSize: 16, color: '#06140C' }}>{label}</ThemedText>
+        <ThemedText style={{ fontWeight: '800', fontSize: 16, color: OnBrand }}>{label}</ThemedText>
       )}
     </Pressable>
   );
@@ -116,7 +116,7 @@ export function AuthButton({
 export function AuthError({ message }: { message?: string }): React.ReactElement | null {
   if (!message) return null;
   return (
-    <ThemedText type="small" className="text-center" style={{ color: Accent.red }}>
+    <ThemedText type="small" className="text-center" style={{ color: Semantic.negative }}>
       {message}
     </ThemedText>
   );

@@ -11,7 +11,7 @@ import {
   SWEEP_MARKETS,
 } from '@/components/onboarding/onboarding-data';
 import { ThemedText } from '@/components/themed-text';
-import { Accent, Brand, Radius, RiskScale, Shadow } from '@/constants/theme';
+import { Brand, OnBrand, Radius, RiskScale, Semantic, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 export { OnboardingGlow } from '@/components/onboarding/OnboardingGlow';
@@ -284,7 +284,7 @@ function SweepRow({
           opacity: anim,
           transform: [{ scale: anim.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] }) }],
         }}>
-        <ThemedText style={{ fontSize: 11, fontWeight: '900', color: '#06140C' }}>✓</ThemedText>
+        <ThemedText style={{ fontSize: 11, fontWeight: '900', color: OnBrand }}>✓</ThemedText>
       </Animated.View>
     </View>
   );
@@ -373,12 +373,12 @@ function BreakdownPreview({ active }: PreviewProps): React.ReactElement {
               marginHorizontal: 6,
               padding: 10,
               borderRadius: Radius.md,
-              backgroundColor: Accent.gold + '12',
+              backgroundColor: Semantic.caution + '12',
               borderWidth: 1,
-              borderColor: Accent.gold + '33',
+              borderColor: Semantic.caution + '33',
               gap: 3,
             }}>
-            <ThemedText style={{ fontSize: 9.5, fontWeight: '800', color: Accent.gold, letterSpacing: 0.4 }}>
+            <ThemedText style={{ fontSize: 9.5, fontWeight: '800', color: Semantic.caution, letterSpacing: 0.4 }}>
               IF IT GOES AGAINST YOU
             </ThemedText>
             <ThemedText style={{ fontSize: 11, color: theme.textSecondary, lineHeight: 16 }}>
@@ -509,7 +509,7 @@ function CoachPreview({ active }: PreviewProps): React.ReactElement {
                   borderRadius: Radius.lg,
                   backgroundColor: Brand[500],
                 }}>
-                <ThemedText style={{ fontSize: 12.5, fontWeight: '700', color: '#06140C', lineHeight: 18 }}>
+                <ThemedText style={{ fontSize: 12.5, fontWeight: '700', color: OnBrand, lineHeight: 18 }}>
                   {question.text}
                 </ThemedText>
               </View>
@@ -551,7 +551,7 @@ function CoachPreview({ active }: PreviewProps): React.ReactElement {
           }}>
           <ThemedText style={{ fontSize: 12, color: theme.textTertiary, flex: 1 }}>Ask why, risk, sizing…</ThemedText>
           <View style={{ paddingHorizontal: 11, paddingVertical: 7, borderRadius: Radius.md, backgroundColor: Brand[500] }}>
-            <ThemedText style={{ fontSize: 11, fontWeight: '800', color: '#06140C' }}>Send</ThemedText>
+            <ThemedText style={{ fontSize: 11, fontWeight: '800', color: OnBrand }}>Send</ThemedText>
           </View>
         </View>
       </Panel>
@@ -579,7 +579,7 @@ function ClosePreview(): React.ReactElement {
                 $300
               </ThemedText>
               <ThemedText style={{ fontSize: 14, color: theme.textTertiary }}>→</ThemedText>
-              <ThemedText style={{ fontSize: 22, fontWeight: '900', color: Brand[500], letterSpacing: -0.7, ...MONO }}>
+              <ThemedText style={{ fontSize: 22, fontWeight: '900', color: Semantic.positive, letterSpacing: -0.7, ...MONO }}>
                 $330
               </ThemedText>
             </View>
@@ -637,7 +637,7 @@ function ClosePreview(): React.ReactElement {
             }}>
             <ThemedText style={{ fontSize: 14 }}>{proof.emoji}</ThemedText>
             <ThemedText style={{ fontSize: 12.5, fontWeight: '600', color: theme.text, flex: 1 }}>{proof.label}</ThemedText>
-            <ThemedText style={{ fontSize: 12, fontWeight: '900', color: Brand[500] }}>✓</ThemedText>
+            <ThemedText style={{ fontSize: 12, fontWeight: '900', color: Semantic.positive }}>✓</ThemedText>
           </View>
         ))}
       </View>

@@ -1,7 +1,7 @@
 import { View } from "react-native";
 
 import { ThemedText } from "@/components/themed-text";
-import { Brand, Radius, Shadow } from "@/constants/theme";
+import { Radius, Semantic, Shadow } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 import type { MarketComparison } from "@/lib/market-comparison";
 
@@ -37,10 +37,10 @@ export function MarketComparisonCard({
               paddingHorizontal: 10,
               paddingVertical: 5,
               borderRadius: Radius.pill,
-              backgroundColor: Brand[500] + "20",
+              backgroundColor: Semantic.positive + "20",
             }}
           >
-            <ThemedText style={{ fontSize: 11, fontWeight: "900", color: Brand[500] }}>
+            <ThemedText style={{ fontSize: 11, fontWeight: "900", color: Semantic.positive }}>
               +{edgeCents}¢ ON {betterPlatform.toUpperCase()}
             </ThemedText>
           </View>
@@ -84,9 +84,9 @@ function PlatformRow({
       className="flex-1"
       style={{
         borderRadius: Radius.md,
-        backgroundColor: highlighted ? Brand[500] + "18" : theme.backgroundSelected,
+        backgroundColor: highlighted ? Semantic.positive + "18" : theme.backgroundSelected,
         borderWidth: highlighted ? 1 : 0,
-        borderColor: Brand[500],
+        borderColor: Semantic.positive,
         paddingHorizontal: 12,
         paddingVertical: 10,
         gap: 2,
@@ -99,7 +99,7 @@ function PlatformRow({
         style={{
           fontSize: 20,
           fontWeight: "900",
-          color: highlighted ? Brand[500] : theme.text,
+          color: highlighted ? Semantic.positive : theme.text,
         }}
       >
         {priceCents}¢

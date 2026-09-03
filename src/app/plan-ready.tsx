@@ -7,7 +7,7 @@ import { useOnboardingProfile } from '@/api/hooks/useOnboardingProfile';
 import { OnboardingGlow } from '@/components/onboarding/OnboardingPreviews';
 import { SOMETHING_ELSE } from '@/components/onboarding/quiz-pages';
 import { ThemedText } from '@/components/themed-text';
-import { Brand, Radius, Shadow } from '@/constants/theme';
+import { Brand, OnBrand, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { deviceCountry } from '@/lib/device-region';
 import { HORIZONS, LOSS_REACTIONS, type SurveyAnswers } from '@/lib/onboarding-profile';
@@ -89,7 +89,7 @@ export default function PlanReadyScreen(): React.ReactElement {
             accessibilityRole="button"
             className="py-4 items-center active:opacity-85"
             style={{ borderRadius: Radius.lg, backgroundColor: Brand[500], ...Shadow.card }}>
-            <ThemedText style={{ fontSize: 16, fontWeight: '800', color: '#06140C', letterSpacing: -0.2 }}>
+            <ThemedText style={{ fontSize: 16, fontWeight: '800', color: OnBrand, letterSpacing: -0.2 }}>
               Set my first goal →
             </ThemedText>
           </Pressable>

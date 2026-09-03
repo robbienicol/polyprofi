@@ -1,11 +1,55 @@
 import type { Route } from '@/types/routes';
 
-const GOAL_SCORE_WEIGHTS = {
+/**
+ * How much each component counts. Fixed constants for years; now a user input,
+ * because "the best route" means different things to someone who cannot afford to
+ * lose the stake and someone who needs the money by Friday. See `normalizeScoreWeights`
+ * — the sliders hand over raw importance, not fractions.
+ */
+export interface ScoreWeights {
+  reliability: number;
+  principalProtection: number;
+  capitalEfficiency: number;
+  timeEfficiency: number;
+}
+
+export const SCORE_WEIGHT_KEYS = [
+  'reliability',
+  'principalProtection',
+  'capitalEfficiency',
+  'timeEfficiency',
+] as const satisfies readonly (keyof ScoreWeights)[];
+
+export const DEFAULT_SCORE_WEIGHTS: ScoreWeights = {
   reliability: 0.35,
   principalProtection: 0.25,
   capitalEfficiency: 0.30,
   timeEfficiency: 0.10,
-} as const;
+};
+
+/**
+ * Turn raw slider importance into weights that sum to 1, so the score stays on its
+ * 0-100 scale no matter where the user leaves the sliders. Only the *ratios* between
+ * the sliders matter — dragging all four to the top is the same as leaving all four
+ * in the middle, which is what makes "more of everything" impossible to ask for.
+ *
+ * A set that is all zeros (or has no finite values at all) carries no preference, so
+ * it falls back to the defaults rather than producing a score of zero for everything.
+ */
+export function normalizeScoreWeights(weights: ScoreWeights): ScoreWeights {
+  const safe = SCORE_WEIGHT_KEYS.map((key) => {
+    const value = weights[key];
+    return Number.isFinite(value) && value > 0 ? value : 0;
+  });
+  const total = safe.reduce((sum, value) => sum + value, 0);
+  if (total <= 0) return DEFAULT_SCORE_WEIGHTS;
+  return {
+    reliability: safe[0] / total,
+    principalProtection: safe[1] / total,
+    capitalEfficiency: safe[2] / total,
+    timeEfficiency: safe[3] / total,
+  };
+}
 
 export interface GoalScoreContext {
   target: number;
@@ -19,6 +63,8 @@ type GoalScoreCapReason = 'over_budget' | 'misses_deadline' | 'insufficient_data
 export interface GoalScoreBreakdown {
   score: number;
   rawScore: number;
+  /** The normalised weights this score was computed with — what the sliders asked for. */
+  weights: ScoreWeights;
   reliability: number;
   principalProtection: number;
   capitalEfficiency: number;
@@ -55,11 +101,17 @@ export interface GoalScoreBreakdown {
 /**
  * Goal Effectiveness Score (0-100).
  *
- * The four components answer separate questions:
+ * The four components answer separate questions, at the weights the user set
+ * (DEFAULT_SCORE_WEIGHTS when they have not touched them):
  *   35% reliability          - how likely is the route to hit the profit goal?
  *   25% principal protection - how protected is the original investment?
  *   30% capital efficiency   - how little capital is needed for the same goal?
  *   10% time efficiency      - how early does it mature inside the deadline?
+ *
+ * Only the four weights are the user's to set. The gates, the capital-destruction
+ * drag and the market-quality deductions below are not — they are corrections for
+ * things that are true whatever someone's priorities are, so no slider can turn
+ * off the fact that an unaffordable route is unaffordable.
  *
  * Affordability and deadline misses are gates. They cap the final number instead
  * of becoming more weights that a high probability could average away.
@@ -84,7 +136,12 @@ export interface GoalScoreBreakdown {
  * never manufacture an informational edge: a perfect market keeps the theoretical score,
  * while a wide, thin, or violently repricing market loses confidence.
  */
-export function goalEffectivenessScore(route: Route, context: GoalScoreContext): GoalScoreBreakdown {
+export function goalEffectivenessScore(
+  route: Route,
+  context: GoalScoreContext,
+  weights: ScoreWeights = DEFAULT_SCORE_WEIGHTS,
+): GoalScoreBreakdown {
+  const appliedWeights = normalizeScoreWeights(weights);
   const reliability = clamp(route.probability, 0, 100);
 
   // How much of the stake survives a failure. An all-or-nothing route protects nothing;
@@ -115,10 +172,10 @@ export function goalEffectivenessScore(route: Route, context: GoalScoreContext):
     : clamp(100 - 50 * (maturityDays / deadlineDays), 50, 100);
 
   const contributions = {
-    reliability: round1(reliability * GOAL_SCORE_WEIGHTS.reliability),
-    principalProtection: round1(principalProtection * GOAL_SCORE_WEIGHTS.principalProtection),
-    capitalEfficiency: round1(capitalEfficiency * GOAL_SCORE_WEIGHTS.capitalEfficiency),
-    timeEfficiency: round1(timeEfficiency * GOAL_SCORE_WEIGHTS.timeEfficiency),
+    reliability: round1(reliability * appliedWeights.reliability),
+    principalProtection: round1(principalProtection * appliedWeights.principalProtection),
+    capitalEfficiency: round1(capitalEfficiency * appliedWeights.capitalEfficiency),
+    timeEfficiency: round1(timeEfficiency * appliedWeights.timeEfficiency),
   };
   const rawScore = round1(
     contributions.reliability
@@ -159,6 +216,7 @@ export function goalEffectivenessScore(route: Route, context: GoalScoreContext):
   return {
     score: Math.round(clamp(cap == null ? qualityAdjustedScore : Math.min(qualityAdjustedScore, cap), 0, 100)),
     rawScore,
+    weights: appliedWeights,
     reliability: round1(reliability),
     principalProtection: round1(principalProtection),
     capitalEfficiency: round1(capitalEfficiency),
@@ -212,10 +270,11 @@ function finiteScore(value: number | undefined): number | null {
 
 export function sortByPatheyScore(
   routes: Route[],
-  contextForRoute: (route: Route) => GoalScoreContext
+  contextForRoute: (route: Route) => GoalScoreContext,
+  weights: ScoreWeights = DEFAULT_SCORE_WEIGHTS,
 ): Route[] {
   const breakdowns = new Map(
-    routes.map((route) => [route, goalEffectivenessScore(route, contextForRoute(route))] as const)
+    routes.map((route) => [route, goalEffectivenessScore(route, contextForRoute(route), weights)] as const)
   );
 
   return [...routes].sort((a, b) => {
@@ -358,6 +417,42 @@ export function __selfCheck(): void {
     (route) => context(route.id === 'efficient' ? 1000 : 3000)
   );
   invariant(sorted[0]?.id === 'efficient', 'capital-efficient route must sort first');
+
+  // ── user-set weights ──────────────────────────────────────────────────────
+  // Raw slider importance, not fractions: only the ratios count, so the score
+  // stays on its 0-100 scale wherever the sliders are left.
+  const allTop = normalizeScoreWeights({ reliability: 100, principalProtection: 100, capitalEfficiency: 100, timeEfficiency: 100 });
+  const allMiddle = normalizeScoreWeights({ reliability: 50, principalProtection: 50, capitalEfficiency: 50, timeEfficiency: 50 });
+  invariant(allTop.reliability === 0.25, 'four equal sliders each carry a quarter, wherever they sit');
+  invariant(allTop.reliability === allMiddle.reliability, 'raising every slider asks for nothing — only ratios count');
+  invariant(
+    normalizeScoreWeights({ reliability: 0, principalProtection: 0, capitalEfficiency: 0, timeEfficiency: 0 }) === DEFAULT_SCORE_WEIGHTS,
+    'a set of all zeros carries no preference, so the defaults stand',
+  );
+  const negative = normalizeScoreWeights({ reliability: -5, principalProtection: 5, capitalEfficiency: 0, timeEfficiency: 0 });
+  invariant(negative.principalProtection === 1, 'a negative slider counts as zero rather than inverting the component');
+
+  // Weights must actually move the ranking: same two routes, opposite priorities.
+  const safeSlow = mk({ id: 'safeSlow', lossProfile: 'partial', riskLevel: 1, probability: 55, maturesInDays: 29 });
+  const riskyFast = mk({ id: 'riskyFast', lossProfile: 'binary', riskLevel: 4, probability: 55, maturesInDays: 2 });
+  const protectionFirst = sortByPatheyScore([riskyFast, safeSlow], () => context(1000), {
+    reliability: 0, principalProtection: 100, capitalEfficiency: 0, timeEfficiency: 0,
+  });
+  const speedFirst = sortByPatheyScore([safeSlow, riskyFast], () => context(1000), {
+    reliability: 0, principalProtection: 0, capitalEfficiency: 0, timeEfficiency: 100,
+  });
+  invariant(protectionFirst[0].id === 'safeSlow', 'all-in on protecting the stake ranks the capital-safe route first');
+  invariant(speedFirst[0].id === 'riskyFast', 'all-in on speed ranks the fastest route first');
+
+  // A slider cannot spend its way past a gate: the corrections are not weights.
+  const cappedByWeights = goalEffectivenessScore(mk({ maturesInDays: 31 }), context(1000), {
+    reliability: 100, principalProtection: 0, capitalEfficiency: 0, timeEfficiency: 0,
+  });
+  invariant(cappedByWeights.score === 39, 'no weighting lifts a route that misses the deadline past its cap');
+  invariant(
+    goalEffectivenessScore(mk({}), context(1000), allTop).weights.timeEfficiency === 0.25,
+    'the breakdown reports the normalised weights it was scored with',
+  );
 }
 
 function invariant(condition: boolean, message: string): void {

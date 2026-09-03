@@ -19,7 +19,7 @@ import {
   SettingsSection,
   SettingsSwitchRow,
 } from '@/components/ui/settings';
-import { Accent, Brand, Radius, Shadow } from '@/constants/theme';
+import { Brand, OnBrand, Radius, Semantic, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { requestAppRating } from '@/lib/app-rating';
 import { requestNotificationPermission, syncWeeklyReminder } from '@/lib/notifications';
@@ -180,7 +180,7 @@ export default function SettingsScreen(): React.ReactElement {
                 alignItems: 'center',
                 justifyContent: 'center',
               }}>
-              <ThemedText style={{ fontSize: 20, fontWeight: '900', color: '#06140C' }}>{initials}</ThemedText>
+              <ThemedText style={{ fontSize: 20, fontWeight: '900', color: OnBrand }}>{initials}</ThemedText>
             </View>
             <View className="flex-1" style={{ gap: 3 }}>
               <ThemedText style={{ fontSize: 18, fontWeight: '800', color: theme.text, letterSpacing: -0.3 }} numberOfLines={1}>
@@ -348,12 +348,12 @@ export default function SettingsScreen(): React.ReactElement {
               chevron={false}
               disabled={isDeleting}
               onPress={handleDeleteAccount}
-              accessory={isDeleting ? <ActivityIndicator color={Accent.red} /> : undefined}
+              accessory={isDeleting ? <ActivityIndicator color={Semantic.negative} /> : undefined}
             />
           </SettingsSection>
 
           {!!deleteError && (
-            <ThemedText type="small" className="text-center" style={{ color: Accent.red }}>
+            <ThemedText type="small" className="text-center" style={{ color: Semantic.negative }}>
               {deleteError}
             </ThemedText>
           )}

@@ -14,7 +14,7 @@ import { isPredictionMarketBet } from '@/lib/parse-bet-line';
 import { notifySellRecommendation } from '@/lib/notifications';
 import { useCelebrationArrival } from '@/hooks/use-celebration-arrival';
 import { isStockOrEtfCategory } from '@/lib/tracked-assets';
-import { Accent, Brand, Radius, Shadow } from '@/constants/theme';
+import { Brand, OnBrand, Radius, Semantic, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { BetLiveStatus, TrackedBet } from '@/types/bets';
 import type { PositionValuation } from '@/lib/portfolio-progress';
@@ -138,7 +138,7 @@ export default function PositionsScreen(): React.ReactElement {
                 <ThemedText style={{ fontSize: 11, fontWeight: '700', color: theme.textTertiary, letterSpacing: 0.8 }}>
                   TOTAL P&L
                 </ThemedText>
-                <ThemedText style={{ fontSize: 40, fontWeight: '800', letterSpacing: -1, color: pnlPositive ? Brand[500] : Accent.red, ...MONO }}>
+                <ThemedText style={{ fontSize: 40, fontWeight: '800', letterSpacing: -1, color: pnlPositive ? Semantic.positive : Semantic.negative, ...MONO }}>
                   {money(stats.pnl, { decimals: 0, signed: true })}
                 </ThemedText>
                 <View className="flex-row gap-4 mt-2">
@@ -229,9 +229,9 @@ function BetCardInner({ bet, liveStatus, valuation, highlighted, onResolve, onDi
         <View
           style={{
             borderRadius: Radius.lg,
-            backgroundColor: Accent.gold + '18',
+            backgroundColor: Semantic.caution + '18',
             borderWidth: 1.5,
-            borderColor: Accent.gold + '66',
+            borderColor: Semantic.caution + '66',
             padding: 14,
             gap: 10,
             ...Shadow.float,
@@ -239,7 +239,7 @@ function BetCardInner({ bet, liveStatus, valuation, highlighted, onResolve, onDi
           <View className="flex-row items-center gap-2">
             <ThemedText style={{ fontSize: 20 }}>💰</ThemedText>
             <View className="flex-1">
-              <ThemedText style={{ fontSize: 11, fontWeight: '800', color: Accent.gold, letterSpacing: 0.6 }}>
+              <ThemedText style={{ fontSize: 11, fontWeight: '800', color: Semantic.caution, letterSpacing: 0.6 }}>
                 SELL NOW — GOAL HIT
               </ThemedText>
               <ThemedText style={{ fontSize: 14, fontWeight: '700', color: theme.text, marginTop: 2 }}>
@@ -256,7 +256,7 @@ function BetCardInner({ bet, liveStatus, valuation, highlighted, onResolve, onDi
               onPress={() => onResolve({ id: bet.id, status: 'won' })}
               className="flex-1 py-3 items-center active:opacity-85"
               style={{ borderRadius: Radius.md, backgroundColor: Brand[500], ...Shadow.card }}>
-              <ThemedText style={{ fontSize: 14, fontWeight: '800', color: '#06140C' }}>Sold ✓</ThemedText>
+              <ThemedText style={{ fontSize: 14, fontWeight: '800', color: OnBrand }}>Sold ✓</ThemedText>
             </Pressable>
             <Pressable
               onPress={onDismissSell}
@@ -276,7 +276,7 @@ function BetCardInner({ bet, liveStatus, valuation, highlighted, onResolve, onDi
           // A sell alert is louder than a "you're up" arrival, so it keeps the
           // gold when both are true.
           borderWidth: showSell || highlighted ? 1.5 : 1,
-          borderColor: showSell ? Accent.gold + '55' : highlighted ? Brand[500] : theme.border,
+          borderColor: showSell ? Semantic.caution + '55' : highlighted ? Brand[500] : theme.border,
           ...Shadow.card,
         }}>
         <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, backgroundColor: rc }} />
@@ -325,7 +325,7 @@ function BetCardInner({ bet, liveStatus, valuation, highlighted, onResolve, onDi
               </View>
               <View className="flex-row items-baseline gap-1.5">
                 <ThemedText style={{ fontSize: 11, color: theme.textSecondary }}>Unrealized</ThemedText>
-                <ThemedText style={{ fontSize: 20, fontWeight: '800', color: valuation.unrealizedPnl >= 0 ? Brand[500] : Accent.red, ...MONO }}>
+                <ThemedText style={{ fontSize: 20, fontWeight: '800', color: valuation.unrealizedPnl >= 0 ? Semantic.positive : Semantic.negative, ...MONO }}>
                   {money(valuation.unrealizedPnl, { signed: true })}
                 </ThemedText>
                 <ThemedText style={{ fontSize: 11, color: theme.textTertiary, ...MONO }}>
@@ -349,14 +349,14 @@ function BetCardInner({ bet, liveStatus, valuation, highlighted, onResolve, onDi
                 padding: 12,
                 backgroundColor: theme.backgroundSelected,
                 borderWidth: 1,
-                borderColor: liveStatus.profitGoalHit ? Brand[500] + '33' : theme.border,
+                borderColor: liveStatus.profitGoalHit ? Semantic.positive + '33' : theme.border,
               }}>
               <View className="flex-row justify-between items-center">
                 <ThemedText style={{ fontSize: 11, fontWeight: '700', color: theme.textTertiary, letterSpacing: 0.4 }}>
                   {liveStatus.isLive ? '● LIVE' : 'MONITORING'}
                 </ThemedText>
                 {liveStatus.currentPrice != null && (
-                  <ThemedText style={{ fontSize: 11, fontWeight: '700', color: Brand[500], ...MONO }}>
+                  <ThemedText style={{ fontSize: 11, fontWeight: '700', color: Semantic.positive, ...MONO }}>
                     {(liveStatus.currentPrice * 100).toFixed(0)}¢
                     {liveStatus.entryPrice != null ? ` · entry ${(liveStatus.entryPrice * 100).toFixed(0)}¢` : ''}
                   </ThemedText>
@@ -370,7 +370,7 @@ function BetCardInner({ bet, liveStatus, valuation, highlighted, onResolve, onDi
                     style={{
                       fontSize: 20,
                       fontWeight: '800',
-                      color: liveStatus.unrealizedPnl >= goal ? Brand[500] : liveStatus.unrealizedPnl >= 0 ? theme.text : Accent.red,
+                      color: liveStatus.unrealizedPnl >= goal ? Semantic.positive : liveStatus.unrealizedPnl >= 0 ? theme.text : Semantic.negative,
                       ...MONO,
                     }}>
                     {money(liveStatus.unrealizedPnl, { decimals: 0, signed: true })}
@@ -391,7 +391,7 @@ function BetCardInner({ bet, liveStatus, valuation, highlighted, onResolve, onDi
               {isStock ? 'cost basis' : 'invested'}
             </ThemedText>
             <ThemedText style={{ fontSize: 12, color: theme.textTertiary }}>target</ThemedText>
-            <ThemedText style={{ fontSize: 13, fontWeight: '700', color: Brand[500], ...MONO }}>{money(targetProfitFor(bet), { decimals: 0, signed: true })}</ThemedText>
+            <ThemedText style={{ fontSize: 13, fontWeight: '700', color: Semantic.positive, ...MONO }}>{money(targetProfitFor(bet), { decimals: 0, signed: true })}</ThemedText>
           </View>
 
           {isActive && !showSell && (
@@ -400,8 +400,8 @@ function BetCardInner({ bet, liveStatus, valuation, highlighted, onResolve, onDi
                 <Pressable
                   onPress={() => onResolve({ id: bet.id, status: 'won' })}
                   className="flex-1 items-center active:opacity-75"
-                  style={{ borderRadius: Radius.md, paddingVertical: 10, backgroundColor: Brand[500] + '20' }}>
-                  <ThemedText style={{ fontSize: 13, fontWeight: '700', color: Brand[500] }}>Won ✓</ThemedText>
+                  style={{ borderRadius: Radius.md, paddingVertical: 10, backgroundColor: Semantic.positive + '20' }}>
+                  <ThemedText style={{ fontSize: 13, fontWeight: '700', color: Semantic.positive }}>Won ✓</ThemedText>
                 </Pressable>
                 <Pressable
                   onPress={() => onResolve({ id: bet.id, status: 'lost' })}
@@ -448,10 +448,10 @@ function StatusBadge({
   isLive?: boolean;
 }): React.ReactElement {
   const map = {
-    active: { color: isLive ? Brand[500] : Accent.gold, label: isLive ? 'Live' : 'Active' },
-    won: { color: Brand[500], label: 'Won ✓' },
-    lost: { color: Accent.red, label: 'Lost ✗' },
-    watching: { color: Accent.blue, label: 'Watching' },
+    active: { color: isLive ? Semantic.positive : Semantic.caution, label: isLive ? 'Live' : 'Active' },
+    won: { color: Semantic.positive, label: 'Won ✓' },
+    lost: { color: Semantic.negative, label: 'Lost ✗' },
+    watching: { color: Semantic.info, label: 'Watching' },
   };
   const { color, label } = map[status];
   return (

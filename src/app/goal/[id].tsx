@@ -14,7 +14,7 @@ import { useTrackedBets } from '@/api/hooks/useTrackedBets';
 import { useUserProfile } from '@/api/hooks/useUserProfile';
 import { PortfolioOverview } from '@/components/portfolio/PortfolioOverview';
 import { ThemedText } from '@/components/themed-text';
-import { Accent, Brand, Radius, Shadow } from '@/constants/theme';
+import { Brand, OnBrand, Radius, Semantic, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { excludedSearchCategoriesFor, riskToleranceFor } from '@/lib/onboarding-profile';
 import { buildRouteParams, referenceStakeFor, surveyAmountCeiling } from '@/lib/quiz-profile';
@@ -55,7 +55,7 @@ export default function GoalDetailScreen(): React.ReactElement {
   const netGain = progress.goalProgress;
   const fraction = goalProgressFraction(netGain, goal);
   const remaining = openEnded ? 0 : Math.max(0, (goal.targetAmount ?? 0) - netGain);
-  const gainColor = netGain > 0 ? Brand[500] : netGain < 0 ? Accent.red : theme.textSecondary;
+  const gainColor = netGain > 0 ? Semantic.positive : netGain < 0 ? Semantic.negative : theme.textSecondary;
   const staked = goalBets
     .filter((bet) => bet.status === 'active')
     .reduce((sum, bet) => sum + bet.amountWagered, 0);
@@ -146,7 +146,7 @@ export default function GoalDetailScreen(): React.ReactElement {
               borderRadius: Radius.xl,
               backgroundColor: theme.backgroundElevated,
               borderWidth: goal.achievedAt ? 1.5 : 1,
-              borderColor: goal.achievedAt ? Brand[500] : theme.border,
+              borderColor: goal.achievedAt ? Semantic.positive : theme.border,
               padding: 18,
               gap: 16,
               ...Shadow.card,
@@ -159,7 +159,7 @@ export default function GoalDetailScreen(): React.ReactElement {
                   borderRadius: Radius.lg,
                   alignItems: 'center',
                   justifyContent: 'center',
-                  backgroundColor: goal.achievedAt ? Brand[500] + '22' : theme.backgroundSelected,
+                  backgroundColor: goal.achievedAt ? Semantic.positive + '22' : theme.backgroundSelected,
                 }}>
                 <ThemedText style={{ fontSize: 28 }}>{goal.emoji}</ThemedText>
               </View>
@@ -172,7 +172,7 @@ export default function GoalDetailScreen(): React.ReactElement {
                 </ThemedText>
               </View>
               {openEnded ? null : (
-                <ThemedText style={{ fontSize: 26, fontWeight: '900', color: goal.achievedAt ? Brand[500] : theme.text, ...MONO }}>
+                <ThemedText style={{ fontSize: 26, fontWeight: '900', color: goal.achievedAt ? Semantic.positive : theme.text, ...MONO }}>
                   {Math.round(fraction * 100)}%
                 </ThemedText>
               )}
@@ -223,7 +223,7 @@ export default function GoalDetailScreen(): React.ReactElement {
                 accessibilityState={{ disabled: searching }}
                 className="py-3.5 items-center active:opacity-85"
                 style={{ borderRadius: Radius.lg, backgroundColor: Brand[500], opacity: searching ? 0.5 : 1 }}>
-                <ThemedText style={{ fontSize: 15, fontWeight: '900', color: '#06140C' }}>
+                <ThemedText style={{ fontSize: 15, fontWeight: '900', color: OnBrand }}>
                   {searching
                     ? 'Finding routes…'
                     : progress.activeCount > 0 ? 'Find another route →' : 'Find routes for this goal →'}
@@ -259,8 +259,8 @@ export default function GoalDetailScreen(): React.ReactElement {
               style={{
                 borderRadius: Radius.lg,
                 borderWidth: 1,
-                borderColor: Accent.red + '66',
-                backgroundColor: Accent.red + '12',
+                borderColor: Semantic.negative + '66',
+                backgroundColor: Semantic.negative + '12',
                 padding: 14,
                 gap: 10,
               }}>
@@ -282,7 +282,7 @@ export default function GoalDetailScreen(): React.ReactElement {
                   onPress={deleteGoal}
                   accessibilityRole="button"
                   className="flex-1 py-3 items-center active:opacity-75"
-                  style={{ borderRadius: Radius.md, backgroundColor: Accent.red }}>
+                  style={{ borderRadius: Radius.md, backgroundColor: Semantic.negative }}>
                   <ThemedText style={{ fontSize: 13, fontWeight: '800', color: '#FFFFFF' }}>Delete goal</ThemedText>
                 </Pressable>
               </View>
@@ -292,7 +292,7 @@ export default function GoalDetailScreen(): React.ReactElement {
               onPress={() => setConfirmingDelete(true)}
               accessibilityRole="button"
               className="items-center py-3 active:opacity-60">
-              <ThemedText style={{ fontSize: 13, fontWeight: '700', color: Accent.red }}>Delete this goal</ThemedText>
+              <ThemedText style={{ fontSize: 13, fontWeight: '700', color: Semantic.negative }}>Delete this goal</ThemedText>
             </Pressable>
           )}
         </ScrollView>

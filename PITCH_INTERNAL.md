@@ -149,7 +149,7 @@ Before any more code: **talk to Eddie + 4 more like him this week.** Don't demo.
 
 ## 15. Pitch Deck Outline (slide-by-slide)
 
-1. **Title** — Pathey + one-liner ("GPS for money").
+1. **Title** — Pathey + tagline ("Not advice. Just the math.").
 2. **Problem** — fragmentation, no calibration, trust vacuum. Show the 10-conflicting-tabs reality.
 3. **Insight** — everything is one risk/reward map; people don't need more picks, they need the honest answer.
 4. **Product** — goal in → ranked honest routes out. Screenshot of the honest-answer screen.

@@ -1,12 +1,17 @@
 import '@/global.css';
 
 import {
-  PlusJakartaSans_500Medium,
-  PlusJakartaSans_600SemiBold,
-  PlusJakartaSans_700Bold,
-  PlusJakartaSans_800ExtraBold,
+  PublicSans_400Regular,
+  PublicSans_500Medium,
+  PublicSans_600SemiBold,
+  PublicSans_700Bold,
+  PublicSans_800ExtraBold,
   useFonts,
-} from '@expo-google-fonts/plus-jakarta-sans';
+} from '@expo-google-fonts/public-sans';
+import {
+  SourceSerif4_600SemiBold,
+  SourceSerif4_700Bold,
+} from '@expo-google-fonts/source-serif-4';
 import { ClerkProvider } from '@clerk/clerk-expo';
 import { QueryClientProvider } from '@tanstack/react-query';
 import * as Notifications from 'expo-notifications';
@@ -88,13 +93,16 @@ export default function RootLayout(): React.ReactElement | null {
   const queryClient = getQueryClient();
   useNotificationObserver();
 
-  // The display face ships with the bundle, so this resolves on the first frame
-  // after load; holding the splash avoids a visible reflow of every heading.
+  // Both faces ship with the bundle, so this resolves on the first frame after
+  // load; holding the splash avoids a visible reflow of every line of text.
   const [fontsLoaded, fontError] = useFonts({
-    PlusJakartaSans_500Medium,
-    PlusJakartaSans_600SemiBold,
-    PlusJakartaSans_700Bold,
-    PlusJakartaSans_800ExtraBold,
+    SourceSerif4_600SemiBold,
+    SourceSerif4_700Bold,
+    PublicSans_400Regular,
+    PublicSans_500Medium,
+    PublicSans_600SemiBold,
+    PublicSans_700Bold,
+    PublicSans_800ExtraBold,
   });
 
   useEffect(() => {

@@ -1,56 +1,91 @@
 /**
- * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
+ * Design tokens — the single source of truth for the Pathey palette.
+ * See DESIGN.md for the rules; the values below are the only ones allowed.
+ *
+ *   Brand / CTA      #D9653D
+ *   Dark background  #141312
+ *   Light background #F7F3EC
+ *   Primary text     #1C1A18
+ *   Muted text       #756F68
+ *   Positive only    #2FA66A
+ *   Caution only     #E2A33C
+ *   Negative only    #DB4B4B
+ *   Neutral / info   #5478D4
  */
 
 import { Platform, type TextStyle } from 'react-native';
 
 export const Colors = {
   light: {
-    text: '#0A0F0D',
-    textSecondary: '#5B6560',
-    textTertiary: '#8A938E',
-    background: '#FBFCFB',
-    backgroundElement: '#FFFFFF',
+    text: '#1C1A18',
+    textSecondary: '#756F68',
+    textTertiary: '#A29A90',
+    background: '#F7F3EC',
+    backgroundElement: '#FFFCF6',
     backgroundElevated: '#FFFFFF',
-    backgroundSelected: '#E6EAE7',
-    border: '#E2E7E3',
-    borderStrong: '#D2D8D3',
+    backgroundSelected: '#EDE6DA',
+    border: '#E3DCD0',
+    borderStrong: '#D3CABB',
   },
   dark: {
-    // Deep green-black, not pure black — gives the app a premium "field" feel
-    text: '#F4F7F5',
-    textSecondary: '#9BA8A0',
-    textTertiary: '#67726B',
-    background: '#070B09',
-    backgroundElement: '#101613',
-    backgroundElevated: '#161D19',
-    backgroundSelected: '#1F2823',
-    border: '#1C2420',
-    borderStrong: '#2A352F',
+    // Warm near-black, not pure black — keeps the paper-and-clay feel after dark
+    text: '#F7F3EC',
+    textSecondary: '#A79F95',
+    textTertiary: '#756F68',
+    background: '#141312',
+    backgroundElement: '#1D1B19',
+    backgroundElevated: '#24211E',
+    backgroundSelected: '#2C2925',
+    border: '#2A2724',
+    borderStrong: '#3A3631',
   },
 } as const;
 
-/** Brand green ramp — use Brand[500] as the primary action color. */
+/** Brand ramp — use Brand[500] as the primary action / CTA color. */
 export const Brand = {
-  50: '#E9FBF0',
-  100: '#C9F5DA',
-  300: '#5FE39A',
-  500: '#22C55E',
-  600: '#16A34A',
-  700: '#107D39',
-  glow: '#22C55E',
+  50: '#FDF1EB',
+  100: '#F8DCCE',
+  300: '#EBA183',
+  500: '#D9653D',
+  600: '#BF5230',
+  700: '#9C4023',
+  glow: '#D9653D',
+} as const;
+
+/**
+ * Ink used for text and icons sitting on a Brand[500] fill.
+ * 5.2:1 against the brand — never put light text on the CTA.
+ */
+export const OnBrand = '#141312';
+
+/**
+ * Semantic colors. Each has exactly one meaning and is used for nothing else:
+ * positive = gains/wins, caution = warnings/projections, negative = losses,
+ * info = neutral emphasis. Never reach for these for decoration.
+ */
+export const Semantic = {
+  positive: '#2FA66A',
+  caution: '#E2A33C',
+  negative: '#DB4B4B',
+  info: '#5478D4',
 } as const;
 
 /** Risk scale: safe → risky. Shared by cards, meters, badges. */
-export const RiskScale = ['#22C55E', '#84CC16', '#F59E0B', '#F97316', '#EF4444'] as const;
+export const RiskScale = ['#2FA66A', '#8FAE4E', '#E2A33C', '#E07D45', '#DB4B4B'] as const;
 
-/** Semantic accents. */
-export const Accent = {
-  gold: '#F5B43C',
-  red: '#EF4444',
-  blue: '#3B82F6',
-  violet: '#A855F7',
+/**
+ * Categorical scale — asset classes, category chips, legend swatches. Drawn
+ * from the brand hue and the info blue so a category never borrows the meaning
+ * of a semantic color. Order is the assignment order; labels do the rest.
+ */
+export const CategoryScale = {
+  clay: '#D9653D',
+  slate: '#5478D4',
+  rust: '#9C4023',
+  haze: '#93A7DE',
+  sand: '#EBA183',
+  stone: '#8C857C',
+  ink: '#4A443E',
 } as const;
 
 /**
@@ -119,7 +154,7 @@ export const Fonts = Platform.select({
     mono: 'monospace',
   },
   web: {
-    sans: 'var(--font-display)',
+    sans: 'var(--font-body)',
     serif: 'var(--font-serif)',
     rounded: 'var(--font-rounded)',
     mono: 'var(--font-mono)',
@@ -127,16 +162,27 @@ export const Fonts = Platform.select({
 });
 
 /**
- * Plus Jakarta Sans — the display face. Custom fonts on native ignore
- * `fontWeight`, so each weight is its own family and we resolve the family from
- * the weight the style asked for.
+ * Source Serif 4 — the display face, headings only. Custom fonts on native
+ * ignore `fontWeight`, so each weight is its own family and we resolve the
+ * family from the weight the style asked for. The serif ships in two weights;
+ * anything lighter or heavier lands on the nearest one it has.
  */
 export const DisplayFont = {
-  '500': 'PlusJakartaSans_500Medium',
-  '600': 'PlusJakartaSans_600SemiBold',
-  '700': 'PlusJakartaSans_700Bold',
-  '800': 'PlusJakartaSans_800ExtraBold',
-  '900': 'PlusJakartaSans_800ExtraBold',
+  '500': 'SourceSerif4_600SemiBold',
+  '600': 'SourceSerif4_600SemiBold',
+  '700': 'SourceSerif4_700Bold',
+  '800': 'SourceSerif4_700Bold',
+  '900': 'SourceSerif4_700Bold',
+} as const;
+
+/** Public Sans — body, labels, buttons and every figure. */
+export const BodyFont = {
+  '400': 'PublicSans_400Regular',
+  '500': 'PublicSans_500Medium',
+  '600': 'PublicSans_600SemiBold',
+  '700': 'PublicSans_700Bold',
+  '800': 'PublicSans_800ExtraBold',
+  '900': 'PublicSans_800ExtraBold',
 } as const;
 
 /** Size at or above which text is treated as a heading and gets the display face. */
@@ -145,6 +191,11 @@ export const DISPLAY_MIN_SIZE = 18;
 export function displayFontFamily(weight?: TextStyle['fontWeight']): string {
   const key = String(weight ?? '700');
   return DisplayFont[key as keyof typeof DisplayFont] ?? DisplayFont['700'];
+}
+
+export function bodyFontFamily(weight?: TextStyle['fontWeight']): string {
+  const key = String(weight ?? '500');
+  return BodyFont[key as keyof typeof BodyFont] ?? BodyFont['500'];
 }
 
 export const Spacing = {

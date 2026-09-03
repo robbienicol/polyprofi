@@ -24,7 +24,7 @@ import {
   type PageId,
 } from '@/components/onboarding/quiz-pages';
 import { ThemedText } from '@/components/themed-text';
-import { Brand, Radius, Shadow } from '@/constants/theme';
+import { Brand, OnBrand, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import {
   EMPTY_ANSWERS,
@@ -280,7 +280,7 @@ function SurveyForm({
                 opacity: unlocked && !submitting ? 1 : 0.4,
                 ...Shadow.card,
               }}>
-              <ThemedText style={{ fontSize: 16, fontWeight: '800', color: '#06140C', letterSpacing: -0.2 }}>
+              <ThemedText style={{ fontSize: 16, fontWeight: '800', color: OnBrand, letterSpacing: -0.2 }}>
                 {submitting ? 'Building…' : isLast ? 'Build my plan →' : 'Continue'}
               </ThemedText>
             </Pressable>
@@ -628,7 +628,7 @@ function NotificationAsk({
           accessibilityRole="button"
           className="py-4 items-center active:opacity-85"
           style={{ borderRadius: Radius.lg, backgroundColor: Brand[500], opacity: busy ? 0.6 : 1, ...Shadow.card }}>
-          <ThemedText style={{ fontSize: 16, fontWeight: '800', color: '#06140C' }}>
+          <ThemedText style={{ fontSize: 16, fontWeight: '800', color: OnBrand }}>
             {busy ? 'Waiting…' : 'Yes, keep me on track'}
           </ThemedText>
         </Pressable>
@@ -668,7 +668,7 @@ function PushPreview({ title, body, muted }: { title: string; body: string; mute
           alignItems: 'center',
           justifyContent: 'center',
         }}>
-        <ThemedText style={{ fontSize: 17, fontWeight: '900', color: '#06140C' }}>$</ThemedText>
+        <ThemedText style={{ fontSize: 17, fontWeight: '900', color: OnBrand }}>$</ThemedText>
       </View>
       <View style={{ flex: 1, gap: 2 }}>
         <View className="flex-row items-center justify-between">

@@ -3,19 +3,19 @@ import { LayoutChangeEvent, View } from 'react-native';
 import Svg, { Circle, Defs, LinearGradient, Path, Stop } from 'react-native-svg';
 
 import { ThemedText } from '@/components/themed-text';
-import { Accent, Brand, Radius } from '@/constants/theme';
+import { CategoryScale, Radius, Semantic } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { betEv } from '@/lib/portfolio';
 import type { TrackedBet } from '@/types/bets';
 
 const CLASS_COLORS = {
-  Polymarket: Brand[500],
-  Treasuries: '#84CC16',
-  Options: Accent.gold,
-  Stocks: '#2DD4BF',
-  Crypto: '#F97316',
-  Cash: '#94A3B8',
-  Other: '#A78BFA',
+  Polymarket: CategoryScale.clay,
+  Treasuries: CategoryScale.slate,
+  Options: CategoryScale.rust,
+  Stocks: CategoryScale.haze,
+  Crypto: CategoryScale.sand,
+  Cash: CategoryScale.stone,
+  Other: CategoryScale.ink,
 } as const;
 
 type PortfolioClass = keyof typeof CLASS_COLORS;
@@ -151,7 +151,7 @@ export function PerformanceChart({
   const max = Math.max(...values);
   const span = Math.max(max - min, Math.max(1, max * 0.01));
   const rising = points.length > 1 && values[values.length - 1] >= values[0];
-  const color = rising ? Brand[500] : Accent.red;
+  const color = rising ? Semantic.positive : Semantic.negative;
 
   const coords = points.map((point, index) => ({
     x: padX + (index / Math.max(1, points.length - 1)) * plotWidth,

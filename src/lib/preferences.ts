@@ -9,6 +9,7 @@
  * notification helpers can depend on it without a cycle.
  */
 
+import { SCORE_WEIGHT_KEYS, type ScoreWeights } from '@/lib/score';
 import type { AcquisitionPlatform } from '@/types/bets';
 
 export interface CurrencyMeta {
@@ -56,6 +57,12 @@ export interface Preferences {
   weeklyReminder: boolean;
   /** Portfolio math assumes stocks/crypto return 0 instead of their expected value. */
   conservativeProjections: boolean;
+  /**
+   * How the user weighted the four score components. Stored raw (slider importance,
+   * 0-100 each) rather than normalised, so the sliders can be put back exactly where
+   * they were left — `normalizeScoreWeights` turns them into fractions at scoring time.
+   */
+  scoreWeights: ScoreWeights;
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
@@ -65,7 +72,32 @@ export const DEFAULT_PREFERENCES: Preferences = {
   positionAlerts: true,
   weeklyReminder: true,
   conservativeProjections: false,
+  // The long-standing fixed weights, as slider positions — so an untouched set of
+  // sliders reproduces exactly the ranking the app had before they existed.
+  scoreWeights: {
+    reliability: 35,
+    principalProtection: 25,
+    capitalEfficiency: 30,
+    timeEfficiency: 10,
+  },
 };
+
+/** Slider importance from disk, clamped to the range the sliders can express. */
+function sanitizeScoreWeights(value: unknown): ScoreWeights {
+  if (typeof value !== 'object' || value === null) return DEFAULT_PREFERENCES.scoreWeights;
+  const raw = value as Record<string, unknown>;
+  const weights = { ...DEFAULT_PREFERENCES.scoreWeights };
+  let named = false;
+  for (const key of SCORE_WEIGHT_KEYS) {
+    const entry = raw[key];
+    if (typeof entry !== 'number' || !Number.isFinite(entry)) continue;
+    weights[key] = Math.max(0, Math.min(100, Math.round(entry)));
+    named = true;
+  }
+  // All four at zero would score every route zero, so it is read as "no preference"
+  // by normalizeScoreWeights. Nothing to guard here beyond keeping the range sane.
+  return named ? weights : DEFAULT_PREFERENCES.scoreWeights;
+}
 
 export function currencyMeta(code: string): CurrencyMeta {
   return CURRENCIES.find((entry) => entry.code === code) ?? CURRENCIES[0];
@@ -92,6 +124,7 @@ export function sanitizePreferences(value: unknown): Preferences {
     positionAlerts: bool('positionAlerts'),
     weeklyReminder: bool('weeklyReminder'),
     conservativeProjections: bool('conservativeProjections'),
+    scoreWeights: sanitizeScoreWeights(raw.scoreWeights),
   };
 }
 

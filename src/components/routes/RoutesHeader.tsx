@@ -2,7 +2,7 @@ import { Pressable, View } from 'react-native';
 
 import { InvestmentAmountControl } from '@/components/routes/InvestmentAmountControl';
 import { ThemedText } from '@/components/themed-text';
-import { Brand, Radius, Shadow } from '@/constants/theme';
+import { Brand, OnBrand, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 interface GoalSummary {
@@ -57,7 +57,7 @@ export function RoutesHeader({
               hitSlop={6}
               className="active:opacity-75"
               style={{ borderRadius: Radius.pill, paddingHorizontal: 18, paddingVertical: 11, backgroundColor: Brand[500] }}>
-              <ThemedText style={{ fontSize: 14, fontWeight: '900', color: '#06140C' }}>+ New goal</ThemedText>
+              <ThemedText style={{ fontSize: 14, fontWeight: '900', color: OnBrand }}>+ New goal</ThemedText>
             </Pressable>
           )}
         </View>

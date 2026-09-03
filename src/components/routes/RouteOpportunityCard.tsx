@@ -6,7 +6,7 @@ import {
   riskLabel,
 } from "@/components/molecules/RouteCard";
 import { ThemedText } from "@/components/themed-text";
-import { Accent, Brand, Radius, Shadow } from "@/constants/theme";
+import { Brand, OnBrand, Radius, Semantic, Shadow } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 import {
   formatMarketLiquidity,
@@ -183,7 +183,7 @@ export function RouteOpportunityCard({
           value={`+$${route.expectedReturn}`}
           label={debt ? "Projected profit" : "Potential profit"}
           subLabel={`(${returnPct.toFixed(1)}% return)`}
-          valueColor={Brand[500]}
+          valueColor={Semantic.positive}
         />
         <Divider />
         <Metric
@@ -200,8 +200,8 @@ export function RouteOpportunityCard({
           }
           valueColor={
             neededToHitGoal != null && !route.meetsTarget
-              ? Accent.gold
-              : Brand[500]
+              ? Semantic.caution
+              : Semantic.positive
           }
         />
       </View>
@@ -221,7 +221,7 @@ export function RouteOpportunityCard({
             label="Probability"
             value={`${route.probability}%`}
             percent={route.probability}
-            color={Brand[500]}
+            color={Semantic.positive}
           />
           <RiskRow
             label="Liquidity"
@@ -229,10 +229,10 @@ export function RouteOpportunityCard({
             percent={liquidityPercent}
             color={
               liquidity === "Low"
-                ? Accent.red
+                ? Semantic.negative
                 : liquidity === "Medium"
-                  ? Accent.gold
-                  : Brand[500]
+                  ? Semantic.caution
+                  : Semantic.positive
             }
           />
         </Section>
@@ -408,7 +408,7 @@ export function RouteOpportunityCard({
           </View>
           {deadlineFit?.misses && (
             <ThemedText
-              style={{ fontSize: 12, lineHeight: 17, color: Accent.red, fontWeight: "700" }}
+              style={{ fontSize: 12, lineHeight: 17, color: Semantic.negative, fontWeight: "700" }}
             >
               Pays out after your goal date — the money is locked up past the point you
               wanted it.
@@ -421,8 +421,8 @@ export function RouteOpportunityCard({
                 gap: 8,
                 borderRadius: Radius.md,
                 borderWidth: 1,
-                borderColor: Accent.gold + "66",
-                backgroundColor: Accent.gold + "14",
+                borderColor: Semantic.caution + "66",
+                backgroundColor: Semantic.caution + "14",
                 paddingHorizontal: 12,
                 paddingVertical: 10,
               }}
@@ -464,24 +464,24 @@ export function RouteOpportunityCard({
           no middle outcome — rather than being the same component with a redder dot. */}
       <Section
         title={binary ? "Settlement · two outcomes" : "Potential outcome"}
-        accent={binary ? Accent.red : undefined}
+        accent={binary ? Semantic.negative : undefined}
       >
         <Outcome
-          color={Brand[500]}
+          color={Semantic.positive}
           label={binary ? "Resolves in your favour" : "Target hit"}
           chance={`${route.probability}% chance`}
           value={`+$${route.expectedReturn}`}
         />
         {binary ? (
           <Outcome
-            color={Accent.red}
+            color={Semantic.negative}
             label="Resolves against you"
             chance={`${100 - route.probability}% chance`}
             value={`−$${stake}`}
           />
         ) : (
           <Outcome
-            color={Accent.red}
+            color={Semantic.negative}
             label="Rough downside if it goes wrong"
             chance={`~${route.riskLevel * 8}% drawdown`}
             value={`−$${Math.round(downsideAtStake(route, stake))}`}
@@ -490,7 +490,7 @@ export function RouteOpportunityCard({
         {/* Both legs weighted by their probability. Shown for every route, binaries most
             of all: an all-or-nothing return is the one that looks best unweighted. */}
         <Outcome
-          color={routeExpectedValue >= 0 ? Accent.gold : Accent.red}
+          color={routeExpectedValue >= 0 ? Semantic.caution : Semantic.negative}
           label="Probability-weighted average"
           chance="what this is worth on average"
           value={`${routeExpectedValue >= 0 ? '+' : '−'}$${Math.abs(Math.round(routeExpectedValue))}`}
@@ -516,7 +516,7 @@ export function RouteOpportunityCard({
         }}
       >
         <ThemedText
-          style={{ fontSize: 16, fontWeight: "900", color: "#06140C" }}
+          style={{ fontSize: 16, fontWeight: "900", color: OnBrand }}
         >
           {added
             ? "Saved to your plan"

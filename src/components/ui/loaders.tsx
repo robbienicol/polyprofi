@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Animated, Easing, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { Brand, Radius, Shadow } from '@/constants/theme';
+import { Brand, OnBrand, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 const ANALYZE_STAGES = [
@@ -66,7 +66,7 @@ export function AnalyzingLoader(): React.ReactElement {
             width: 72, height: 72, borderRadius: Radius.xl, backgroundColor: Brand[500],
             alignItems: 'center', justifyContent: 'center', transform: [{ scale }], ...Shadow.float,
           }}>
-          <ThemedText style={{ fontSize: 38, fontWeight: '900', color: '#06140C' }}>$</ThemedText>
+          <ThemedText style={{ fontSize: 38, fontWeight: '900', color: OnBrand }}>$</ThemedText>
         </Animated.View>
       </View>
 
@@ -144,7 +144,7 @@ export function BrandLoader({
             justifyContent: 'center',
             transform: [{ scale }],
           }}>
-          <Animated.Text style={{ fontSize: 38, fontWeight: '900', color: '#06140C' }}>$</Animated.Text>
+          <Animated.Text style={{ fontSize: 38, fontWeight: '900', color: OnBrand }}>$</Animated.Text>
         </Animated.View>
       </View>
       <View style={{ alignItems: 'center', gap: 6 }}>

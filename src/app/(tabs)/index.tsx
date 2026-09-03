@@ -5,15 +5,19 @@ import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { usePortfolioProgress } from '@/api/hooks/usePortfolioProgress';
-import { useMoney } from '@/api/hooks/usePreferences';
+import { useMoney, usePreferences } from '@/api/hooks/usePreferences';
+import { useQuizAnswers } from '@/api/hooks/useQuizAnswers';
 import { useSavedRoutes } from '@/api/hooks/useSavedRoutes';
+import { useTrackedBets } from '@/api/hooks/useTrackedBets';
 import {
   PortfolioLineChart,
   PortfolioRange,
 } from '@/components/molecules/PortfolioLineChart';
 import { ThemedText } from '@/components/themed-text';
-import { Accent, Brand, Radius, Shadow } from '@/constants/theme';
+import { Brand, OnBrand, Radius, Semantic, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { maturityWords, portfolioStats } from '@/lib/portfolio';
+import { describeSearch } from '@/lib/quiz-profile';
 import { cashFlowAdjustedChange } from '@/lib/portfolio-progress';
 
 const MONO = { fontVariant: ['tabular-nums' as const] };
@@ -38,8 +42,14 @@ export default function HomeScreen(): React.ReactElement {
   const router = useRouter();
   const { user } = useUser();
   const money = useMoney();
+  const { preferences } = usePreferences();
+  const { bets } = useTrackedBets();
   const { history } = useSavedRoutes();
+  const { quizAnswers } = useQuizAnswers();
   const latestSearch = history[0] ?? null;
+  // The quiz prefills from exactly this, in exactly this order, so what the row
+  // below shows is what the form will open on.
+  const lastAnswers = quizAnswers ?? latestSearch?.quizSnapshot ?? null;
   const fallbackBalance = latestSearch?.quizSnapshot.balance ?? 0;
   const progress = usePortfolioProgress(fallbackBalance);
   const [range, setRange] = useState<PortfolioRange>('1W');
@@ -47,6 +57,19 @@ export default function HomeScreen(): React.ReactElement {
   // Goals are deliberately absent from this screen: Home is live money, the Goals
   // tab is progress per goal. Marking a goal reached happens in useGoalMaintenance,
   // mounted at the root, so it doesn't depend on which screen is open.
+
+  // Expected value is a probability-weighted average over outcomes, not a price,
+  // so it is labelled and kept out of the headline: adding it to tracked value
+  // would make a modelled number read as money already in the account.
+  const activeBets = useMemo(() => bets.filter((bet) => bet.status === 'active'), [bets]);
+  const stats = useMemo(
+    () => portfolioStats(bets, preferences.conservativeProjections),
+    [bets, preferences.conservativeProjections]
+  );
+  const expectedHorizon = useMemo(
+    () => activeBets.reduce((longest, bet) => Math.max(longest, bet.maturesInDays ?? 0), 0),
+    [activeBets]
+  );
 
   const chartPoints = useMemo(() => {
     const current = {
@@ -87,7 +110,7 @@ export default function HomeScreen(): React.ReactElement {
   const change = adjustedChange.amount;
   const changePct = adjustedChange.percent;
   const positive = change >= 0;
-  const changeColor = positive ? Brand[500] : Accent.red;
+  const changeColor = positive ? Semantic.positive : Semantic.negative;
   const greeting = user?.firstName ? `Hey, ${user.firstName}` : 'Welcome back';
 
   const trackingLabel = progress.livePositions > 0 && progress.projectedPositions > 0
@@ -143,7 +166,7 @@ export default function HomeScreen(): React.ReactElement {
                   width: 7,
                   height: 7,
                   borderRadius: Radius.pill,
-                  backgroundColor: progress.livePositions > 0 ? Brand[500] : progress.projectedPositions > 0 ? Accent.gold : theme.textTertiary,
+                  backgroundColor: progress.livePositions > 0 ? Semantic.positive : progress.projectedPositions > 0 ? Semantic.caution : theme.textTertiary,
                 }} />
                 <ThemedText style={{ fontSize: 11, fontWeight: '700', color: theme.textSecondary }}>
                   {trackingLabel}
@@ -179,6 +202,33 @@ export default function HomeScreen(): React.ReactElement {
               />
             </View>
 
+            {activeBets.length > 0 ? (
+              <View
+                className="flex-row items-end justify-between"
+                style={{ borderTopWidth: 1, borderTopColor: theme.border, paddingTop: 12, marginTop: 4, gap: 12 }}>
+                <View className="flex-1">
+                  <ThemedText style={{ fontSize: 11, fontWeight: '800', color: theme.textTertiary, letterSpacing: 0.35 }}>
+                    EXPECTED VALUE
+                  </ThemedText>
+                  <ThemedText style={{ fontSize: 11, lineHeight: 15, color: theme.textTertiary, marginTop: 2 }}>
+                    {expectedHorizon > 0
+                      ? `Average across every outcome over ${maturityWords(expectedHorizon)}. Modelled — no money has moved.`
+                      : 'Average across every outcome. Modelled — no money has moved.'}
+                  </ThemedText>
+                </View>
+                <View style={{ alignItems: 'flex-end' }}>
+                  {/* Neutral, never green or red: this is a model average, so colouring
+                      it would read as money made or lost. */}
+                  <ThemedText style={{ fontSize: 15, fontWeight: '800', color: theme.text, letterSpacing: -0.3, ...MONO }}>
+                    {money(stats.totalEv, { signed: true })}
+                  </ThemedText>
+                  <ThemedText style={{ fontSize: 11, fontWeight: '700', color: theme.textSecondary, marginTop: 1, ...MONO }}>
+                    {stats.weightedReturnPct >= 0 ? '+' : '−'}{Math.abs(stats.weightedReturnPct).toFixed(1)}% on {money(stats.totalStaked, { decimals: 0 })}
+                  </ThemedText>
+                </View>
+              </View>
+            ) : null}
+
             <View
               className="flex-row items-center justify-between"
               style={{ borderTopWidth: 1, borderTopColor: theme.border, paddingTop: 12, marginTop: 4 }}>
@@ -187,8 +237,8 @@ export default function HomeScreen(): React.ReactElement {
               </ThemedText>
               {progress.projectedPositions > 0 ? (
                 <View className="flex-row items-center" style={{ gap: 5 }}>
-                  <View style={{ width: 6, height: 6, borderRadius: 9, borderWidth: 1, borderColor: Accent.gold }} />
-                  <ThemedText style={{ fontSize: 11, color: Accent.gold }}>includes projected accrual</ThemedText>
+                  <View style={{ width: 6, height: 6, borderRadius: 9, borderWidth: 1, borderColor: Semantic.caution }} />
+                  <ThemedText style={{ fontSize: 11, color: Semantic.caution }}>includes projected accrual</ThemedText>
                 </View>
               ) : null}
             </View>
@@ -200,13 +250,45 @@ export default function HomeScreen(): React.ReactElement {
             onPress={() => router.push('/quiz')}
             className="py-5 items-center active:opacity-85"
             style={{ borderRadius: Radius.xl, backgroundColor: Brand[500], ...Shadow.card }}>
-            <ThemedText style={{ fontSize: 17, fontWeight: '900', color: '#06140C', letterSpacing: -0.2 }}>
+            <ThemedText style={{ fontSize: 17, fontWeight: '900', color: OnBrand, letterSpacing: -0.2 }}>
               Make me money →
             </ThemedText>
-            <ThemedText style={{ fontSize: 11, fontWeight: '700', color: '#06140C', opacity: 0.7, marginTop: 3 }}>
+            <ThemedText style={{ fontSize: 11, fontWeight: '700', color: OnBrand, opacity: 0.7, marginTop: 3 }}>
               Ranked routes from live markets, in under a minute
             </ThemedText>
           </Pressable>
+
+          {/* The quiz already reopens on the last answers; nothing on this screen said
+              so, so the only way back into them looked like starting over. */}
+          {lastAnswers ? (
+            <Pressable
+              onPress={() => router.push('/quiz')}
+              accessibilityRole="button"
+              accessibilityLabel="Edit your last search"
+              className="flex-row items-center active:opacity-80"
+              style={{
+                borderRadius: Radius.lg,
+                borderWidth: 1,
+                borderColor: theme.border,
+                backgroundColor: theme.backgroundElevated,
+                paddingHorizontal: 16,
+                paddingVertical: 13,
+                gap: 12,
+                marginTop: -10,
+              }}>
+              <View className="flex-1">
+                <ThemedText style={{ fontSize: 11, fontWeight: '800', color: theme.textTertiary, letterSpacing: 0.35 }}>
+                  YOUR LAST SEARCH
+                </ThemedText>
+                <ThemedText style={{ fontSize: 13, fontWeight: '700', color: theme.text, marginTop: 2 }} numberOfLines={1}>
+                  {describeSearch(lastAnswers)}
+                </ThemedText>
+              </View>
+              <ThemedText style={{ fontSize: 13, fontWeight: '800', color: Brand[500] }}>
+                Edit →
+              </ThemedText>
+            </Pressable>
+          ) : null}
 
           {/* Only surfaced when a position actually needs a decision. */}
           {progress.sellAlerts.length > 0 ? (
@@ -217,8 +299,8 @@ export default function HomeScreen(): React.ReactElement {
               style={{
                 borderRadius: Radius.lg,
                 borderWidth: 1,
-                borderColor: Accent.gold + '66',
-                backgroundColor: Accent.gold + '14',
+                borderColor: Semantic.caution + '66',
+                backgroundColor: Semantic.caution + '14',
                 paddingHorizontal: 16,
                 paddingVertical: 14,
                 gap: 12,
@@ -232,7 +314,7 @@ export default function HomeScreen(): React.ReactElement {
                   {progress.sellAlerts[0].reason}
                 </ThemedText>
               </View>
-              <ThemedText style={{ fontSize: 18, color: Accent.gold }}>→</ThemedText>
+              <ThemedText style={{ fontSize: 18, color: Semantic.caution }}>→</ThemedText>
             </Pressable>
           ) : null}
 

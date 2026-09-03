@@ -4,7 +4,7 @@ import Svg, { Circle, Defs, LinearGradient, Path, Stop } from 'react-native-svg'
 
 import { PortfolioProgressPoint } from '@/api/client/storage';
 import { ThemedText } from '@/components/themed-text';
-import { Accent, Brand, Radius } from '@/constants/theme';
+import { Brand, Radius, Semantic } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 export type PortfolioRange = '1D' | '1W' | '1M' | 'ALL';
@@ -74,7 +74,7 @@ export function PortfolioLineChart({
     return { line, area, last, rising: visible[visible.length - 1].value >= visible[0].value };
   }, [points, range, width]);
 
-  const lineColor = chart?.rising === false ? Accent.red : Brand[500];
+  const lineColor = chart?.rising === false ? Semantic.negative : Semantic.positive;
 
   function handleLayout(event: LayoutChangeEvent) {
     const nextWidth = event.nativeEvent.layout.width;
@@ -111,7 +111,7 @@ export function PortfolioLineChart({
                 cy={chart.last.y}
                 r={8}
                 fill="none"
-                stroke={Accent.gold}
+                stroke={Semantic.caution}
                 strokeWidth={1.25}
                 strokeDasharray="2 3"
               />

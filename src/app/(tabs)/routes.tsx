@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { usePreferences } from '@/api/hooks/usePreferences';
 import { useQuizAnswers } from '@/api/hooks/useQuizAnswers';
 import { useRoutes } from '@/api/hooks/useRoutes';
 import { usePredictionSearch } from '@/api/hooks/usePredictionSearch';
@@ -12,13 +13,14 @@ import { useSavingsGoal } from '@/api/hooks/useSavingsGoal';
 import { useTrackedBets } from '@/api/hooks/useTrackedBets';
 import { RouteFilters } from '@/components/routes/RouteFilters';
 import { RouteSearchBar } from '@/components/routes/RouteSearchBar';
+import { ScoreWeightSliders } from '@/components/routes/ScoreWeightSliders';
 import { RoutesHeader } from '@/components/routes/RoutesHeader';
 import { TrackRouteForm } from '@/components/routes/TrackRouteForm';
 import { RouteCard } from '@/components/molecules/RouteCard';
 import { ThemedText } from '@/components/themed-text';
 import { AnalyzingLoader, BrandLoader } from '@/components/ui/loaders';
 import { KEYBOARD_AWARE_SCROLL_PROPS } from '@/constants/keyboard';
-import { Accent, Brand, Radius, Shadow } from '@/constants/theme';
+import { Brand, OnBrand, Radius, Semantic, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { betOutcomeSide } from '@/lib/bet-monitor-match';
 import { scheduleWeeklyReminder } from '@/lib/notifications';
@@ -27,6 +29,8 @@ import { investmentSliderMaximum } from '@/lib/quiz-profile';
 import { openTradeDestination, preferredTradeDestination, tradeDestinationLabel } from '@/lib/route-actions';
 import { activeKeyword, assetSectionsActive, buildRouteResults, groupRoutesByAssetClass, groupRoutesByChance, predictionFacetsActive, resolveInvestmentAmount, routeMatchesKeyword, searchOutcome, shouldOfferCapitalSafe } from '@/lib/route-results';
 import type { RouteAssetSection, RouteFilters as Filters } from '@/lib/route-results';
+import { DEFAULT_PREFERENCES } from '@/lib/preferences';
+import { normalizeScoreWeights, SCORE_WEIGHT_KEYS, type ScoreWeights } from '@/lib/score';
 import { rescoreForStake } from '@/lib/stake-rescore';
 import { trackedPositionFields } from '@/lib/tracked-assets';
 import type { Route, RouteParams, SavedRoutesBatch } from '@/types/routes';
@@ -50,6 +54,7 @@ export default function RoutesScreen(): React.ReactElement {
   const { batchId, generate, goalId } = useLocalSearchParams<{ batchId?: string; generate?: string; goalId?: string }>();
   const { quizAnswers, isLoading: quizLoading } = useQuizAnswers();
   const { history, saveGeneratedRoutes } = useSavedRoutes();
+  const { preferences, update: updatePreferences } = usePreferences();
   const { allGoals, confirmGoal } = useSavingsGoal();
   const { trackBet } = useTrackedBets();
 
@@ -142,9 +147,28 @@ export default function RoutesScreen(): React.ReactElement {
     return [...routes, ...searchRoutes.filter((route) => !known.has(route.id))];
   }, [routes, searchRoutes]);
 
-  const results = sessionParams
-    ? buildRouteResults(searchPool, sessionParams, displayedInvestment, filters)
-    : null;
+  // The user's own weighting of the four score components. Held in preferences, not
+  // screen state: someone who has said they cannot afford to lose the stake means it
+  // on their next search too.
+  const scoreWeights = preferences.scoreWeights;
+  const defaultWeights = DEFAULT_PREFERENCES.scoreWeights;
+  const usingDefaultWeights = SCORE_WEIGHT_KEYS.every((key) => scoreWeights[key] === defaultWeights[key]);
+  const [showScoreWeights, setShowScoreWeights] = useState(false);
+
+  function setScoreWeights(next: ScoreWeights): void {
+    updatePreferences({ scoreWeights: next });
+    setVisibleCount(30);
+  }
+
+  // Memoised: this rescores, scores and ranks the entire pool, and it used to run on
+  // every render — including every event the investment slider fires while being
+  // dragged, which is what made that slider feel unresponsive.
+  const results = useMemo(
+    () => (sessionParams
+      ? buildRouteResults(searchPool, sessionParams, displayedInvestment, filters, scoreWeights)
+      : null),
+    [searchPool, sessionParams, displayedInvestment, filters, scoreWeights],
+  );
   const ranked = results?.ranked ?? [];
   const filtered = results?.filtered ?? [];
   const isSearching = predictionSearch.isSearching || assetSearch.isSearching;
@@ -256,6 +280,7 @@ export default function RoutesScreen(): React.ReactElement {
           route={route}
           requiredInvestment={results?.requiredInvestmentById.get(route.id)}
           currentInvestment={results?.selectedStake(route)}
+          score={results?.scoreById.get(route.id)?.score ?? null}
           onTrack={trackingId === null ? () => {
             setTrackingId(route.id);
             setTrackingAmount(String(results?.selectedStake(route) ?? referenceStake));
@@ -307,6 +332,45 @@ export default function RoutesScreen(): React.ReactElement {
             categories={ranked.map((route) => route.category)}
             onChange={setFiltersAndReset}
           />
+        )}
+        {ranked.length > 0 && (
+          <>
+            <Pressable
+              onPress={() => setShowScoreWeights((open) => !open)}
+              accessibilityRole="button"
+              className="flex-row items-center justify-between active:opacity-70"
+              style={{
+                borderRadius: Radius.lg,
+                borderWidth: 1,
+                borderColor: usingDefaultWeights ? theme.border : Brand[500] + '3D',
+                backgroundColor: theme.backgroundElement,
+                paddingHorizontal: 14,
+                paddingVertical: 12,
+                gap: 10,
+              }}>
+              <View className="flex-1">
+                <ThemedText style={{ fontSize: 13, fontWeight: '800', color: theme.text }}>
+                  What makes a good route for you
+                </ThemedText>
+                <ThemedText style={{ fontSize: 11, color: theme.textSecondary, marginTop: 2 }}>
+                  {usingDefaultWeights
+                    ? 'Ranked on chance, safety, cash needed and speed — set how much each counts'
+                    : scoreWeightSummary(scoreWeights)}
+                </ThemedText>
+              </View>
+              <ThemedText style={{ fontSize: 13, fontWeight: '800', color: Brand[500] }}>
+                {showScoreWeights ? 'Done' : 'Adjust'}
+              </ThemedText>
+            </Pressable>
+            {showScoreWeights ? (
+              <ScoreWeightSliders
+                weights={scoreWeights}
+                onChange={setScoreWeights}
+                onReset={() => setScoreWeights(defaultWeights)}
+                isDefault={usingDefaultWeights}
+              />
+            ) : null}
+          </>
         )}
         {error && <RoutesError message={error} onRetry={refresh} />}
         {capitalSafeUnlock != null && sessionParams ? (
@@ -398,7 +462,7 @@ function CapitalSafeNudge({ target, amount, onRaiseInvestment }: {
         accessibilityRole="button"
         className="self-start active:opacity-85"
         style={{ borderRadius: Radius.md, paddingHorizontal: 14, paddingVertical: 9, backgroundColor: Brand[500] }}>
-        <ThemedText style={{ fontSize: 13, fontWeight: '800', color: '#06140C' }}>
+        <ThemedText style={{ fontSize: 13, fontWeight: '800', color: OnBrand }}>
           Invest up to ${amount.toLocaleString()}
         </ThemedText>
       </Pressable>
@@ -473,12 +537,12 @@ function Screen({ children }: React.PropsWithChildren): React.ReactElement {
 
 function EmptyRoutes({ hasSavedQuiz, onStart }: { hasSavedQuiz: boolean; onStart: () => void }): React.ReactElement {
   const theme = useTheme();
-  return <Screen><View className="flex-1 justify-center px-6"><View className="items-center gap-4 py-10 px-6" style={{ borderRadius: Radius.xl, backgroundColor: theme.backgroundElevated, borderWidth: 1, borderColor: theme.border, ...Shadow.card }}><ThemedText style={{ fontSize: 40 }}>🎯</ThemedText><ThemedText style={{ fontSize: 22, fontWeight: '800', color: theme.text, textAlign: 'center' }}>Find prediction routes</ThemedText><ThemedText className="text-center" style={{ fontSize: 14, color: theme.textSecondary, lineHeight: 21, maxWidth: 300 }}>{hasSavedQuiz ? 'Use your saved goal and preferences to generate fresh routes.' : 'Set your goal and timeframe — we\'ll scan prediction markets and generate routes in one step.'}</ThemedText><Pressable onPress={onStart} className="self-stretch py-4 items-center active:opacity-85 mt-2" style={{ borderRadius: Radius.lg, backgroundColor: Brand[500], ...Shadow.card }}><ThemedText style={{ fontSize: 16, fontWeight: '800', color: '#06140C' }}>{hasSavedQuiz ? 'Find routes from saved quiz →' : 'Set goal & search →'}</ThemedText></Pressable></View></View></Screen>;
+  return <Screen><View className="flex-1 justify-center px-6"><View className="items-center gap-4 py-10 px-6" style={{ borderRadius: Radius.xl, backgroundColor: theme.backgroundElevated, borderWidth: 1, borderColor: theme.border, ...Shadow.card }}><ThemedText style={{ fontSize: 40 }}>🎯</ThemedText><ThemedText style={{ fontSize: 22, fontWeight: '800', color: theme.text, textAlign: 'center' }}>Find prediction routes</ThemedText><ThemedText className="text-center" style={{ fontSize: 14, color: theme.textSecondary, lineHeight: 21, maxWidth: 300 }}>{hasSavedQuiz ? 'Use your saved goal and preferences to generate fresh routes.' : 'Set your goal and timeframe — we\'ll scan prediction markets and generate routes in one step.'}</ThemedText><Pressable onPress={onStart} className="self-stretch py-4 items-center active:opacity-85 mt-2" style={{ borderRadius: Radius.lg, backgroundColor: Brand[500], ...Shadow.card }}><ThemedText style={{ fontSize: 16, fontWeight: '800', color: OnBrand }}>{hasSavedQuiz ? 'Find routes from saved quiz →' : 'Set goal & search →'}</ThemedText></Pressable></View></View></Screen>;
 }
 
 function RoutesError({ message, onRetry }: { message: string; onRetry: () => void }): React.ReactElement {
   const theme = useTheme();
-  return <View className="items-center gap-2 py-10 px-6" style={{ borderRadius: Radius.lg, backgroundColor: Accent.red + '12', borderWidth: 1, borderColor: Accent.red + '30' }}><ThemedText style={{ fontSize: 24 }}>⚠️</ThemedText><ThemedText style={{ fontSize: 14, fontWeight: '700', color: theme.text }}>Couldn&apos;t load routes</ThemedText><ThemedText className="text-center" style={{ fontSize: 13, color: theme.textSecondary }}>{message}</ThemedText><Pressable onPress={onRetry} className="active:opacity-70 mt-1" style={{ borderRadius: Radius.md, paddingHorizontal: 16, paddingVertical: 9, backgroundColor: Brand[500] }}><ThemedText style={{ fontSize: 13, fontWeight: '700', color: '#06140C' }}>Try again</ThemedText></Pressable></View>;
+  return <View className="items-center gap-2 py-10 px-6" style={{ borderRadius: Radius.lg, backgroundColor: Semantic.negative + '12', borderWidth: 1, borderColor: Semantic.negative + '30' }}><ThemedText style={{ fontSize: 24 }}>⚠️</ThemedText><ThemedText style={{ fontSize: 14, fontWeight: '700', color: theme.text }}>Couldn&apos;t load routes</ThemedText><ThemedText className="text-center" style={{ fontSize: 13, color: theme.textSecondary }}>{message}</ThemedText><Pressable onPress={onRetry} className="active:opacity-70 mt-1" style={{ borderRadius: Radius.md, paddingHorizontal: 16, paddingVertical: 9, backgroundColor: Brand[500] }}><ThemedText style={{ fontSize: 13, fontWeight: '700', color: OnBrand }}>Try again</ThemedText></Pressable></View>;
 }
 
 /**
@@ -539,7 +603,7 @@ function EmptyFiltered({ filters, unlockAmount, onRaiseInvestment, onClear }: {
             onPress={() => onRaiseInvestment(unlockAmount)}
             className="active:opacity-85 mt-1"
             style={{ borderRadius: Radius.md, paddingHorizontal: 16, paddingVertical: 9, backgroundColor: Brand[500] }}>
-            <ThemedText style={{ fontSize: 13, fontWeight: '800', color: '#06140C' }}>
+            <ThemedText style={{ fontSize: 13, fontWeight: '800', color: OnBrand }}>
               Invest up to ${unlockAmount.toLocaleString()}
             </ThemedText>
           </Pressable>
@@ -550,6 +614,22 @@ function EmptyFiltered({ filters, unlockAmount, onRaiseInvestment, onClear }: {
       </Pressable>
     </View>
   );
+}
+
+/** The weighting in one line, for the collapsed row: what the user leaned into. */
+function scoreWeightSummary(weights: ScoreWeights): string {
+  const labels: Record<keyof ScoreWeights, string> = {
+    reliability: 'chance',
+    principalProtection: 'safety',
+    capitalEfficiency: 'less cash',
+    timeEfficiency: 'speed',
+  };
+  const shares = normalizeScoreWeights(weights);
+  const ordered = [...SCORE_WEIGHT_KEYS].sort((a, b) => shares[b] - shares[a]);
+  return `Your weighting · ${ordered
+    .filter((key) => shares[key] > 0)
+    .map((key) => `${labels[key]} ${Math.round(shares[key] * 100)}%`)
+    .join(' · ')}`;
 }
 
 function timeframeLabel(timeframe: RouteParams['timeframe']): string {

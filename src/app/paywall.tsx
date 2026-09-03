@@ -6,15 +6,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuizAnswers } from '@/api/hooks/useQuizAnswers';
 import { useSubscription } from '@/api/hooks/useSubscription';
 import { ThemedText } from '@/components/themed-text';
-import { Accent, Brand, Radius, Shadow } from '@/constants/theme';
+import { Brand, CategoryScale, OnBrand, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { FEATURE_FLAGS } from '@/lib/feature-flags';
 
 const FEATURES = [
   { emoji: '🧠', text: 'Live opportunities from our real-time market engine', color: Brand[500] },
-  { emoji: '📊', text: 'Compare risk from conservative to aggressive', color: '#84CC16' },
-  { emoji: '📍', text: 'Monitor every position and see your P&L in real time', color: Accent.gold },
-  { emoji: '🔄', text: 'Refresh routes anytime, as many times as you want', color: Accent.violet },
+  { emoji: '📊', text: 'Compare risk from conservative to aggressive', color: CategoryScale.slate },
+  { emoji: '📍', text: 'Monitor every position and see your P&L in real time', color: CategoryScale.haze },
+  { emoji: '🔄', text: 'Refresh routes anytime, as many times as you want', color: Brand[300] },
 ] as const;
 
 export default function PaywallScreen(): React.ReactElement {
@@ -56,7 +56,7 @@ export default function PaywallScreen(): React.ReactElement {
 
           <View className="items-center gap-4">
             <View style={{ width: 72, height: 72, borderRadius: Radius.xl, backgroundColor: Brand[500], alignItems: 'center', justifyContent: 'center', ...Shadow.float }}>
-              <ThemedText style={{ fontSize: 38, fontWeight: '900', color: '#06140C' }}>$</ThemedText>
+              <ThemedText style={{ fontSize: 38, fontWeight: '900', color: OnBrand }}>$</ThemedText>
             </View>
             <ThemedText style={{ fontSize: 28, fontWeight: '800', letterSpacing: -0.6, color: theme.text }} className="text-center">
               Your routes are ready
@@ -99,8 +99,8 @@ export default function PaywallScreen(): React.ReactElement {
             className="self-stretch py-4 items-center active:opacity-80"
             style={{ borderRadius: Radius.lg, backgroundColor: Brand[500], opacity: isSubscribing ? 0.7 : 1, ...Shadow.card }}>
             {isSubscribing
-              ? <ActivityIndicator color="#06140C" />
-              : <ThemedText style={{ fontWeight: '800', fontSize: 16, color: '#06140C' }}>
+              ? <ActivityIndicator color={OnBrand} />
+              : <ThemedText style={{ fontWeight: '800', fontSize: 16, color: OnBrand }}>
                   Subscribe — $9.99/mo
                 </ThemedText>}
           </Pressable>

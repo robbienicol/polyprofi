@@ -194,6 +194,42 @@ export function investmentSliderMaximum(
   return Math.max(1, base) * 2;
 }
 
+/** Timeframe as a person would say it at the end of a sentence. */
+const TIMEFRAME_WORDS: Record<QuizAnswers['timeframe'], string> = {
+  today: 'today',
+  week: 'this week',
+  month: 'this month',
+  '3months': 'in 3 months',
+  '1year': 'this year',
+  '5years': 'in 5 years',
+};
+
+/** Market picks as words. Keys are the quiz's own `value`s — see MARKETS in app/quiz. */
+const MARKET_WORDS: Record<string, string> = {
+  Stocks: 'stocks',
+  Crypto: 'crypto',
+  Polymarket: 'prediction markets',
+};
+
+/**
+ * One line naming what a saved search asked for, so a screen can show the answers
+ * back before offering to change them. Shared so Home and the results screen can
+ * never describe the same search two different ways.
+ */
+export function describeSearch(answers: QuizAnswers): string {
+  const goal = `$${Math.round(answers.target).toLocaleString()} ${TIMEFRAME_WORDS[answers.timeframe]}`;
+  const markets = answers.categories
+    .map((category) => MARKET_WORDS[category] ?? category.toLowerCase())
+    .filter((word, index, all) => all.indexOf(word) === index);
+  if (markets.length === 0) return `${goal} · any market`;
+  const listed = markets.length > 3
+    ? `${markets.length} markets`
+    : markets.length === 1
+      ? markets[0]
+      : `${markets.slice(0, -1).join(', ')} & ${markets[markets.length - 1]}`;
+  return `${goal} · ${listed}`;
+}
+
 export function buildRouteParams(answers: Omit<QuizAnswers, 'maxRiskLevel' | 'minProbability'>): QuizAnswers {
   const returnPct = answers.balance > 0 ? (answers.target / answers.balance) * 100 : 0;
   const bounds = deriveRiskBounds(answers.timeframe, returnPct);

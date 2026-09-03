@@ -3,6 +3,7 @@ import { ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
+import { CategoryScale } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 /**
@@ -11,10 +12,10 @@ import { useTheme } from '@/hooks/use-theme';
  * either, which made this screen a list of promises rather than of coverage.
  */
 const CATEGORIES = [
-  { emoji: '🏦', name: 'Savings & Treasuries', desc: 'T-bills and high-yield savings, at their stated contractual yield.', color: '#22c55e' },
-  { emoji: '📈', name: 'Stocks & ETFs', desc: 'Broad index funds and large, liquid single names.', color: '#22c55e' },
-  { emoji: '₿', name: 'Crypto', desc: 'The largest, most liquid coins, priced off their own volatility.', color: '#f59e0b' },
-  { emoji: '🔮', name: 'Prediction markets', desc: 'Market-implied probabilities on politics, sports and world events.', color: '#a855f7' },
+  { emoji: '🏦', name: 'Savings & Treasuries', desc: 'T-bills and high-yield savings, at their stated contractual yield.', color: CategoryScale.slate },
+  { emoji: '📈', name: 'Stocks & ETFs', desc: 'Broad index funds and large, liquid single names.', color: CategoryScale.haze },
+  { emoji: '₿', name: 'Crypto', desc: 'The largest, most liquid coins, priced off their own volatility.', color: CategoryScale.sand },
+  { emoji: '🔮', name: 'Prediction markets', desc: 'Market-implied probabilities on politics, sports and world events.', color: CategoryScale.clay },
 ] as const;
 
 export default function LearnScreen(): React.ReactElement {

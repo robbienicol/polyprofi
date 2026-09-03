@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { authenticateWithBiometrics, useBiometricLock } from '@/api/hooks/useBiometricLock';
 import { ThemedText } from '@/components/themed-text';
-import { Brand, Radius, Shadow } from '@/constants/theme';
+import { Brand, OnBrand, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 /**
@@ -82,7 +82,7 @@ export function AppLockGate({ children }: { children: React.ReactNode }): React.
             justifyContent: 'center',
             ...Shadow.float,
           }}>
-          <ThemedText style={{ fontSize: 38, fontWeight: '900', color: '#06140C' }}>$</ThemedText>
+          <ThemedText style={{ fontSize: 38, fontWeight: '900', color: OnBrand }}>$</ThemedText>
         </View>
 
         <View className="items-center gap-2">
@@ -96,8 +96,8 @@ export function AppLockGate({ children }: { children: React.ReactNode }): React.
           className="py-4 px-8 items-center active:opacity-80"
           style={{ borderRadius: Radius.lg, backgroundColor: Brand[500], opacity: authenticating ? 0.6 : 1, ...Shadow.card }}>
           {authenticating
-            ? <ActivityIndicator color="#06140C" />
-            : <ThemedText style={{ fontWeight: '800', fontSize: 16, color: '#06140C' }}>Unlock</ThemedText>}
+            ? <ActivityIndicator color={OnBrand} />
+            : <ThemedText style={{ fontWeight: '800', fontSize: 16, color: OnBrand }}>Unlock</ThemedText>}
         </Pressable>
       </SafeAreaView>
     </View>

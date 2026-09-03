@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Animated, Easing, useWindowDimensions, View } from 'react-native';
 
-import { Accent, Brand } from '@/constants/theme';
+import { Brand, CategoryScale, Semantic } from '@/constants/theme';
 
-const COLORS = [Brand[500], Brand[300], Brand[100], Accent.gold, Accent.blue, Accent.violet];
+// Confetti only fires on a goal being reached, so the win green belongs here.
+const COLORS = [Brand[500], Brand[300], Brand[100], Brand[600], Semantic.positive, CategoryScale.slate];
 
 interface Piece {
   left: number; // fraction of screen width

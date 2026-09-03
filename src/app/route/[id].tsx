@@ -6,16 +6,18 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { timeframeCalendarDays } from "@/api/client/playbook";
 import { useMarketComparison } from "@/api/hooks/useMarketComparison";
 import { useSavedRoutes } from "@/api/hooks/useSavedRoutes";
+import { usePreferences } from "@/api/hooks/usePreferences";
 import { useSavingsGoal } from "@/api/hooks/useSavingsGoal";
 import { useTrackedBets } from "@/api/hooks/useTrackedBets";
 import { MarketComparisonCard } from "@/components/routes/MarketComparisonCard";
 import { RelatedRoutes } from "@/components/routes/RelatedRoutes";
 import { RouteCoach } from "@/components/routes/RouteCoach";
 import { RouteOpportunityCard } from "@/components/routes/RouteOpportunityCard";
+import { ScoreMathCard } from "@/components/routes/ScoreMathCard";
 import { TrackRouteForm } from "@/components/routes/TrackRouteForm";
 import { ThemedText } from "@/components/themed-text";
 import { KEYBOARD_AWARE_SCROLL_PROPS } from "@/constants/keyboard";
-import { Brand, Radius } from "@/constants/theme";
+import { Brand, Radius, Semantic } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 import { betOutcomeSide } from "@/lib/bet-monitor-match";
 import { parseEntryPrice } from "@/lib/parse-bet-line";
@@ -26,6 +28,7 @@ import {
   tradeVenuesForRoute,
 } from "@/lib/route-actions";
 import type { TradeVenue } from "@/lib/route-actions";
+import { goalEffectivenessScore } from "@/lib/score";
 import { rescoreForStake, stakeNeededForReturn } from "@/lib/stake-rescore";
 import { trackedPositionFields } from "@/lib/tracked-assets";
 
@@ -44,6 +47,7 @@ export default function RouteDetailScreen(): React.ReactElement {
   const { history } = useSavedRoutes();
   const { allGoals, confirmGoal } = useSavingsGoal();
   const { trackBet, isTracking } = useTrackedBets();
+  const { preferences } = usePreferences();
   const [added, setAdded] = useState(false);
   const [showAcquireForm, setShowAcquireForm] = useState(false);
   const [acquireAmount, setAcquireAmount] = useState("");
@@ -111,6 +115,18 @@ export default function RouteDetailScreen(): React.ReactElement {
     savedRoute,
     baseStake || stake || 1,
     targetProfit,
+  );
+  // Scored with the user's own weights, so the breakdown below explains this number
+  // the way they asked for it rather than the way the app used to insist on.
+  const scoreBreakdown = goalEffectivenessScore(
+    route,
+    {
+      target: targetProfit,
+      requiredInvestment: neededToHitGoal,
+      availableInvestment,
+      deadlineDays: goalDeadlineDays ?? route.maturesInDays ?? 1,
+    },
+    preferences.scoreWeights,
   );
   const relatedRoutes = (batch?.routes ?? [])
     .filter((candidate) => candidate.id !== route.id)
@@ -264,6 +280,34 @@ export default function RouteDetailScreen(): React.ReactElement {
 
           {comparison ? <MarketComparisonCard comparison={comparison} /> : null}
 
+          {/* The score, and the arithmetic behind it. This is the screen where money
+              gets committed, so the weighting the number came from is shown here
+              rather than left on the results list. */}
+          <ScoreMathCard
+            scoreBreakdown={scoreBreakdown}
+            requiredInvestment={neededToHitGoal}
+            availableInvestment={availableInvestment}
+          />
+          <Pressable
+            onPress={() => router.push("/(tabs)/routes")}
+            accessibilityRole="button"
+            className="active:opacity-70"
+            hitSlop={6}
+          >
+            <ThemedText
+              style={{ fontSize: 11, lineHeight: 16, color: theme.textTertiary, textAlign: "center" }}
+            >
+              Scored on what you said matters:{" "}
+              {Math.round(scoreBreakdown.weights.reliability * 100)}% chance ·{" "}
+              {Math.round(scoreBreakdown.weights.principalProtection * 100)}% safety ·{" "}
+              {Math.round(scoreBreakdown.weights.capitalEfficiency * 100)}% capital ·{" "}
+              {Math.round(scoreBreakdown.weights.timeEfficiency * 100)}% time.{" "}
+              <ThemedText style={{ fontSize: 11, fontWeight: "800", color: Brand[500] }}>
+                Change it
+              </ThemedText>
+            </ThemedText>
+          </Pressable>
+
           <View
             style={{
               backgroundColor: theme.backgroundElement,
@@ -374,9 +418,9 @@ function TradeLink({
         paddingHorizontal: 8,
         alignItems: "center",
         gap: 2,
-        backgroundColor: venue.cheapest ? Brand[500] + "14" : theme.backgroundElement,
+        backgroundColor: venue.cheapest ? Semantic.positive + "14" : theme.backgroundElement,
         borderWidth: 1,
-        borderColor: venue.cheapest ? Brand[500] : theme.border,
+        borderColor: venue.cheapest ? Semantic.positive : theme.border,
       }}
     >
       <ThemedText
@@ -389,7 +433,7 @@ function TradeLink({
           style={{
             fontSize: 11,
             fontWeight: "700",
-            color: venue.cheapest ? Brand[500] : theme.textTertiary,
+            color: venue.cheapest ? Semantic.positive : theme.textTertiary,
             fontVariant: ["tabular-nums"],
           }}
         >

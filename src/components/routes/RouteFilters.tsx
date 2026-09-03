@@ -2,15 +2,15 @@ import Slider from '@react-native-community/slider';
 import { Pressable, ScrollView, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { Accent, Brand, Radius } from '@/constants/theme';
+import { Brand, Radius, Semantic } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { isPredictionCategory, PREDICTION_TOPICS } from '@/lib/prediction-topics';
 import type { RouteFilters as Filters, RouteSort } from '@/lib/route-results';
 import type { Route } from '@/types/routes';
 
 const LOSS_PROFILE_FILTERS: { label: string; value: Route['lossProfile']; color: string }[] = [
-  { label: 'All-or-nothing', value: 'binary', color: Accent.red },
-  { label: 'Capital preservation', value: 'partial', color: Brand[500] },
+  { label: 'All-or-nothing', value: 'binary', color: Semantic.negative },
+  { label: 'Capital preservation', value: 'partial', color: Semantic.positive },
 ];
 
 const ASSET_CLASS_ORDER = ['Polymarket', 'Savings & Treasuries', 'Stocks & ETFs', 'Crypto'];
@@ -62,7 +62,7 @@ export function RouteFilters({ filters, categories, onChange }: RouteFiltersProp
       <View style={{ borderRadius: Radius.lg, backgroundColor: theme.backgroundElement, borderWidth: 1, borderColor: theme.border, paddingHorizontal: 14, paddingVertical: 10, gap: 2 }}>
         <View className="flex-row justify-between items-center">
           <ThemedText style={{ fontSize: 12, fontWeight: '600', color: theme.textSecondary }}>Chance of hitting goal</ThemedText>
-          <ThemedText style={{ fontSize: 13, fontWeight: '800', fontVariant: ['tabular-nums'], color: filters.minimumProbability === 0 ? theme.textTertiary : filters.minimumProbability >= 65 ? Brand[500] : Accent.gold }}>
+          <ThemedText style={{ fontSize: 13, fontWeight: '800', fontVariant: ['tabular-nums'], color: filters.minimumProbability === 0 ? theme.textTertiary : filters.minimumProbability >= 65 ? Brand[500] : Semantic.caution }}>
             {filters.minimumProbability === 0 ? 'Any' : `≥ ${filters.minimumProbability}%`}
           </ThemedText>
         </View>

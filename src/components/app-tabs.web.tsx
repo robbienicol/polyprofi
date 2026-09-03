@@ -12,7 +12,7 @@ import { Pressable, useColorScheme, useWindowDimensions, View, StyleSheet } from
 import { ThemedText } from './themed-text';
 import { ThemedView } from './themed-view';
 
-import { Colors, MaxContentWidth, Spacing } from '@/constants/theme';
+import { Brand, Colors, MaxContentWidth, Spacing } from '@/constants/theme';
 
 export default function AppTabs() {
   return (
@@ -46,7 +46,7 @@ export function TabButton({ children, icon, isFocused, ...props }: TabTriggerSlo
   const { width } = useWindowDimensions();
   const compact = width < 640;
   const colors = Colors[scheme === 'unspecified' ? 'light' : scheme];
-  const tintColor = isFocused ? colors.text : colors.textSecondary;
+  const tintColor = isFocused ? Brand[500] : colors.textSecondary;
 
   return (
     <Pressable {...props} style={({ pressed }) => [compact && styles.compactTab, pressed && styles.pressed]}>

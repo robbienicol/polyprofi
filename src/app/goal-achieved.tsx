@@ -7,7 +7,7 @@ import { useSavingsGoal } from '@/api/hooks/useSavingsGoal';
 import { OnboardingGlow } from '@/components/onboarding/OnboardingPreviews';
 import { ThemedText } from '@/components/themed-text';
 import { Confetti } from '@/components/ui/Confetti';
-import { Accent, Brand, Radius, Shadow } from '@/constants/theme';
+import { Brand, OnBrand, Radius, Semantic, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 const MONO = { fontVariant: ['tabular-nums' as const] };
@@ -59,16 +59,16 @@ export default function GoalAchievedScreen(): React.ReactElement {
               borderRadius: 999,
               alignItems: 'center',
               justifyContent: 'center',
-              backgroundColor: Brand[500] + '22',
+              backgroundColor: Semantic.positive + '22',
               borderWidth: 2,
-              borderColor: Brand[500],
+              borderColor: Semantic.positive,
               ...Shadow.card,
             }}>
             <ThemedText style={{ fontSize: 64 }}>{goal.emoji}</ThemedText>
           </Animated.View>
 
           <ThemedText
-            style={{ fontSize: 12, fontWeight: '900', color: Brand[500], letterSpacing: 1.4, marginTop: 26 }}>
+            style={{ fontSize: 12, fontWeight: '900', color: Semantic.positive, letterSpacing: 1.4, marginTop: 26 }}>
             GOAL REACHED
           </ThemedText>
           <ThemedText
@@ -102,16 +102,16 @@ export default function GoalAchievedScreen(): React.ReactElement {
               borderRadius: Radius.pill,
               backgroundColor: theme.backgroundElevated,
               borderWidth: 1,
-              borderColor: Brand[500] + '55',
+              borderColor: Semantic.positive + '55',
             }}>
-            <ThemedText style={{ fontSize: 30, fontWeight: '900', color: Brand[500], ...MONO }}>
+            <ThemedText style={{ fontSize: 30, fontWeight: '900', color: Semantic.positive, ...MONO }}>
               +${(goal.targetAmount ?? 0).toLocaleString()}
             </ThemedText>
             <ThemedText style={{ fontSize: 13, color: theme.textSecondary }}>in net gains</ThemedText>
           </View>
 
           {achievedCount > 0 ? (
-            <ThemedText style={{ fontSize: 13, fontWeight: '700', color: Accent.gold, marginTop: 16 }}>
+            <ThemedText style={{ fontSize: 13, fontWeight: '700', color: Semantic.caution, marginTop: 16 }}>
               🏆 {achievedCount} goal{achievedCount === 1 ? '' : 's'} reached
             </ThemedText>
           ) : null}
@@ -123,7 +123,7 @@ export default function GoalAchievedScreen(): React.ReactElement {
             accessibilityRole="button"
             className="py-4 items-center active:opacity-85"
             style={{ borderRadius: Radius.lg, backgroundColor: Brand[500], ...Shadow.card }}>
-            <ThemedText style={{ fontSize: 16, fontWeight: '900', color: '#06140C' }}>Set new goal →</ThemedText>
+            <ThemedText style={{ fontSize: 16, fontWeight: '900', color: OnBrand }}>Set new goal →</ThemedText>
           </Pressable>
           <Pressable
             onPress={close}

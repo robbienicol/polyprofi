@@ -7,7 +7,7 @@ import { GoalProgress, useGoalsProgress } from '@/api/hooks/useGoalProgress';
 import { useMoney } from '@/api/hooks/usePreferences';
 import { useSavingsGoal } from '@/api/hooks/useSavingsGoal';
 import { ThemedText } from '@/components/themed-text';
-import { Accent, Brand, Radius, Shadow } from '@/constants/theme';
+import { Brand, OnBrand, Radius, Semantic, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { goalProgressFraction, isOpenEnded } from '@/lib/savings-goal';
 import type { SavingsGoal } from '@/types/bets';
@@ -64,7 +64,7 @@ export default function GoalsScreen(): React.ReactElement {
                 backgroundColor: Brand[500],
                 ...Shadow.card,
               }}>
-              <ThemedText style={{ fontSize: 22, lineHeight: 25, fontWeight: '900', color: '#06140C' }}>+</ThemedText>
+              <ThemedText style={{ fontSize: 22, lineHeight: 25, fontWeight: '900', color: OnBrand }}>+</ThemedText>
             </Pressable>
           </View>
 
@@ -111,7 +111,7 @@ function GoalRow({
   const achieved = !!goal.achievedAt;
   const fraction = goalProgressFraction(netGain, goal);
   const remaining = openEnded ? 0 : Math.max(0, (goal.targetAmount ?? 0) - netGain);
-  const gainColor = netGain > 0 ? Brand[500] : netGain < 0 ? Accent.red : theme.textSecondary;
+  const gainColor = netGain > 0 ? Semantic.positive : netGain < 0 ? Semantic.negative : theme.textSecondary;
 
   return (
     <Pressable
@@ -127,7 +127,7 @@ function GoalRow({
         borderRadius: Radius.xl,
         backgroundColor: theme.backgroundElevated,
         borderWidth: achieved ? 1.5 : 1,
-        borderColor: achieved ? Brand[500] : theme.border,
+        borderColor: achieved ? Semantic.positive : theme.border,
         padding: 16,
         gap: 14,
         ...Shadow.card,
@@ -140,7 +140,7 @@ function GoalRow({
             borderRadius: Radius.md,
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: achieved ? Brand[500] + '22' : theme.backgroundSelected,
+            backgroundColor: achieved ? Semantic.positive + '22' : theme.backgroundSelected,
           }}>
           <ThemedText style={{ fontSize: 25 }}>{goal.emoji}</ThemedText>
         </View>
@@ -150,7 +150,7 @@ function GoalRow({
             <ThemedText style={{ fontSize: 16, fontWeight: '800', color: theme.text, letterSpacing: -0.2, flexShrink: 1 }} numberOfLines={1}>
               {goal.label}
             </ThemedText>
-            {achieved ? <Tag label="REACHED 🎉" color={Accent.gold} /> : null}
+            {achieved ? <Tag label="REACHED 🎉" color={Semantic.positive} /> : null}
           </View>
           <ThemedText style={{ fontSize: 12, color: theme.textTertiary, ...MONO }} numberOfLines={1}>
             {openEnded ? 'No finish line' : `${money(goal.targetAmount ?? 0, { decimals: 0 })} target`}
@@ -161,7 +161,7 @@ function GoalRow({
         </View>
 
         {openEnded ? null : (
-          <ThemedText style={{ fontSize: 22, fontWeight: '900', color: achieved ? Brand[500] : theme.text, ...MONO }}>
+          <ThemedText style={{ fontSize: 22, fontWeight: '900', color: achieved ? Semantic.positive : theme.text, ...MONO }}>
             {Math.round(fraction * 100)}%
           </ThemedText>
         )}
@@ -261,7 +261,7 @@ function EmptyGoals({ onAdd }: { onAdd: () => void }): React.ReactElement {
         onPress={onAdd}
         className="items-center active:opacity-85"
         style={{ borderRadius: Radius.lg, backgroundColor: Brand[500], paddingVertical: 13, paddingHorizontal: 22, marginTop: 4 }}>
-        <ThemedText style={{ fontSize: 14, fontWeight: '800', color: '#06140C' }}>Add a goal →</ThemedText>
+        <ThemedText style={{ fontSize: 14, fontWeight: '800', color: OnBrand }}>Add a goal →</ThemedText>
       </Pressable>
     </View>
   );

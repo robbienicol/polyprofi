@@ -12,8 +12,10 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 export function OnboardingGlow(): React.ReactElement {
   const { width: W, height: H } = useWindowDimensions();
   const dark = useColorScheme() !== 'light';
-  const topOpacity = dark ? 0.42 : 0.22;
-  const bottomOpacity = dark ? 0.2 : 0.12;
+  // The terracotta brand carries far more weight than the old green at the same
+  // alpha — at 0.42 it washed the whole screen, so the blooms are dialled back.
+  const topOpacity = dark ? 0.24 : 0.13;
+  const bottomOpacity = dark ? 0.12 : 0.07;
 
   return (
     <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }}>
