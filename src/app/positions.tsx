@@ -411,12 +411,14 @@ function BetCardInner({ bet, liveStatus, valuation, highlighted, onResolve, onDi
                 </Pressable>
               </View>
               {/* Won/Lost both assume money went in. Tracking a route you decided
-                  against needs its own answer, or the only way out is a false one. */}
+                  against needs its own answer, or the only way out is a false one —
+                  and as bare tertiary text under two buttons it read as a footnote
+                  rather than as the third option it is. */}
               <Pressable
                 onPress={() => onResolve({ id: bet.id, status: 'watching' })}
-                className="items-center active:opacity-70"
-                style={{ borderRadius: Radius.md, paddingVertical: 9 }}>
-                <ThemedText style={{ fontSize: 12.5, fontWeight: '700', color: theme.textTertiary }}>
+                className="items-center active:opacity-70 border"
+                style={{ borderRadius: Radius.md, paddingVertical: 10, borderColor: theme.border }}>
+                <ThemedText style={{ fontSize: 13, fontWeight: '700', color: theme.textSecondary }}>
                   I didn&apos;t invest — just watching
                 </ThemedText>
               </Pressable>

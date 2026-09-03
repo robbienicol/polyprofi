@@ -30,7 +30,7 @@ export default function GoalDetailScreen(): React.ReactElement {
   // news, so it is a fair moment to ask for a rating.
   const { id, celebrate } = useLocalSearchParams<{ id: string; celebrate?: string }>();
   const { goals, allGoals, isLoading, removeGoal } = useSavingsGoal();
-  const { bets, reassignBets } = useTrackedBets();
+  const { bets, reassignBets, resolveBet } = useTrackedBets();
   const { quizAnswers, saveAnswers } = useQuizAnswers();
   const { history } = useSavedRoutes();
 
@@ -247,8 +247,11 @@ export default function GoalDetailScreen(): React.ReactElement {
               livePositions: progress.livePositions,
               projectedPositions: progress.projectedPositions,
             }}
+            positionById={progress.positionById}
             onFindRoutes={findRoutes}
             onOpenPositions={() => router.push('/positions')}
+            onOpenPosition={(betId) => router.push(`/positions?betId=${betId}` as Href)}
+            onResolve={resolveBet}
             emptyTitle="Nothing working on this goal yet"
             emptyBody={`Take a route for ${goal.label} and its allocation, projected value, and probability of getting there all show up here.`}
           />

@@ -13,6 +13,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Brand, OnBrand, Radius, Semantic, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { maturityWords, portfolioStats } from '@/lib/portfolio';
+import type { PositionValuation } from '@/lib/portfolio-progress';
 import type { TrackedBet } from '@/types/bets';
 
 const MONO = { fontVariant: ['tabular-nums' as const] };
@@ -108,8 +109,23 @@ export interface PortfolioOverviewProps {
    * would be a lie about that goal.
    */
   historyPoints?: { time: number; value: number }[];
+  /**
+   * Live valuation per position, when prices have arrived. Without it a row can only
+   * report the payout the route was taken for, which is a forecast wearing the colour
+   * of a gain — see PositionRow.
+   */
+  positionById?: Record<string, PositionValuation>;
   onFindRoutes: () => void;
   onOpenPositions: () => void;
+  /** Open one position rather than the whole list. Falls back to the list when absent. */
+  onOpenPosition?: (betId: string) => void;
+  /**
+   * Settle a position from here. "Didn't invest" is the third answer and not a
+   * courtesy: without it, a route someone tracked and then decided against can only
+   * be cleared by claiming it won or lost, and both of those move real money in the
+   * numbers above.
+   */
+  onResolve?: (args: { id: string; status: TrackedBet['status'] }) => void;
   /** Copy for the nothing-tracked-yet state, which differs per goal. */
   emptyTitle?: string;
   emptyBody?: string;
@@ -132,8 +148,11 @@ export function PortfolioOverview({
   targetValue,
   valueNow,
   historyPoints,
+  positionById,
   onFindRoutes,
   onOpenPositions,
+  onOpenPosition,
+  onResolve,
   emptyTitle = 'No portfolio yet',
   emptyBody = 'Set a goal, pick a route, and what it is worth, where it sits, and your probability of hitting the target all show up here.',
 }: PortfolioOverviewProps): React.ReactElement {
@@ -390,49 +409,13 @@ export function PortfolioOverview({
           </View>
 
           {activeBets.slice(0, 5).map((bet) => (
-            <Pressable
+            <PositionRow
               key={bet.id}
-              onPress={onOpenPositions}
-              className="active:opacity-80"
-              style={{
-                borderRadius: Radius.lg,
-                backgroundColor: theme.backgroundElement,
-                borderWidth: 1,
-                borderColor: theme.border,
-                paddingHorizontal: 14,
-                paddingVertical: 13,
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 12,
-              }}>
-              <View
-                style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: Radius.sm,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: theme.backgroundSelected,
-                }}>
-                <ThemedText style={{ fontSize: 17 }}>{bet.emoji}</ThemedText>
-              </View>
-              <View className="flex-1" style={{ gap: 2 }}>
-                <ThemedText style={{ fontSize: 14, fontWeight: '700', color: theme.text }} numberOfLines={1}>
-                  {bet.description}
-                </ThemedText>
-                <ThemedText style={{ fontSize: 11, color: theme.textTertiary }} numberOfLines={1}>
-                  {positionMeta(bet.category, bet.platform, bet.probability)}
-                </ThemedText>
-              </View>
-              <View className="items-end" style={{ gap: 2 }}>
-                <ThemedText style={{ fontSize: 14, fontWeight: '800', color: theme.text, ...MONO }}>
-                  {money(bet.amountWagered, { decimals: 0 })}
-                </ThemedText>
-                <ThemedText style={{ fontSize: 11, fontWeight: '700', color: Semantic.positive, ...MONO }}>
-                  {money(bet.expectedReturn, { decimals: 0, signed: true })}
-                </ThemedText>
-              </View>
-            </Pressable>
+              bet={bet}
+              valuation={positionById?.[bet.id]}
+              onPress={() => (onOpenPosition ? onOpenPosition(bet.id) : onOpenPositions())}
+              onResolve={onResolve}
+            />
           ))}
 
           {activeBets.length > 5 ? (
@@ -445,6 +428,149 @@ export function PortfolioOverview({
         </View>
       )}
     </>
+  );
+}
+
+/**
+ * One active position, with the two things you can do to it from here: open it, or
+ * say how it ended.
+ *
+ * The figure on the right used to be the route's expected payout, in green, next to
+ * the amount staked and labelled as neither — so a position that was down still read
+ * as money made. Where a live price exists the row now reports the actual unrealised
+ * P&L, and where one does not it says the number is a forecast rather than colouring
+ * it like a result.
+ */
+function PositionRow({
+  bet,
+  valuation,
+  onPress,
+  onResolve,
+}: {
+  bet: TrackedBet;
+  valuation?: PositionValuation;
+  onPress: () => void;
+  onResolve?: (args: { id: string; status: TrackedBet['status'] }) => void;
+}): React.ReactElement {
+  const theme = useTheme();
+  const money = useMoney();
+  const live = valuation?.pricing === 'live' || valuation?.pricing === 'projected';
+  const pnl = valuation?.unrealizedPnl ?? 0;
+  const up = pnl >= 0;
+
+  return (
+    <View
+      style={{
+        borderRadius: Radius.lg,
+        backgroundColor: theme.backgroundElement,
+        borderWidth: 1,
+        borderColor: theme.border,
+        overflow: 'hidden',
+      }}>
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={`Open ${bet.description}`}
+        className="active:opacity-80"
+        style={{
+          paddingHorizontal: 14,
+          paddingVertical: 13,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 12,
+        }}>
+        <View
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: Radius.sm,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: theme.backgroundSelected,
+          }}>
+          <ThemedText style={{ fontSize: 17 }}>{bet.emoji}</ThemedText>
+        </View>
+        <View className="flex-1" style={{ gap: 2 }}>
+          <ThemedText style={{ fontSize: 14, fontWeight: '700', color: theme.text }} numberOfLines={1}>
+            {bet.description}
+          </ThemedText>
+          <ThemedText style={{ fontSize: 11, color: theme.textTertiary }} numberOfLines={1}>
+            {positionMeta(bet.category, bet.platform, bet.probability)}
+          </ThemedText>
+        </View>
+        <View className="items-end" style={{ gap: 1 }}>
+          <ThemedText style={{ fontSize: 14, fontWeight: '800', color: theme.text, ...MONO }}>
+            {money(bet.amountWagered, { decimals: 0 })}
+          </ThemedText>
+          <ThemedText style={{ fontSize: 10, color: theme.textTertiary }}>staked</ThemedText>
+          <ThemedText
+            style={{
+              fontSize: 12,
+              fontWeight: '700',
+              marginTop: 2,
+              color: live ? (up ? Semantic.positive : Semantic.negative) : theme.textSecondary,
+              ...MONO,
+            }}>
+            {money(live ? pnl : bet.expectedReturn, { decimals: 0, signed: true })}
+          </ThemedText>
+          <ThemedText style={{ fontSize: 10, color: theme.textTertiary }}>
+            {live ? 'now' : 'if it wins'}
+          </ThemedText>
+        </View>
+      </Pressable>
+
+      {onResolve ? (
+        <View
+          className="flex-row"
+          style={{ borderTopWidth: 1, borderTopColor: theme.border }}>
+          <ResolveAction
+            label="Won ✓"
+            color={Semantic.positive}
+            onPress={() => onResolve({ id: bet.id, status: 'won' })}
+          />
+          <ResolveAction
+            label="Lost ✗"
+            color={theme.textSecondary}
+            onPress={() => onResolve({ id: bet.id, status: 'lost' })}
+            divided
+          />
+          <ResolveAction
+            label="Didn't invest"
+            color={theme.textSecondary}
+            onPress={() => onResolve({ id: bet.id, status: 'watching' })}
+            divided
+          />
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function ResolveAction({
+  label,
+  color,
+  onPress,
+  divided,
+}: {
+  label: string;
+  color: string;
+  onPress: () => void;
+  /** Hairline against the action to its left. */
+  divided?: boolean;
+}): React.ReactElement {
+  const theme = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      className="flex-1 items-center active:opacity-60"
+      style={{
+        paddingVertical: 10,
+        borderLeftWidth: divided ? 1 : 0,
+        borderLeftColor: theme.border,
+      }}>
+      <ThemedText style={{ fontSize: 12, fontWeight: '700', color }}>{label}</ThemedText>
+    </Pressable>
   );
 }
 

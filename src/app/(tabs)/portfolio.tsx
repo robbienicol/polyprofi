@@ -21,7 +21,7 @@ import { goalRemaining, parseGoalIds } from '@/lib/savings-goal';
 export default function PortfolioScreen(): React.ReactElement {
   const theme = useTheme();
   const router = useRouter();
-  const { bets: allBets } = useTrackedBets();
+  const { bets: allBets, resolveBet } = useTrackedBets();
   const { history } = useSavedRoutes();
   const { goals: allGoals } = useSavingsGoal();
 
@@ -118,8 +118,11 @@ export default function PortfolioScreen(): React.ReactElement {
               projectedPositions: progress.projectedPositions,
             }}
             historyPoints={progress.points}
+            positionById={progress.positionById}
             onFindRoutes={() => router.push('/(tabs)/routes')}
             onOpenPositions={() => router.push('/positions')}
+            onOpenPosition={(betId) => router.push(`/positions?betId=${betId}` as Href)}
+            onResolve={resolveBet}
           />
 
           <ThemedText style={{ fontSize: 11, color: theme.textTertiary, textAlign: 'center', opacity: 0.6 }}>
