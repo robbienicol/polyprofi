@@ -1,4 +1,4 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import React, { useCallback, useMemo } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -12,7 +12,7 @@ import { PortfolioOverview } from '@/components/portfolio/PortfolioOverview';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, Radius } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { goalRemaining } from '@/lib/savings-goal';
+import { goalRemaining, parseGoalIds } from '@/lib/savings-goal';
 
 /**
  * Every position across every goal. The per-goal breakdown lives in the Goals
@@ -28,10 +28,16 @@ export default function PortfolioScreen(): React.ReactElement {
   // Goals ticked on the Goals tab. Absent means the whole portfolio, which is what
   // this screen is for; a selection narrows every number on it to those goals.
   const { goalIds } = useLocalSearchParams<{ goalIds?: string }>();
-  const selectedGoalIds = useMemo(
-    () => new Set((goalIds ?? '').split(',').map((id) => id.trim()).filter(Boolean)),
-    [goalIds],
-  );
+  const selectedGoalIds = useMemo(() => new Set(parseGoalIds(goalIds)), [goalIds]);
+  // Back to the list to change the selection, carrying it so the boxes are already
+  // ticked. Choosing goals belongs where the goals are; this screen only reports on
+  // whichever ones were picked.
+  // Always carries the parameter, empty included: arriving from the whole-portfolio
+  // view means "nothing is selected", and the list has to be told that rather than
+  // left showing whatever was ticked the last time it was open.
+  const chooseGoals = (): void => {
+    router.push(`/(tabs)/goals?selected=${[...selectedGoalIds].join(',')}` as Href);
+  };
   const scoped = selectedGoalIds.size > 0;
   const goals = useMemo(
     () => (scoped ? allGoals.filter((goal) => selectedGoalIds.has(goal.id)) : allGoals),
@@ -88,19 +94,16 @@ export default function PortfolioScreen(): React.ReactElement {
                 <ThemedText style={{ fontSize: 12, color: theme.textSecondary }}>
                   {goals.length} selected goal{goals.length === 1 ? '' : 's'}
                 </ThemedText>
-                <Pressable
-                  onPress={() => router.setParams({ goalIds: '' })}
-                  accessibilityRole="button"
-                  hitSlop={8}
-                  className="active:opacity-60"
-                  style={{ borderRadius: Radius.pill, borderWidth: 1, borderColor: theme.border, paddingHorizontal: 10, paddingVertical: 3 }}>
-                  <ThemedText style={{ fontSize: 11, fontWeight: '800', color: Brand[500] }}>Show all</ThemedText>
-                </Pressable>
+                <ScopeChip label="Change" onPress={chooseGoals} />
+                <ScopeChip label="Show all" onPress={() => router.setParams({ goalIds: '' })} />
               </View>
-            ) : goals.length > 1 && activeBets.length > 0 ? (
-              <ThemedText style={{ fontSize: 12, color: theme.textSecondary, marginTop: 3 }}>
-                Across all {goals.length} goals
-              </ThemedText>
+            ) : allGoals.length > 1 ? (
+              <View className="flex-row items-center" style={{ gap: 8, marginTop: 5 }}>
+                <ThemedText style={{ fontSize: 12, color: theme.textSecondary }}>
+                  Across all {allGoals.length} goals
+                </ThemedText>
+                <ScopeChip label="Pick goals" onPress={chooseGoals} />
+              </View>
             ) : null}
           </View>
 
@@ -125,5 +128,26 @@ export default function PortfolioScreen(): React.ReactElement {
         </ScrollView>
       </SafeAreaView>
     </View>
+  );
+}
+
+/** Small pill beside the scope line: the controls for what this screen is reporting on. */
+function ScopeChip({ label, onPress }: { label: string; onPress: () => void }): React.ReactElement {
+  const theme = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      hitSlop={8}
+      className="active:opacity-60"
+      style={{
+        borderRadius: Radius.pill,
+        borderWidth: 1,
+        borderColor: theme.border,
+        paddingHorizontal: 10,
+        paddingVertical: 3,
+      }}>
+      <ThemedText style={{ fontSize: 11, fontWeight: '800', color: Brand[500] }}>{label}</ThemedText>
+    </Pressable>
   );
 }

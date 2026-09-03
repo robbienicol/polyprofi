@@ -115,6 +115,17 @@ export function betsForGoal(bets: TrackedBet[], goalId: string): TrackedBet[] {
 }
 
 /**
+ * Goal ids carried in a URL parameter, as the Goals tab and the Portfolio tab pass a
+ * selection back and forth. Tolerant of the shapes a parameter really arrives in —
+ * missing, empty, an array from a repeated key, padded, duplicated — because every
+ * one of those means "no usable selection" rather than an error worth a screen.
+ */
+export function parseGoalIds(value: string | string[] | undefined): string[] {
+  const raw = Array.isArray(value) ? value.join(',') : value ?? '';
+  return [...new Set(raw.split(',').map((id) => id.trim()).filter(Boolean))];
+}
+
+/**
  * The goals a user actually has: drafts named by a search nobody acted on are
  * excluded, so browsing routes never fills the Goals tab with noise.
  */
@@ -337,6 +348,15 @@ export function __selfCheck(): void {
   invariant(abandonedDraftGoalIds([stillRunning], [], now).length === 0, 'a draft still inside its deadline is left alone');
 
   // A draft is a search in progress, not a goal the user has: it stays out of the list.
+  // ── selection parameters ──────────────────────────────────────────────────
+  invariant(parseGoalIds('goal-1,goal-2').length === 2, 'a comma-separated parameter is a selection');
+  invariant(parseGoalIds(' goal-1 , goal-2 ')[0] === 'goal-1', 'padding around an id is trimmed');
+  invariant(parseGoalIds('goal-1,goal-1').length === 1, 'a repeated id selects one goal, not two');
+  invariant(parseGoalIds(['goal-1', 'goal-2']).length === 2, 'a repeated key arrives as an array and still reads');
+  invariant(parseGoalIds('').length === 0, 'an empty parameter is no selection');
+  invariant(parseGoalIds(undefined).length === 0, 'a missing parameter is no selection');
+  invariant(parseGoalIds(',,').length === 0, 'separators with nothing between them select nothing');
+
   invariant(committedGoals([trip, abandoned]).length === 1, 'drafts are hidden from the goals list');
   invariant(committedGoals([trip, abandoned])[0].id === 'goal-2', 'the committed goal is the one that survives the filter');
   invariant(goalByLabel([trip], '  a DREAM trip ')?.id === 'goal-2', 'a goal is found by name regardless of case or padding');

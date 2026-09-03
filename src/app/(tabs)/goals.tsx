@@ -1,4 +1,4 @@
-import { useRouter, type Href } from 'expo-router';
+import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import React, { useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -10,7 +10,7 @@ import { useTrackedBets } from '@/api/hooks/useTrackedBets';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, OnBrand, Radius, Semantic, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { goalProgressFraction, isOpenEnded } from '@/lib/savings-goal';
+import { goalProgressFraction, isOpenEnded, parseGoalIds } from '@/lib/savings-goal';
 import type { SavingsGoal } from '@/types/bets';
 
 const MONO = { fontVariant: ['tabular-nums' as const] };
@@ -25,7 +25,26 @@ export default function GoalsScreen(): React.ReactElement {
   // Ticked goals, for looking at their combined portfolio or clearing several out
   // at once. Ids rather than indexes, so a goal disappearing under the selection
   // (deleted, swept) takes itself out of it.
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  //
+  // Ticks are held in state so a tap lands on the frame it was made, and re-seeded
+  // from the route parameter whenever the Portfolio tab sends a different selection
+  // back here to be changed. A tab screen is not remounted on arrival, so without
+  // that re-seeding the boxes would keep whatever they showed last time and disagree
+  // with the screen that sent you; and driving them from the parameter alone loses a
+  // tick when two land in the same render, since a parameter has no "update from
+  // what it was" the way state does.
+  const { selected: selectedParam } = useLocalSearchParams<{ selected?: string }>();
+  const [selection, setSelection] = useState(() => ({
+    fromParam: selectedParam,
+    ids: parseGoalIds(selectedParam),
+  }));
+  if (selection.fromParam !== selectedParam) {
+    setSelection({ fromParam: selectedParam, ids: parseGoalIds(selectedParam) });
+  }
+  const selectedIds = selection.ids;
+  const setSelectedIds = (update: (prev: string[]) => string[]): void => {
+    setSelection((prev) => ({ ...prev, ids: update(prev.ids) }));
+  };
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const selected = goals.filter((goal) => selectedIds.includes(goal.id));
@@ -38,7 +57,7 @@ export default function GoalsScreen(): React.ReactElement {
   };
 
   const clearSelection = (): void => {
-    setSelectedIds([]);
+    setSelectedIds(() => []);
     setConfirmingDelete(false);
   };
 
@@ -203,6 +222,9 @@ function GoalRow({
           onPress={onToggleSelected}
           accessibilityRole="checkbox"
           accessibilityState={{ checked: selected }}
+          // react-native-web does not turn accessibilityState into aria-checked, so on
+          // web the box announced as unchecked however it looked.
+          aria-checked={selected}
           accessibilityLabel={`Select ${goal.label}`}
           hitSlop={10}
           className="active:opacity-60"
