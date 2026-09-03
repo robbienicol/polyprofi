@@ -292,6 +292,13 @@ export function useSavingsGoal() {
     allGoals: state.goals,
     achievedCount: state.achievedCount,
     hasGoal: committed.length > 0,
+    /**
+     * Any goal at all, drafts included. The launch gate asks this rather than
+     * `hasGoal`: someone who named a goal and ran a search has answered "what are
+     * you saving for?", and sending them back to goal setup on every launch until
+     * they commit money would be asking it again.
+     */
+    hasAnyGoal: state.goals.length > 0,
     /** Set while a reached goal still owes the user its congratulations screen. */
     pendingCelebration: pendingCelebrationGoal(state.goals),
     isLoading: !isLoaded || status === 'pending',

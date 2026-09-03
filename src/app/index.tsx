@@ -17,7 +17,7 @@ export default function Index(): React.ReactElement {
   const { isLoading: localProfileLoading } = useOnboardingProfile();
   const { replaying, isLoading: replayLoading } = useDevReplayFunnel();
   const { hasCompletedProfile, checkFailed: profileCheckFailed, isLoading: profileLoading } = useUserProfile();
-  const { hasGoal, isLoading: goalLoading } = useSavingsGoal();
+  const { hasAnyGoal, isLoading: goalLoading } = useSavingsGoal();
   const { hasEarlyAccess, isLoading: earlyAccessLoading } = useEarlyAccess();
 
   if (onboardingLoading) {
@@ -73,8 +73,11 @@ export default function Index(): React.ReactElement {
   }
 
   // First real step after sign-in: what are you saving for? (one-time until a goal exists)
+  // Drafts count: goal setup hands off to the quiz, and the goal it creates there
+  // stays a draft until money is committed. Gating on committed goals alone sent
+  // everyone who had searched but not yet acquired back here on every launch.
   if (goalLoading) return <BrandLoader subtitle="Loading your goal…" />;
-  if (!hasGoal) return <Redirect href={'/goal-setup' as Href} />;
+  if (!hasAnyGoal) return <Redirect href={'/goal-setup' as Href} />;
 
   return <Redirect href="/(tabs)" />;
 }

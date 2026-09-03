@@ -58,6 +58,30 @@ const CUSTOM_GOAL_EMOJI = '🎯';
 /** Emoji for an unnamed search — money for its own sake. */
 const UNNAMED_GOAL_EMOJI = '⚡';
 
+/** A goal chosen in goal setup, carried here in the URL and not yet saved anywhere. */
+interface GoalSeed {
+  label: string;
+  emoji: string;
+  /** Null for the open-ended goal, which has no finish line. */
+  target: number | null;
+}
+
+/**
+ * The seeded goal, or null when the quiz was opened any other way. Goal setup hands
+ * the choice over rather than writing it, so a goal only ever reaches the Goals tab
+ * by way of a search.
+ */
+function goalSeedFrom(label?: string, emoji?: string, target?: string): GoalSeed | null {
+  const trimmed = label?.trim();
+  if (!trimmed) return null;
+  const amount = Number(target);
+  return {
+    label: trimmed,
+    emoji: emoji?.trim() || CUSTOM_GOAL_EMOJI,
+    target: Number.isFinite(amount) && amount > 0 ? Math.round(amount) : null,
+  };
+}
+
 /**
  * `value` must stay in sync with QUIZ_TO_ROUTE_CATEGORIES in lib/quiz-profile —
  * it's the string the route filter matches on.
@@ -112,7 +136,12 @@ function marketsWord(selected: string[]): string {
 export default function QuizScreen(): React.ReactElement {
   // A goal can be named by whoever sent us here (the Goals tab, a goal detail
   // screen); otherwise the quiz picks the sensible default itself.
-  const { goalId } = useLocalSearchParams<{ goalId?: string }>();
+  const { goalId, goalLabel, goalEmoji: goalEmojiParam, goalTarget } = useLocalSearchParams<{
+    goalId?: string;
+    goalLabel?: string;
+    goalEmoji?: string;
+    goalTarget?: string;
+  }>();
   const { saveAnswers, quizAnswers, isLoading: quizLoading } = useQuizAnswers();
   const { history, isLoading: historyLoading } = useSavedRoutes();
   const { preferences, isLoading: preferencesLoading } = usePreferences();
@@ -132,20 +161,27 @@ export default function QuizScreen(): React.ReactElement {
   // The goal of the last search, so returning to the quiz resumes what you were
   // working on rather than the oldest thing on the list.
   const lastSearchGoalId = goalId ?? history[0]?.goalId;
-  const startingGoal = defaultQuizGoal(allGoals, lastSearchGoalId);
+  // A goal picked in goal setup and handed over unsaved: it becomes real here, as a
+  // draft, when the search is saved. A seed names a specific goal, so it wins over
+  // the "resume what you were working on" default — otherwise adding a second goal
+  // would open the quiz on the first one. No target means the open-ended goal.
+  const seed = goalSeedFrom(goalLabel, goalEmojiParam, goalTarget);
+  const seededExistingGoal = seed ? goalByLabel(allGoals, seed.label) : null;
+  const startingGoal = seed ? seededExistingGoal : defaultQuizGoal(allGoals, lastSearchGoalId);
 
   // The survey answers seed the form's own state, and `formKey` does not name
   // them — so a form mounted before they arrive keeps the defaults for good.
   if (quizLoading || historyLoading || preferencesLoading || goalsLoading || profileLoading || onboardingLoading) {
     return <View className="flex-1" />;
   }
-  const formKey = `${startingGoal?.id ?? 'none'}-${prefill?.target ?? 0}-${prefill?.timeframe ?? ''}`;
+  const formKey = `${startingGoal?.id ?? 'none'}-${seed?.label ?? ''}-${seed?.target ?? ''}-${prefill?.target ?? 0}-${prefill?.timeframe ?? ''}`;
   return (
     <QuizForm
       key={formKey}
       prefill={prefill}
       goals={allGoals}
       startingGoalId={startingGoal?.id ?? null}
+      newGoalSeed={seededExistingGoal ? null : seed}
       remainingFor={(goal) => goalRemaining(goalsProgress.progressFor(goal.id).netGain, goal)}
       preferredPlatforms={preferences.preferredPlatforms}
       investmentCeiling={surveyAmountCeiling(profile?.investmentAmount)}
@@ -163,6 +199,7 @@ function QuizForm({
   prefill,
   goals,
   startingGoalId,
+  newGoalSeed,
   remainingFor,
   preferredPlatforms,
   investmentCeiling,
@@ -176,6 +213,8 @@ function QuizForm({
   prefill?: QuizAnswers;
   goals: SavingsGoal[];
   startingGoalId: string | null;
+  /** A goal chosen in goal setup that does not exist yet. See `goalSeedFrom`. */
+  newGoalSeed: GoalSeed | null;
   /** What is left to earn on a goal, which is what a search for it should target. */
   remainingFor: (goal: SavingsGoal) => number;
   preferredPlatforms: AcquisitionPlatform[];
@@ -205,10 +244,10 @@ function QuizForm({
   const startingGoal = goals.find((goal) => goal.id === startingGoalId) ?? null;
   const startingTarget = startingGoal && !isOpenEnded(startingGoal)
     ? Math.max(1, Math.round(remainingFor(startingGoal)))
-    : prefill?.target ?? 100;
+    : newGoalSeed?.target ?? prefill?.target ?? 100;
 
-  const [goalName, setGoalName] = useState(startingGoal?.label ?? '');
-  const [goalEmoji, setGoalEmoji] = useState(startingGoal?.emoji ?? CUSTOM_GOAL_EMOJI);
+  const [goalName, setGoalName] = useState(startingGoal?.label ?? newGoalSeed?.label ?? '');
+  const [goalEmoji, setGoalEmoji] = useState(startingGoal?.emoji ?? newGoalSeed?.emoji ?? CUSTOM_GOAL_EMOJI);
   const [nameFocused, setNameFocused] = useState(false);
   const [target, setTarget] = useState(String(startingTarget));
   const [timeframe, setTimeframe] = useState<QuizAnswers['timeframe']>(prefill?.timeframe ?? defaultTimeframe);
@@ -255,12 +294,16 @@ function QuizForm({
       // Every search gets a goal, but a search is not a commitment: a new one is
       // created as a draft and only joins the Goals tab once the user acquires
       // against it. An unnamed search is named after what was asked for.
+      // "Just make me money" has no finish line, and the amount typed here is what the
+      // search aims at rather than a target the goal is judged against. Only while the
+      // name is still the one that was chosen: renaming it makes it an ordinary goal.
+      const openEnded = newGoalSeed?.target == null && trimmedName === newGoalSeed?.label;
       const searchGoalId = existingGoal
         ? existingGoal.id
         : (await addGoalAsync({
           label: trimmedName || `$${targetValue.toLocaleString()} ${selectedTimeframe.deadlineWord}`,
           emoji: trimmedName ? goalEmoji : UNNAMED_GOAL_EMOJI,
-          targetAmount: targetValue,
+          ...(openEnded ? null : { targetAmount: targetValue }),
           draft: true,
           deadline: new Date(Date.now() + timeframeCalendarDays(timeframe) * 86_400_000).toISOString(),
         })).goal.id;
@@ -288,7 +331,7 @@ function QuizForm({
     };
 
     void run().catch(() => setIsSaving(false));
-  }, [targetValue, isSaving, existingGoal, addGoalAsync, trimmedName, goalEmoji, selectedTimeframe.deadlineWord, timeframe, saveAnswers, prefill?.riskTolerance, defaultRiskTolerance, categories, excludedCategories, preferredPlatforms, investCeiling, router]);
+  }, [targetValue, isSaving, existingGoal, newGoalSeed, addGoalAsync, trimmedName, goalEmoji, selectedTimeframe.deadlineWord, timeframe, saveAnswers, prefill?.riskTolerance, defaultRiskTolerance, categories, excludedCategories, preferredPlatforms, investCeiling, router]);
 
   return (
     <View className="flex-1" style={{ backgroundColor: theme.background }}>

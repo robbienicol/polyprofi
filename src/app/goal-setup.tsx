@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -42,7 +42,7 @@ interface ChosenGoal {
 export default function GoalSetupScreen(): React.ReactElement {
   const theme = useTheme();
   const router = useRouter();
-  const { addGoal, hasGoal, isLoading } = useSavingsGoal();
+  const { hasAnyGoal, isLoading } = useSavingsGoal();
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [customLabel, setCustomLabel] = useState('');
@@ -53,11 +53,11 @@ export default function GoalSetupScreen(): React.ReactElement {
   const isCustom = selectedId === CUSTOM_ID;
   const isOpenEnded = selectedId === OPEN_ENDED_ID;
   const customAmountValue = Number(customAmount.replace(/[^0-9]/g, '')) || 0;
-  // Whether this is the very first goal decides the copy and where "done" goes.
-  // Read live rather than latched on mount: on mount the stored goals may still be
-  // loading, which would make every visit look like the first one. The navigation
-  // callback closes over the value from the tap, before the write flips it.
-  const isFirstGoal = !hasGoal;
+  // Whether this is the very first goal decides the copy. Read live rather than
+  // latched on mount: on mount the stored goals may still be loading, which would
+  // make every visit look like the first one. Drafts count, so a goal that has been
+  // searched for but not yet committed to does not read as "no goals yet".
+  const isFirstGoal = !hasAnyGoal;
 
   const chosen = useMemo((): ChosenGoal | null => {
     if (isOpenEnded) return OPEN_ENDED_GOAL;
@@ -70,12 +70,17 @@ export default function GoalSetupScreen(): React.ReactElement {
     return preset ? { emoji: preset.emoji, label: preset.label, targetAmount: preset.targetAmount } : null;
   }, [isOpenEnded, isCustom, customLabel, customAmountValue, selectedId]);
 
+  // The goal is NOT created here. Picking a target is half the question — the quiz
+  // asks the other half (by when, how much to put in, which markets), and a goal with
+  // no search behind it went straight onto the Goals tab having been asked nothing.
+  // The quiz creates it, as a draft, when the search is saved; abandoning the quiz
+  // leaves nothing behind. An open-ended goal carries no target, so it is identified
+  // by the absence of one rather than by a second flag.
   const start = (): void => {
     if (!chosen) return;
-    addGoal(chosen, {
-      // First goal lands you in the app; a later one belongs back in the list.
-      onSettled: () => router.replace(isFirstGoal ? '/(tabs)' : '/(tabs)/goals'),
-    });
+    const params = new URLSearchParams({ goalLabel: chosen.label, goalEmoji: chosen.emoji });
+    if (chosen.targetAmount != null) params.set('goalTarget', String(chosen.targetAmount));
+    router.replace(`/quiz?${params.toString()}` as Href);
   };
 
   // Existing goals decide the copy, so don't paint until they're known.
