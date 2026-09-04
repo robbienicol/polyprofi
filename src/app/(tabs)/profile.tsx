@@ -24,7 +24,7 @@ import { requestNotificationPermission, syncWeeklyReminder } from '@/lib/notific
 import { ACQUISITION_PLATFORMS, CURRENCIES, currencyMeta, type CurrencyCode } from '@/lib/preferences';
 import type { AcquisitionPlatform } from '@/types/bets';
 
-const SUPPORT_EMAIL = 'creators@tryzalt.com';
+const SUPPORT_EMAIL = 'team@usepathey.com';
 
 const CURRENCY_OPTIONS = CURRENCIES.map((entry) => ({
   value: entry.code as CurrencyCode,
