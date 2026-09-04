@@ -98,6 +98,13 @@ export const METRIC_EXPLAINERS = {
     why: 'These positions have no live price to quote, so this is the only way to show them growing instead of sitting still.',
     reading: 'Estimated from the tracked rate and time held, not read from your account. It is not money you can spend yet.',
   },
+  totalPnl: {
+    title: 'Total P&L',
+    what: 'Profit and loss: everything you have made, less everything you have lost, across settled and open positions together.',
+    why: 'It is the one figure that answers "am I up?" for the whole set at once, rather than position by position.',
+    reading:
+      'Open positions are counted at what they are worth today, so this moves with the market and is not money banked until a position is settled.',
+  },
   trackedValue: {
     title: 'Tracked value',
     what: 'What your positions are worth right now — what you put in, plus or minus how they have moved since.',

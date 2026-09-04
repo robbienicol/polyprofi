@@ -10,9 +10,11 @@ import {
   PerformanceChart,
 } from '@/components/portfolio/PortfolioVisuals';
 import { ThemedText } from '@/components/themed-text';
+import { MetricInfo } from '@/components/ui/MetricInfo';
 import { Brand, OnBrand, Radius, Semantic, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { maturityWords, portfolioStats } from '@/lib/portfolio';
+import type { MetricKey } from '@/lib/metric-glossary';
 import type { PositionValuation } from '@/lib/portfolio-progress';
 import type { TrackedBet } from '@/types/bets';
 
@@ -269,6 +271,7 @@ export function PortfolioOverview({
                     ? 'Estimated from tracked yield and time held.'
                     : 'No live price yet — showing what you put in.'}
           </ThemedText>
+          <MetricInfo metric="conservativeMode" />
           <Pressable
             onPress={() => update({ conservativeProjections: !conservative })}
             accessibilityRole="switch"
@@ -301,6 +304,7 @@ export function PortfolioOverview({
             caption says what it is instead. */}
         <MetricTile
           label="Expected profit"
+          metric="expectedProfit"
           value={money(expectedProfit, { decimals: 0, signed: true })}
           valueColor={theme.text}
           caption={
@@ -313,6 +317,7 @@ export function PortfolioOverview({
         />
         <MetricTile
           label="Goal probability"
+          metric="goalProbability"
           value={`${goalProbability.toFixed(0)}%`}
           valueColor={Semantic.positive}
           caption={
@@ -595,12 +600,15 @@ function positionMeta(category: string, platform: string, probability: number): 
 
 function MetricTile({
   label,
+  metric,
   value,
   valueColor,
   caption,
   meter,
 }: {
   label: string;
+  /** Glossary entry for the ⓘ beside the label. Omit for a self-evident number. */
+  metric?: MetricKey;
   value: string;
   valueColor: string;
   caption: string;
@@ -620,9 +628,12 @@ function MetricTile({
         gap: 6,
         ...Shadow.card,
       }}>
-      <ThemedText style={{ fontSize: 11, fontWeight: '800', color: theme.textTertiary, letterSpacing: 0.5 }}>
-        {label.toUpperCase()}
-      </ThemedText>
+      <View className="flex-row items-center" style={{ gap: 6 }}>
+        <ThemedText style={{ fontSize: 11, fontWeight: '800', color: theme.textTertiary, letterSpacing: 0.5 }}>
+          {label.toUpperCase()}
+        </ThemedText>
+        {metric ? <MetricInfo metric={metric} /> : null}
+      </View>
       <ThemedText style={{ fontSize: 28, fontWeight: '800', color: valueColor, letterSpacing: -0.6, ...MONO }} numberOfLines={1}>
         {value}
       </ThemedText>

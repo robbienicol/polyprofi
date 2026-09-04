@@ -5,9 +5,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useGoalsProgress } from '@/api/hooks/useGoalProgress';
 import { usePortfolioProgress } from '@/api/hooks/usePortfolioProgress';
+import { usePreferences } from '@/api/hooks/usePreferences';
 import { useSavedRoutes } from '@/api/hooks/useSavedRoutes';
 import { useSavingsGoal } from '@/api/hooks/useSavingsGoal';
 import { useTrackedBets } from '@/api/hooks/useTrackedBets';
+import {
+  CapitalSplitCard,
+  CheapestPathCard,
+  GoalContributionCard,
+  MaturityTimelineCard,
+} from '@/components/portfolio/PortfolioInsights';
 import { PortfolioOverview } from '@/components/portfolio/PortfolioOverview';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, Radius } from '@/constants/theme';
@@ -24,6 +31,7 @@ export default function PortfolioScreen(): React.ReactElement {
   const { bets: allBets, resolveBet } = useTrackedBets();
   const { history } = useSavedRoutes();
   const { goals: allGoals } = useSavingsGoal();
+  const { preferences } = usePreferences();
 
   // Goals ticked on the Goals tab. Absent means the whole portfolio, which is what
   // this screen is for; a selection narrows every number on it to those goals.
@@ -123,6 +131,18 @@ export default function PortfolioScreen(): React.ReactElement {
             onOpenPositions={() => router.push('/positions')}
             onOpenPosition={(betId) => router.push(`/positions?betId=${betId}` as Href)}
             onResolve={resolveBet}
+          />
+
+          {/* The shape of the portfolio, under the size of it. Each answers a question
+              the headline cannot: what can actually be lost, what has produced the
+              progress, when the money comes free, and what a dollar of progress costs. */}
+          <CapitalSplitCard bets={bets} />
+          <GoalContributionCard bets={bets} positionById={progress.positionById} />
+          <MaturityTimelineCard bets={bets} goals={goals} />
+          <CheapestPathCard
+            bets={bets}
+            conservative={preferences.conservativeProjections}
+            remainingToGoal={outstanding > 0 ? outstanding : null}
           />
 
           <ThemedText style={{ fontSize: 11, color: theme.textTertiary, textAlign: 'center', opacity: 0.6 }}>

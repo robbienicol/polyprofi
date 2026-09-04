@@ -8,6 +8,7 @@ import { useMoney } from '@/api/hooks/usePreferences';
 import { useSavedRoutes } from '@/api/hooks/useSavedRoutes';
 import { useTrackedBets } from '@/api/hooks/useTrackedBets';
 import { ThemedText } from '@/components/themed-text';
+import { MetricInfo } from '@/components/ui/MetricInfo';
 import { riskColor, riskLabel } from '@/components/molecules/RouteCard';
 import { effectiveEntryPrice, monitoredProfitGoal, positionTargetProfit } from '@/lib/bet-monitor-match';
 import { isPredictionMarketBet } from '@/lib/parse-bet-line';
@@ -135,9 +136,12 @@ export default function PositionsScreen(): React.ReactElement {
                   gap: 4,
                   ...Shadow.card,
                 }}>
-                <ThemedText style={{ fontSize: 11, fontWeight: '700', color: theme.textTertiary, letterSpacing: 0.8 }}>
-                  TOTAL P&L
-                </ThemedText>
+                <View className="flex-row items-center" style={{ gap: 6 }}>
+                  <ThemedText style={{ fontSize: 11, fontWeight: '700', color: theme.textTertiary, letterSpacing: 0.8 }}>
+                    TOTAL P&L
+                  </ThemedText>
+                  <MetricInfo metric="totalPnl" />
+                </View>
                 <ThemedText style={{ fontSize: 40, fontWeight: '800', letterSpacing: -1, color: pnlPositive ? Semantic.positive : Semantic.negative, ...MONO }}>
                   {money(stats.pnl, { decimals: 0, signed: true })}
                 </ThemedText>
