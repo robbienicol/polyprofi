@@ -1,13 +1,15 @@
 import { useUser } from '@clerk/clerk-expo';
-import { useRouter } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useGoalsProgress, type GoalProgress } from '@/api/hooks/useGoalProgress';
 import { usePortfolioProgress } from '@/api/hooks/usePortfolioProgress';
 import { useMoney, usePreferences } from '@/api/hooks/usePreferences';
 import { useQuizAnswers } from '@/api/hooks/useQuizAnswers';
 import { useSavedRoutes } from '@/api/hooks/useSavedRoutes';
+import { useSavingsGoal } from '@/api/hooks/useSavingsGoal';
 import { useTrackedBets } from '@/api/hooks/useTrackedBets';
 import {
   PortfolioLineChart,
@@ -19,6 +21,8 @@ import { useTheme } from '@/hooks/use-theme';
 import { maturityWords, portfolioStats } from '@/lib/portfolio';
 import { describeSearch } from '@/lib/quiz-profile';
 import { cashFlowAdjustedChange } from '@/lib/portfolio-progress';
+import { goalProgressFraction, goalRemaining, isOpenEnded } from '@/lib/savings-goal';
+import type { SavingsGoal } from '@/types/bets';
 
 const MONO = { fontVariant: ['tabular-nums' as const] };
 
@@ -54,9 +58,28 @@ export default function HomeScreen(): React.ReactElement {
   const progress = usePortfolioProgress(fallbackBalance);
   const [range, setRange] = useState<PortfolioRange>('1W');
 
-  // Goals are deliberately absent from this screen: Home is live money, the Goals
-  // tab is progress per goal. Marking a goal reached happens in useGoalMaintenance,
-  // mounted at the root, so it doesn't depend on which screen is open.
+  // Home used to be live money only, with the goals a tab away. But the whole
+  // proposition is "here is the goal, here is the route to it", and the first screen
+  // never said how far off the goal was — the distance to the destination was the one
+  // number missing from it. The rollup below is that distance, not a second Goals tab:
+  // the goals still nearest to done, and nothing to act on beyond opening one.
+  // Marking a goal reached still happens in useGoalMaintenance, mounted at the root,
+  // so it doesn't depend on which screen is open.
+  const { goals } = useSavingsGoal();
+  const goalsProgress = useGoalsProgress(goals);
+  // Reached goals drop off: this asks what is left to earn, and a finished goal has
+  // nothing. Closest to done first, so the one worth another route is at the top;
+  // open-ended goals have no fraction and sort last on their own.
+  const openGoals = useMemo(
+    () => goals
+      .filter((goal) => !goal.achievedAt)
+      .map((goal) => ({ goal, progress: goalsProgress.progressFor(goal.id) }))
+      .sort((a, b) => (
+        goalProgressFraction(b.progress.netGain, b.goal) - goalProgressFraction(a.progress.netGain, a.goal)
+      )),
+    [goals, goalsProgress],
+  );
+  const shownGoals = openGoals.slice(0, 3);
 
   // Expected value is a probability-weighted average over outcomes, not a price,
   // so it is labelled and kept out of the headline: adding it to tracked value
@@ -244,6 +267,33 @@ export default function HomeScreen(): React.ReactElement {
             </View>
           </View>
 
+          {/* Distance to the goals still running. Hidden with no open goals — the button
+              below is the whole answer then, and an empty rail would only be furniture. */}
+          {shownGoals.length > 0 ? (
+            <View style={{ gap: 10 }}>
+              <View className="flex-row items-center justify-between" style={{ paddingHorizontal: 2 }}>
+                <ThemedText style={{ fontSize: 11, fontWeight: '800', color: theme.textTertiary, letterSpacing: 0.35 }}>
+                  STILL TO GO
+                </ThemedText>
+                {openGoals.length > shownGoals.length ? (
+                  <Pressable onPress={() => router.push('/(tabs)/goals')} hitSlop={8} className="active:opacity-60">
+                    <ThemedText style={{ fontSize: 12, fontWeight: '800', color: Brand[500] }}>
+                      All {openGoals.length} goals →
+                    </ThemedText>
+                  </Pressable>
+                ) : null}
+              </View>
+              {shownGoals.map(({ goal, progress: goalProgress }) => (
+                <GoalTrack
+                  key={goal.id}
+                  goal={goal}
+                  progress={goalProgress}
+                  onPress={() => router.push(`/goal/${goal.id}` as Href)}
+                />
+              ))}
+            </View>
+          ) : null}
+
           {/* One job on this screen: go make money. The quiz is where the goal gets
               picked, so this always starts there rather than re-running a stale search. */}
           <Pressable
@@ -327,5 +377,88 @@ export default function HomeScreen(): React.ReactElement {
         </ScrollView>
       </SafeAreaView>
     </View>
+  );
+}
+
+/**
+ * One goal, reduced to the only thing Home has to say about it: how far it still is.
+ * The Goals tab carries the full card — staked, positions, the tick box — so repeating
+ * any of that here would make two screens compete to be the place goals are managed.
+ */
+function GoalTrack({
+  goal,
+  progress,
+  onPress,
+}: {
+  goal: SavingsGoal;
+  progress: GoalProgress;
+  onPress: () => void;
+}): React.ReactElement {
+  const theme = useTheme();
+  const money = useMoney();
+  const openEnded = isOpenEnded(goal);
+  const fraction = goalProgressFraction(progress.netGain, goal);
+  const remaining = goalRemaining(progress.netGain, goal);
+  const pct = Math.round(fraction * 100);
+
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={
+        openEnded
+          ? `${goal.label}, open-ended, ${money(progress.netGain, { decimals: 0, signed: true })} in net gains`
+          : `${goal.label}, ${pct} percent there, ${money(remaining, { decimals: 0 })} to go`
+      }
+      className="active:opacity-80"
+      style={{
+        borderRadius: Radius.lg,
+        borderWidth: 1,
+        borderColor: theme.border,
+        backgroundColor: theme.backgroundElevated,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        gap: 9,
+      }}>
+      <View className="flex-row items-center" style={{ gap: 10 }}>
+        <ThemedText style={{ fontSize: 18 }}>{goal.emoji}</ThemedText>
+        <ThemedText
+          style={{ flex: 1, fontSize: 14, fontWeight: '700', color: theme.text, letterSpacing: -0.2 }}
+          numberOfLines={1}>
+          {goal.label}
+        </ThemedText>
+        {/* An open-ended goal has no finish line to be a fraction of, so it reports what
+            it has earned instead of a percentage it can never complete. */}
+        <ThemedText style={{ fontSize: 13, fontWeight: '800', color: theme.text, ...MONO }}>
+          {openEnded
+            ? money(progress.netGain, { decimals: 0, signed: true })
+            : `${money(remaining, { decimals: 0 })} to go`}
+        </ThemedText>
+      </View>
+
+      {openEnded ? null : (
+        <View className="flex-row items-center" style={{ gap: 9 }}>
+          <View
+            className="flex-1"
+            style={{ height: 6, borderRadius: Radius.pill, backgroundColor: theme.backgroundSelected, overflow: 'hidden' }}>
+            {/* Empty stays empty. A minimum-width sliver would draw progress that has
+                not happened, which is exactly the number this screen must not invent. */}
+            {fraction > 0 ? (
+              <View
+                style={{
+                  width: `${Math.max(fraction * 100, 2)}%`,
+                  height: '100%',
+                  borderRadius: Radius.pill,
+                  backgroundColor: Brand[500],
+                }}
+              />
+            ) : null}
+          </View>
+          <ThemedText style={{ fontSize: 11, fontWeight: '800', color: theme.textSecondary, ...MONO }}>
+            {pct}%
+          </ThemedText>
+        </View>
+      )}
+    </Pressable>
   );
 }
