@@ -8,8 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useBiometricLock } from '@/api/hooks/useBiometricLock';
 import { useDeleteAccount } from '@/api/hooks/useDeleteAccount';
-import { useMoney, usePreferences } from '@/api/hooks/usePreferences';
-import { useSavedRoutes } from '@/api/hooks/useSavedRoutes';
+import { usePreferences } from '@/api/hooks/usePreferences';
 import { useSavingsGoal } from '@/api/hooks/useSavingsGoal';
 import { ThemedText } from '@/components/themed-text';
 import {
@@ -37,10 +36,8 @@ export default function SettingsScreen(): React.ReactElement {
   const router = useRouter();
   const { user } = useUser();
   const { signOut } = useAuth();
-  const { history } = useSavedRoutes();
   const { goals, achievedCount } = useSavingsGoal();
   const { preferences, update } = usePreferences();
-  const money = useMoney();
   const {
     isAvailable: biometricAvailable,
     isEnabled: biometricEnabled,
@@ -61,7 +58,6 @@ export default function SettingsScreen(): React.ReactElement {
     [preferences.preferredPlatforms, update],
   );
 
-  const latestSearch = history[0] ?? null;
   const initials = useMemo(() => {
     const first = user?.firstName?.[0] ?? '';
     const last = user?.lastName?.[0] ?? '';
@@ -300,24 +296,6 @@ export default function SettingsScreen(): React.ReactElement {
               />
             </SettingsSection>
           ) : null}
-
-          {/* Activity */}
-          <SettingsSection title="Activity">
-            <SettingsRow
-              icon="🧭"
-              label="Latest routes"
-              description={
-                latestSearch
-                  ? `${money(latestSearch.quizSnapshot.balance, { decimals: 0 })} → ${money(
-                      latestSearch.quizSnapshot.balance + latestSearch.quizSnapshot.target,
-                      { decimals: 0 },
-                    )} · ${latestSearch.quizSnapshot.riskTolerance ?? 'balanced'} risk`
-                  : 'Take the quiz to generate ranked routes'
-              }
-              value={latestSearch ? `${latestSearch.routes.length}` : undefined}
-              onPress={() => router.push(latestSearch ? '/(tabs)/routes' : '/quiz')}
-            />
-          </SettingsSection>
 
           {/* About */}
           <SettingsSection title="About">
