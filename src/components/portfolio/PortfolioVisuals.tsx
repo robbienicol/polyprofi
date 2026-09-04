@@ -3,7 +3,7 @@ import { LayoutChangeEvent, View } from 'react-native';
 import Svg, { Circle, Defs, LinearGradient, Path, Stop } from 'react-native-svg';
 
 import { ThemedText } from '@/components/themed-text';
-import { CategoryScale, Radius, Semantic } from '@/constants/theme';
+import { Brand, CategoryScale, Radius, Semantic } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { betEv } from '@/lib/portfolio';
 import type { TrackedBet } from '@/types/bets';
@@ -209,6 +209,74 @@ export function PerformanceChart({
           Acquire a position to start the curve
         </ThemedText>
       ) : null}
+    </View>
+  );
+}
+
+/**
+ * The spread between the worst and best modelled outcomes, with the average
+ * marked on it and break-even marked behind that.
+ *
+ * A single expected figure hides the thing people most need to see, which is how
+ * far apart the good day and the bad day are. Break-even is drawn because it is
+ * the only line on the bar that means something concrete — left of it is holding
+ * less than you put in — and without it the marker is a dot on an unlabelled axis.
+ */
+export function OutcomeRangeBar({
+  expectedPosition,
+  breakEvenPosition,
+}: {
+  /** Where the average outcome sits between the two ends, 0–1. */
+  expectedPosition: number;
+  /** Where the money put in sits, 0–1, or null when it falls outside the range. */
+  breakEvenPosition: number | null;
+}): React.ReactElement {
+  const theme = useTheme();
+  const clamp = (value: number): number => Math.min(1, Math.max(0, value));
+  return (
+    <View style={{ height: 26, justifyContent: 'center' }}>
+      <View style={{ height: 8, borderRadius: Radius.pill, backgroundColor: theme.backgroundSelected, overflow: 'hidden' }}>
+        {/* Everything up to the average, so the bar reads as a fill rather than as a
+            dot floating on an empty track. */}
+        <View
+          style={{
+            width: `${clamp(expectedPosition) * 100}%`,
+            height: '100%',
+            borderRadius: Radius.pill,
+            backgroundColor: Brand[500] + '55',
+          }}
+        />
+      </View>
+
+      {breakEvenPosition != null ? (
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            left: `${clamp(breakEvenPosition) * 100}%`,
+            width: 2,
+            height: 18,
+            marginLeft: -1,
+            borderRadius: Radius.pill,
+            backgroundColor: theme.textTertiary,
+          }}
+        />
+      ) : null}
+
+      <View
+        pointerEvents="none"
+        style={{
+          position: 'absolute',
+          left: `${clamp(expectedPosition) * 100}%`,
+          width: 14,
+          height: 14,
+          marginLeft: -7,
+          borderRadius: Radius.pill,
+          backgroundColor: Brand[500],
+          borderWidth: 2.5,
+          borderColor: theme.backgroundElevated,
+        }}
+      />
     </View>
   );
 }

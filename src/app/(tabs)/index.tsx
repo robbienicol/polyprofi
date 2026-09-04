@@ -15,12 +15,15 @@ import {
   PortfolioLineChart,
   PortfolioRange,
 } from '@/components/molecules/PortfolioLineChart';
+import { OutcomeRangeBar } from '@/components/portfolio/PortfolioVisuals';
+import { MetricInfo } from '@/components/ui/MetricInfo';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, OnBrand, Radius, Semantic, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { maturityWords, portfolioStats } from '@/lib/portfolio';
 import { describeSearch } from '@/lib/quiz-profile';
 import { cashFlowAdjustedChange } from '@/lib/portfolio-progress';
+import { outcomeRange } from '@/lib/portfolio-shape';
 import { goalProgressFraction, goalRemaining, isOpenEnded } from '@/lib/savings-goal';
 import type { SavingsGoal } from '@/types/bets';
 
@@ -93,6 +96,20 @@ export default function HomeScreen(): React.ReactElement {
     () => activeBets.reduce((longest, bet) => Math.max(longest, bet.maturesInDays ?? 0), 0),
     [activeBets]
   );
+  // The spread the single expected figure hides. Same conservative setting as the
+  // expectation itself, so the two cannot describe different portfolios.
+  const outcomes = useMemo(
+    () => outcomeRange(bets, preferences.conservativeProjections),
+    [bets, preferences.conservativeProjections]
+  );
+  // Break-even only gets a line when it is actually on the bar. Once every position
+  // is deep enough in profit that the worst case still clears what was put in, the
+  // marker would sit off the left end and point at nothing.
+  const breakEvenPosition = outcomes.best > outcomes.worst
+    && outcomes.staked >= outcomes.worst
+    && outcomes.staked <= outcomes.best
+    ? (outcomes.staked - outcomes.worst) / (outcomes.best - outcomes.worst)
+    : null;
 
   const chartPoints = useMemo(() => {
     const current = {
@@ -181,9 +198,12 @@ export default function HomeScreen(): React.ReactElement {
               ...Shadow.card,
             }}>
             <View className="flex-row items-center justify-between">
-              <ThemedText style={{ fontSize: 12, fontWeight: '800', color: theme.textTertiary, letterSpacing: 0.35 }}>
-                TRACKED VALUE · LIVE
-              </ThemedText>
+              <View className="flex-row items-center" style={{ gap: 6 }}>
+                <ThemedText style={{ fontSize: 12, fontWeight: '800', color: theme.textTertiary, letterSpacing: 0.35 }}>
+                  TRACKED VALUE · LIVE
+                </ThemedText>
+                <MetricInfo metric="trackedValue" />
+              </View>
               <View className="flex-row items-center" style={{ gap: 6 }}>
                 <View style={{
                   width: 7,
@@ -225,30 +245,78 @@ export default function HomeScreen(): React.ReactElement {
               />
             </View>
 
+            {/* Where this could end up. The expected figure alone said nothing about
+                the spread around it, which is the part that decides whether a plan is
+                one you can live with — so the average, the good day and the bad day
+                are shown together, on one axis, with break-even marked. */}
             {activeBets.length > 0 ? (
               <View
-                className="flex-row items-end justify-between"
-                style={{ borderTopWidth: 1, borderTopColor: theme.border, paddingTop: 12, marginTop: 4, gap: 12 }}>
-                <View className="flex-1">
-                  <ThemedText style={{ fontSize: 11, fontWeight: '800', color: theme.textTertiary, letterSpacing: 0.35 }}>
-                    EXPECTED VALUE
-                  </ThemedText>
-                  <ThemedText style={{ fontSize: 11, lineHeight: 15, color: theme.textTertiary, marginTop: 2 }}>
-                    {expectedHorizon > 0
-                      ? `Average across every outcome over ${maturityWords(expectedHorizon)}. Modelled — no money has moved.`
-                      : 'Average across every outcome. Modelled — no money has moved.'}
-                  </ThemedText>
+                style={{ borderTopWidth: 1, borderTopColor: theme.border, paddingTop: 12, marginTop: 4, gap: 10 }}>
+                <View className="flex-row items-end justify-between" style={{ gap: 12 }}>
+                  <View className="flex-1">
+                    <View className="flex-row items-center" style={{ gap: 6 }}>
+                      <ThemedText style={{ fontSize: 11, fontWeight: '800', color: theme.textTertiary, letterSpacing: 0.35 }}>
+                        EXPECTED PAYOUT
+                      </ThemedText>
+                      <MetricInfo metric="expectedPayout" />
+                    </View>
+                    <ThemedText style={{ fontSize: 22, fontWeight: '800', color: theme.text, letterSpacing: -0.6, marginTop: 3, ...MONO }}>
+                      {money(outcomes.expected)}
+                    </ThemedText>
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <View className="flex-row items-center" style={{ gap: 6 }}>
+                      <ThemedText style={{ fontSize: 11, fontWeight: '800', color: theme.textTertiary, letterSpacing: 0.35 }}>
+                        EXPECTED PROFIT
+                      </ThemedText>
+                      <MetricInfo metric="expectedProfit" />
+                    </View>
+                    {/* Neutral, never green or red: this is a model average, so colouring
+                        it would read as money made or lost. */}
+                    <ThemedText style={{ fontSize: 15, fontWeight: '800', color: theme.text, letterSpacing: -0.3, marginTop: 4, ...MONO }}>
+                      {money(stats.totalEv, { signed: true })}
+                    </ThemedText>
+                    <ThemedText style={{ fontSize: 11, fontWeight: '700', color: theme.textSecondary, marginTop: 1, ...MONO }}>
+                      {stats.weightedReturnPct >= 0 ? '+' : '−'}{Math.abs(stats.weightedReturnPct).toFixed(1)}% on {money(stats.totalStaked, { decimals: 0 })}
+                    </ThemedText>
+                  </View>
                 </View>
-                <View style={{ alignItems: 'flex-end' }}>
-                  {/* Neutral, never green or red: this is a model average, so colouring
-                      it would read as money made or lost. */}
-                  <ThemedText style={{ fontSize: 15, fontWeight: '800', color: theme.text, letterSpacing: -0.3, ...MONO }}>
-                    {money(stats.totalEv, { signed: true })}
-                  </ThemedText>
-                  <ThemedText style={{ fontSize: 11, fontWeight: '700', color: theme.textSecondary, marginTop: 1, ...MONO }}>
-                    {stats.weightedReturnPct >= 0 ? '+' : '−'}{Math.abs(stats.weightedReturnPct).toFixed(1)}% on {money(stats.totalStaked, { decimals: 0 })}
-                  </ThemedText>
+
+                <OutcomeRangeBar
+                  expectedPosition={outcomes.expectedPosition}
+                  breakEvenPosition={breakEvenPosition}
+                />
+
+                <View className="flex-row items-start justify-between" style={{ gap: 12 }}>
+                  <View>
+                    <ThemedText style={{ fontSize: 10.5, fontWeight: '800', color: theme.textTertiary, letterSpacing: 0.35 }}>
+                      WORST CASE
+                    </ThemedText>
+                    <ThemedText style={{ fontSize: 13, fontWeight: '800', color: theme.text, marginTop: 2, ...MONO }}>
+                      {money(outcomes.worst, { decimals: 0 })}
+                    </ThemedText>
+                  </View>
+                  <View className="flex-row items-center" style={{ gap: 6, paddingTop: 3 }}>
+                    <ThemedText style={{ fontSize: 10.5, fontWeight: '800', color: theme.textTertiary, letterSpacing: 0.35 }}>
+                      RANGE
+                    </ThemedText>
+                    <MetricInfo metric="outcomeRange" />
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <ThemedText style={{ fontSize: 10.5, fontWeight: '800', color: theme.textTertiary, letterSpacing: 0.35 }}>
+                      BEST CASE
+                    </ThemedText>
+                    <ThemedText style={{ fontSize: 13, fontWeight: '800', color: theme.text, marginTop: 2, ...MONO }}>
+                      {money(outcomes.best, { decimals: 0 })}
+                    </ThemedText>
+                  </View>
                 </View>
+
+                <ThemedText style={{ fontSize: 11, lineHeight: 15, color: theme.textTertiary }}>
+                  {expectedHorizon > 0
+                    ? `Modelled over ${maturityWords(expectedHorizon)}. No money has moved${breakEvenPosition != null ? '; the thin line is what you put in' : ''}.`
+                    : `Modelled from probability and risk. No money has moved${breakEvenPosition != null ? '; the thin line is what you put in' : ''}.`}
+                </ThemedText>
               </View>
             ) : null}
 
@@ -262,6 +330,7 @@ export default function HomeScreen(): React.ReactElement {
                 <View className="flex-row items-center" style={{ gap: 5 }}>
                   <View style={{ width: 6, height: 6, borderRadius: 9, borderWidth: 1, borderColor: Semantic.caution }} />
                   <ThemedText style={{ fontSize: 11, color: Semantic.caution }}>includes projected accrual</ThemedText>
+                  <MetricInfo metric="projectedAccrual" />
                 </View>
               ) : null}
             </View>

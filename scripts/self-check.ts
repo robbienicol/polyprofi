@@ -4,6 +4,7 @@ import { __selfCheck as checkBetMonitorMatch } from '@/lib/bet-monitor-match';
 import { __selfCheck as checkDeviceRegion } from '@/lib/device-region';
 import { __selfCheck as checkGainAlerts } from '@/lib/gain-alerts';
 import { __selfCheck as checkEtfRoutes } from '@/lib/etf-routes';
+import { __selfCheck as checkMetricGlossary } from '@/lib/metric-glossary';
 import { __selfCheck as checkMethodology } from '@/lib/methodology';
 import { __selfCheck as checkPolymarketMarketQuality } from '@/lib/polymarket-market-quality';
 import { __selfCheck as checkRouteResults } from '@/lib/route-results';
@@ -16,6 +17,7 @@ import { __selfCheck as checkOnboardingProfile } from '@/lib/onboarding-profile'
 import { __selfCheck as checkPlatformFees } from '@/lib/platform-fees';
 import { __selfCheck as checkPortfolio } from '@/lib/portfolio';
 import { __selfCheck as checkPortfolioProgress } from '@/lib/portfolio-progress';
+import { __selfCheck as checkPortfolioShape } from '@/lib/portfolio-shape';
 import { __selfCheck as checkQuizProfile } from '@/lib/quiz-profile';
 import { __selfCheck as checkRouteExpectedValue } from '@/lib/route-expected-value';
 import { __selfCheck as checkSavingsTreasuryRoutes } from '@/lib/savings-treasury-routes';
@@ -33,6 +35,7 @@ const checks = [
   ['device region', checkDeviceRegion],
   ['etf routes', checkEtfRoutes],
   ['methodology', checkMethodology],
+  ['metric glossary', checkMetricGlossary],
   ['polymarket market quality', checkPolymarketMarketQuality],
   ['route results', checkRouteResults],
   ['route actions', checkRouteActions],
@@ -44,6 +47,7 @@ const checks = [
   ['platform fees', checkPlatformFees],
   ['portfolio math', checkPortfolio],
   ['portfolio goal progress', checkPortfolioProgress],
+  ['portfolio shape', checkPortfolioShape],
   ['quiz profile', checkQuizProfile],
   ['route expected value', checkRouteExpectedValue],
   ['savings & treasury routes', checkSavingsTreasuryRoutes],
