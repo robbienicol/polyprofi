@@ -249,6 +249,9 @@ function QuizForm({
   const [goalName, setGoalName] = useState(startingGoal?.label ?? newGoalSeed?.label ?? '');
   const [goalEmoji, setGoalEmoji] = useState(startingGoal?.emoji ?? newGoalSeed?.emoji ?? CUSTOM_GOAL_EMOJI);
   const [nameFocused, setNameFocused] = useState(false);
+  // The amount is prefilled and set in the headline type, so it reads as a printed
+  // figure rather than a field. The hint beside it says otherwise until it is used.
+  const [amountTouched, setAmountTouched] = useState(false);
   const [target, setTarget] = useState(String(startingTarget));
   const [timeframe, setTimeframe] = useState<QuizAnswers['timeframe']>(prefill?.timeframe ?? defaultTimeframe);
   const [categories, setCategories] = useState<string[]>(prefill?.categories ?? preferredCategories);
@@ -356,10 +359,11 @@ function QuizForm({
                 {trimmedName ? 'I want to make' : 'I want to have'}
               </ThemedText>
 
+              <View className="flex-row items-end" style={{ gap: 10 }}>
               <Pressable
                 onPress={() => amountRef.current?.focus()}
                 accessibilityRole="button"
-                accessibilityLabel={`Amount, ${targetValue} dollars`}
+                accessibilityLabel={`Amount, ${targetValue} dollars. Double tap to edit.`}
                 className="flex-row items-end self-start active:opacity-80"
                 style={{ marginTop: 2, marginBottom: 6, borderBottomWidth: 3, borderBottomColor: Brand[500], paddingBottom: 2 }}>
                 <ThemedText style={{ fontSize: 34, lineHeight: 66, fontWeight: '700', color: Brand[500] }}>$</ThemedText>
@@ -387,8 +391,24 @@ function QuizForm({
                     // the platform font, since a tight fit clips.
                     width: Math.max(1, target.length) * 37 + groupingCommas(target) * 14 + 12,
                   }}
+                  onFocus={() => setAmountTouched(true)}
                 />
               </Pressable>
+              {!amountTouched ? (
+                <Pressable
+                  onPress={() => amountRef.current?.focus()}
+                  accessibilityRole="button"
+                  accessibilityLabel="Edit the amount"
+                  hitSlop={8}
+                  className="flex-row items-center active:opacity-60"
+                  style={{ marginBottom: 18, gap: 4 }}>
+                  <ThemedText style={{ fontSize: 12 }}>✏️</ThemedText>
+                  <ThemedText style={{ fontSize: 12, fontWeight: '700', color: theme.textTertiary }}>
+                    tap to edit
+                  </ThemedText>
+                </Pressable>
+              ) : null}
+              </View>
 
               {/* One flowing paragraph, so any combination of answers wraps like English.
                   The goal is part of the sentence, so what a position will count
@@ -409,6 +429,7 @@ function QuizForm({
                     key={amount}
                     onPress={() => {
                       setTarget(String(amount));
+                      setAmountTouched(true);
                       Keyboard.dismiss();
                     }}
                     accessibilityRole="button"

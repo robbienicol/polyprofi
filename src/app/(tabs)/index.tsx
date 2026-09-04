@@ -251,7 +251,7 @@ export default function HomeScreen(): React.ReactElement {
             className="py-5 items-center active:opacity-85"
             style={{ borderRadius: Radius.xl, backgroundColor: Brand[500], ...Shadow.card }}>
             <ThemedText style={{ fontSize: 17, fontWeight: '900', color: OnBrand, letterSpacing: -0.2 }}>
-              Make me money →
+              Find routes →
             </ThemedText>
             <ThemedText style={{ fontSize: 11, fontWeight: '700', color: OnBrand, opacity: 0.7, marginTop: 3 }}>
               Ranked routes from live markets, in under a minute
