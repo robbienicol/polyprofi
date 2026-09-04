@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useQuizAnswers } from '@/api/hooks/useQuizAnswers';
 import { useSubscription } from '@/api/hooks/useSubscription';
+import { BrandMark } from '@/components/ui/BrandMark';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, CategoryScale, OnBrand, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -55,9 +56,7 @@ export default function PaywallScreen(): React.ReactElement {
           showsVerticalScrollIndicator={false}>
 
           <View className="items-center gap-4">
-            <View style={{ width: 72, height: 72, borderRadius: Radius.xl, backgroundColor: Brand[500], alignItems: 'center', justifyContent: 'center', ...Shadow.float }}>
-              <ThemedText style={{ fontSize: 38, fontWeight: '900', color: OnBrand }}>$</ThemedText>
-            </View>
+            <BrandMark size={72} style={{ ...Shadow.float }} />
             <ThemedText style={{ fontSize: 28, fontWeight: '800', letterSpacing: -0.6, color: theme.text }} className="text-center">
               Your routes are ready
             </ThemedText>

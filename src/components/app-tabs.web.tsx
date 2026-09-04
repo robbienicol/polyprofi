@@ -9,6 +9,7 @@ import {
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { Pressable, useColorScheme, useWindowDimensions, View, StyleSheet } from 'react-native';
 
+import { BrandMark } from './ui/BrandMark';
 import { ThemedText } from './themed-text';
 import { ThemedView } from './themed-view';
 
@@ -70,9 +71,10 @@ export function CustomTabList(props: TabListProps) {
     <View {...props} style={[styles.tabListContainer, compact && styles.compactTabListContainer]}>
       <ThemedView type="backgroundElement" style={[styles.innerContainer, compact && styles.compactInnerContainer]}>
         {!compact ? (
-          <ThemedText type="smallBold" style={styles.brandText}>
-            Pathey
-          </ThemedText>
+          <View style={styles.brand}>
+            <BrandMark size={20} />
+            <ThemedText type="smallBold">Pathey</ThemedText>
+          </View>
         ) : null}
 
         {props.children}
@@ -117,7 +119,10 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 7 },
   },
-  brandText: {
+  brand: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
     marginRight: 'auto',
   },
   pressed: {

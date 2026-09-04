@@ -1,6 +1,6 @@
 import { Platform, StyleSheet, Text, type TextProps, type TextStyle } from 'react-native';
 
-import { DISPLAY_MIN_SIZE, Fonts, LINE_HEIGHT_RATIO, ThemeColor, Type, bodyFontFamily, displayFontFamily } from '@/constants/theme';
+import { Brand, DISPLAY_MIN_SIZE, Fonts, LINE_HEIGHT_RATIO, ThemeColor, Type, bodyFontFamily, displayFontFamily } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 type TextVariant =
@@ -75,7 +75,7 @@ const styles = StyleSheet.create({
   small: { fontSize: 14, lineHeight: 20, fontWeight: '500' },
   smallBold: { fontSize: 14, lineHeight: 20, fontWeight: '700' },
   link: { fontSize: 14, lineHeight: 22 },
-  linkPrimary: { fontSize: 14, lineHeight: 22, color: '#3c87f7' },
+  linkPrimary: { fontSize: 14, lineHeight: 22, color: Brand[500] },
   code: {
     fontFamily: Fonts.mono,
     fontWeight: Platform.select({ android: '700' }) ?? '500',

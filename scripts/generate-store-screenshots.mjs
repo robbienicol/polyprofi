@@ -9,99 +9,93 @@ const root = resolve(import.meta.dirname, '..');
 const sourceDir = join(root, 'store-screenshots', 'source-current');
 const outputDir = join(root, 'store-screenshots', 'marketing-6.9');
 const generatedBackground = join(sourceDir, 'generated-path-background.png');
-const fontRegular = join(
+// The brand faces (BRANDING.md): Source Serif 4 sets the headline, Public Sans
+// everything under it. Read straight out of node_modules so the slides use the
+// same files the app bundles.
+const fontDisplay = join(
   root,
-  'node_modules/@expo-google-fonts/plus-jakarta-sans/500Medium/PlusJakartaSans_500Medium.ttf',
+  'node_modules/@expo-google-fonts/source-serif-4/700Bold/SourceSerif4_700Bold.ttf',
 );
 const fontBold = join(
   root,
-  'node_modules/@expo-google-fonts/plus-jakarta-sans/800ExtraBold/PlusJakartaSans_800ExtraBold.ttf',
+  'node_modules/@expo-google-fonts/public-sans/700Bold/PublicSans_700Bold.ttf',
 );
+const fontRegular = join(
+  root,
+  'node_modules/@expo-google-fonts/public-sans/500Medium/PublicSans_500Medium.ttf',
+);
+
+// Palette tokens, mirroring src/constants/theme.ts. Slides alternate cream and
+// near-black; brand clay carries the eyebrow and the rule, and nothing else.
+const CREAM = '#F7F3EC';
+const NIGHT = '#141312';
+const INK = '#1C1A18';
+const MUTED = '#756F68';
+const MUTED_DARK = '#A79F95';
+const TINT_LIGHT = '#EDE6DA';
+const TINT_DARK = '#24211E';
+const BRAND = '#D9653D';
+
+const light = { background: CREAM, accent: TINT_LIGHT, text: INK, muted: MUTED, glow: BRAND };
+const dark = { background: NIGHT, accent: TINT_DARK, text: CREAM, muted: MUTED_DARK, glow: BRAND };
 
 const slides = [
   {
     layout: 'hook',
     output: '00-what-pathey-does.png',
     source: '02-ranked-routes.png',
-    eyebrow: 'PATHEY, IN PLAIN ENGLISH',
-    headline: 'Set a money goal.\nSee ranked ways\nto reach it.',
-    subhead: 'Pathey compares savings, stocks, crypto and\nprediction markets in one place.',
-    background: '#F4FF67',
-    accent: '#FF765E',
-    text: '#071A16',
-    muted: '#304039',
-    glow: '#071A16',
+    eyebrow: 'PATHEY',
+    headline: 'Not advice.\nJust the math.',
+    subhead: 'Tell it the goal. It prices every route to it —\nsavings, stocks, crypto, prediction markets.',
+    ...light,
   },
   {
     output: '01-how-it-works.png',
     source: '01-how-it-works.png',
-    eyebrow: 'PATHEY · THE BIG PICTURE',
-    headline: 'See how each\nroute works.',
-    subhead: 'Savings, stocks, crypto and prediction markets — explained.',
-    background: 'generated',
-    text: '#FFFFFF',
-    muted: '#C9F7E3',
-    glow: '#21D77B',
+    eyebrow: 'EVERY ROUTE, SAFEST FIRST',
+    headline: 'Tell it the goal.\nIt finds the route.',
+    subhead: 'Every route, safest first. Scored out of 100,\nand every score opens into its working.',
+    ...dark,
   },
   {
     output: '02-ranked-routes.png',
     source: '02-ranked-routes.png',
-    eyebrow: 'COMPARE WITH CONTEXT',
-    headline: 'Options ranked\nfor your goal.',
-    subhead: 'Adjust the amount, market and risk profile in one place.',
-    background: '#FFE79A',
-    accent: '#FF9F1C',
-    text: '#071A16',
-    muted: '#514521',
-    glow: '#FF9F1C',
+    eyebrow: 'RANKED FOR YOUR NUMBER',
+    headline: 'A Roth IRA and a bet\nget the same math.',
+    subhead: 'Sometimes the bet wins. Drag the dials,\nand the list re-ranks for your number.',
+    ...light,
   },
   {
     output: '03-goals.png',
     source: '03-goals.png',
-    eyebrow: 'BUILT AROUND YOUR TARGETS',
-    headline: 'Goals stay\nfront and center.',
-    subhead: 'See progress, capital committed and what remains.',
-    background: '#24CE70',
-    accent: '#A8F4C7',
-    text: '#06140C',
-    muted: '#15492C',
-    glow: '#FFFFFF',
+    eyebrow: 'YOUR NUMBER, YOUR DEADLINE',
+    headline: 'Six months or\nsix years.',
+    subhead: 'The math changes with your goals — and it\nsays so when the goal does not add up.',
+    ...dark,
   },
   {
     output: '04-portfolio.png',
     source: '04-portfolio.png',
     eyebrow: 'ONE LIVE VIEW',
-    headline: 'Your whole plan.\nClearly tracked.',
-    subhead: 'Worth now, expected outcomes and goal probability together.',
-    background: '#153BB8',
-    accent: '#5A7CFF',
-    text: '#FFFFFF',
-    muted: '#D9E1FF',
-    glow: '#75F0C1',
+    headline: 'The whole plan,\npriced today.',
+    subhead: 'Worth now, expected outcomes and the odds\nof hitting the goal, in one live view.',
+    ...light,
   },
   {
     output: '05-positions.png',
     source: '05-positions.png',
-    eyebrow: 'POSITION MONITORING',
-    headline: 'Track every\nposition.',
-    subhead: 'Monitor live status and record the result when it closes.',
-    background: '#FF665B',
-    accent: '#FFB3AD',
-    text: '#101724',
-    muted: '#431A18',
-    glow: '#FFE8E4',
+    eyebrow: 'WHAT COULD GO WRONG',
+    headline: 'An AI coach\nfor every pick.',
+    subhead: 'Including what could go wrong. Track each\nposition live, and record how it closed.',
+    ...dark,
   },
   {
     output: '06-new-goal.png',
     source: '06-new-goal.png',
-    eyebrow: 'START WITH THE WHY',
-    headline: 'Build toward\nsomething real.',
-    subhead: 'Choose a goal, then let Pathey map the routes.',
-    background: '#DCD7FF',
-    accent: '#A899FF',
-    text: '#10152B',
-    muted: '#403A6B',
-    glow: '#6E5BFF',
+    eyebrow: 'START WITH THE GOAL',
+    headline: 'Not the best recipe.\nThe best compass.',
+    subhead: 'Nobody knows the market.\nEverybody can read a map.',
+    ...light,
   },
 ];
 
@@ -164,7 +158,7 @@ function buildPhone(source, path) {
     '966x2058',
     'xc:none',
     '-fill',
-    '#07120F',
+    NIGHT,
     '-draw',
     'roundrectangle 0,0 965,2057 94,94',
     screen,
@@ -220,7 +214,7 @@ function renderSlide(slide, workingDir) {
       '+86+110',
       slide.eyebrow,
       '-font',
-      fontBold,
+      fontDisplay,
       '-pointsize',
       '130',
       '-kerning',
@@ -281,7 +275,7 @@ function renderSlide(slide, workingDir) {
     '+86+112',
     slide.eyebrow,
     '-font',
-    fontBold,
+    fontDisplay,
     '-pointsize',
     '112',
     '-kerning',

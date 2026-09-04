@@ -4,6 +4,7 @@ import { ActivityIndicator, AppState, Pressable, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { authenticateWithBiometrics, useBiometricLock } from '@/api/hooks/useBiometricLock';
+import { BrandMark } from '@/components/ui/BrandMark';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, OnBrand, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -72,18 +73,7 @@ export function AppLockGate({ children }: { children: React.ReactNode }): React.
   return (
     <View className="flex-1" style={{ backgroundColor: theme.background }}>
       <SafeAreaView className="flex-1 items-center justify-center gap-8 px-8">
-        <View
-          style={{
-            width: 72,
-            height: 72,
-            borderRadius: Radius.xl,
-            backgroundColor: Brand[500],
-            alignItems: 'center',
-            justifyContent: 'center',
-            ...Shadow.float,
-          }}>
-          <ThemedText style={{ fontSize: 38, fontWeight: '900', color: OnBrand }}>$</ThemedText>
-        </View>
+        <BrandMark size={72} style={{ ...Shadow.float }} />
 
         <View className="items-center gap-2">
           <ThemedText style={{ fontSize: 20, fontWeight: '800', color: theme.text }}>Pathey is locked</ThemedText>

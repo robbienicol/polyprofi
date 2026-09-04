@@ -23,6 +23,7 @@ import {
   SOMETHING_ELSE,
   type PageId,
 } from '@/components/onboarding/quiz-pages';
+import { BrandMark } from '@/components/ui/BrandMark';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, OnBrand, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -659,17 +660,7 @@ function PushPreview({ title, body, muted }: { title: string; body: string; mute
         opacity: muted ? 0.55 : 1,
         ...Shadow.card,
       }}>
-      <View
-        style={{
-          width: 34,
-          height: 34,
-          borderRadius: Radius.sm,
-          backgroundColor: Brand[500],
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}>
-        <ThemedText style={{ fontSize: 17, fontWeight: '900', color: OnBrand }}>$</ThemedText>
-      </View>
+      <BrandMark size={34} />
       <View style={{ flex: 1, gap: 2 }}>
         <View className="flex-row items-center justify-between">
           <ThemedText style={{ fontSize: 12, fontWeight: '800', color: theme.text }}>{title}</ThemedText>

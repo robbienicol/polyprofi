@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { BrandMark } from '@/components/ui/BrandMark';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, OnBrand, Radius, Semantic, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -47,18 +48,7 @@ export function AuthScreen({
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}>
             <View className="items-center gap-3">
-              <View
-                style={{
-                  width: 64,
-                  height: 64,
-                  borderRadius: Radius.xl,
-                  backgroundColor: Brand[500],
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  ...Shadow.float,
-                }}>
-                <ThemedText style={{ fontSize: 34, fontWeight: '900', color: OnBrand }}>$</ThemedText>
-              </View>
+              <BrandMark size={64} style={{ ...Shadow.float }} />
               <ThemedText
                 style={{ fontSize: 30, fontWeight: '800', letterSpacing: -0.8, color: theme.text }}>
                 {title}
