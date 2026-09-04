@@ -389,14 +389,26 @@ export function PortfolioOverview({
 
       {/* Positions */}
       {activeBets.length === 0 ? (
-        <Pressable
-          onPress={onFindRoutes}
-          className="py-4 items-center active:opacity-85"
-          style={{ borderRadius: Radius.lg, backgroundColor: Brand[500], ...Shadow.card }}>
-          <ThemedText style={{ fontSize: 14, fontWeight: '800', color: OnBrand }}>
-            Put your cash to work →
-          </ThemedText>
-        </Pressable>
+        <View style={{ gap: 10 }}>
+          <Pressable
+            onPress={onFindRoutes}
+            className="py-4 items-center active:opacity-85"
+            style={{ borderRadius: Radius.lg, backgroundColor: Brand[500], ...Shadow.card }}>
+            <ThemedText style={{ fontSize: 14, fontWeight: '800', color: OnBrand }}>
+              Put your cash to work →
+            </ThemedText>
+          </Pressable>
+          {/* Nothing is working, but closed positions still are the record of what
+              happened. Without this the history has no way in once the last position
+              settles. */}
+          {bets.length > 0 ? (
+            <Pressable onPress={onOpenPositions} className="items-center py-1 active:opacity-60">
+              <ThemedText style={{ fontSize: 12, fontWeight: '700', color: theme.textSecondary }}>
+                View past positions
+              </ThemedText>
+            </Pressable>
+          ) : null}
+        </View>
       ) : (
         <View style={{ gap: 10 }}>
           <View className="flex-row items-center justify-between" style={{ paddingHorizontal: 6 }}>

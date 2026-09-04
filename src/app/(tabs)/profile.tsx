@@ -11,7 +11,6 @@ import { useDeleteAccount } from '@/api/hooks/useDeleteAccount';
 import { useMoney, usePreferences } from '@/api/hooks/usePreferences';
 import { useSavedRoutes } from '@/api/hooks/useSavedRoutes';
 import { useSavingsGoal } from '@/api/hooks/useSavingsGoal';
-import { useTrackedBets } from '@/api/hooks/useTrackedBets';
 import { ThemedText } from '@/components/themed-text';
 import {
   SettingsChoiceRow,
@@ -39,7 +38,6 @@ export default function SettingsScreen(): React.ReactElement {
   const { user } = useUser();
   const { signOut } = useAuth();
   const { history } = useSavedRoutes();
-  const { bets } = useTrackedBets();
   const { goals, achievedCount } = useSavingsGoal();
   const { preferences, update } = usePreferences();
   const money = useMoney();
@@ -63,7 +61,6 @@ export default function SettingsScreen(): React.ReactElement {
     [preferences.preferredPlatforms, update],
   );
 
-  const activeCount = useMemo(() => bets.filter((bet) => bet.status === 'active').length, [bets]);
   const latestSearch = history[0] ?? null;
   const initials = useMemo(() => {
     const first = user?.firstName?.[0] ?? '';
@@ -306,12 +303,6 @@ export default function SettingsScreen(): React.ReactElement {
 
           {/* Activity */}
           <SettingsSection title="Activity">
-            <SettingsRow
-              icon="📋"
-              label="Tracked positions"
-              value={activeCount > 0 ? `${activeCount} active` : 'None'}
-              onPress={() => router.push('/positions')}
-            />
             <SettingsRow
               icon="🧭"
               label="Latest routes"
