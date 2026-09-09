@@ -4,8 +4,36 @@ export interface PolymarketEntry {
   prices: number[];
   volumeM: number;
   liquidityM?: number;
+  spread?: number;
+  bestBid?: number;
+  bestAsk?: number;
+  oneDayPriceChange?: number;
+  oneWeekPriceChange?: number;
+  oneMonthPriceChange?: number;
   slug?: string;
   endDate?: string;
+  /** Polymarket tag slugs, bookkeeping tags already stripped. Absent when untagged. */
+  tagSlugs?: string[];
+}
+
+export interface KalshiEntry {
+  ticker: string;
+  eventTicker: string;
+  seriesTicker: string;
+  title: string;
+  yesSubTitle?: string;
+  noSubTitle?: string;
+  yesBid?: number;
+  yesAsk?: number;
+  noBid?: number;
+  noAsk?: number;
+  volume?: number;
+  volume24h?: number;
+  liquidity?: number;
+  closeTime?: string;
+  openTime?: string;
+  expectedExpirationTime?: string;
+  status: string;
 }
 
 export interface SportsGame {

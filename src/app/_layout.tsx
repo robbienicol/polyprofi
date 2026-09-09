@@ -1,15 +1,38 @@
 import '@/global.css';
 
+import {
+  PublicSans_400Regular,
+  PublicSans_500Medium,
+  PublicSans_600SemiBold,
+  PublicSans_700Bold,
+  PublicSans_800ExtraBold,
+  useFonts,
+} from '@expo-google-fonts/public-sans';
+import {
+  SourceSerif4_600SemiBold,
+  SourceSerif4_700Bold,
+} from '@expo-google-fonts/source-serif-4';
 import { ClerkProvider } from '@clerk/clerk-expo';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import * as Notifications from 'expo-notifications';
-import { Stack, router, type Href } from 'expo-router';
-import { useEffect } from 'react';
+import * as SplashScreen from 'expo-splash-screen';
+import { Stack, router, usePathname, type Href } from 'expo-router';
+import { useEffect, useRef } from 'react';
 import { useColorScheme } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { useGoalMaintenance } from '@/api/hooks/useGoalMaintenance';
+import { useSavingsGoal } from '@/api/hooks/useSavingsGoal';
+import { AppLockGate } from '@/components/auth/AppLockGate';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { OfflineBanner } from '@/components/OfflineBanner';
+import { getQueryClient } from '@/api/query-client';
 import { clerkTokenCache } from '@/lib/clerk-cache';
+import { useGainAlerts } from '@/api/hooks/useGainAlerts';
+import { shouldPresentCelebration } from '@/lib/savings-goal';
 
-const queryClient = new QueryClient();
+SplashScreen.preventAutoHideAsync().catch(() => {});
+
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ?? '';
 
 function useNotificationObserver() {
@@ -33,14 +56,76 @@ function useNotificationObserver() {
   }, []);
 }
 
-export default function RootLayout(): React.ReactElement {
+/**
+ * Presents the congratulations screen once a goal is reached, from anywhere in
+ * the app. Driven by persisted goal state rather than by the notification tap, so
+ * it works identically whether the user opens the notification, comes back to a
+ * backgrounded app, or launches it cold days later.
+ */
+function GoalHousekeeping(): null {
+  useGoalMaintenance();
+  // Rides the portfolio refresh that is already running, and sends at most one
+  // piece of good news a day. Mounted here so it works whichever tab is open.
+  useGainAlerts();
+  return null;
+}
+
+function GoalCelebrationGate(): null {
+  const { pendingCelebration } = useSavingsGoal();
+  const pathname = usePathname();
+  const presentedGoalId = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!shouldPresentCelebration({ goal: pendingCelebration, pathname, presentedGoalId: presentedGoalId.current })) {
+      return;
+    }
+    presentedGoalId.current = pendingCelebration?.id ?? null;
+    // The goal travels as an argument: the screen congratulates the goal it was
+    // opened for, not whatever is pending by the time it renders.
+    router.push(`/goal-achieved?goalId=${pendingCelebration?.id ?? ''}` as Href);
+  }, [pendingCelebration, pathname]);
+
+  return null;
+}
+
+export default function RootLayout(): React.ReactElement | null {
   useColorScheme(); // subscribe to color scheme changes
+  const queryClient = getQueryClient();
   useNotificationObserver();
+
+  // Both faces ship with the bundle, so this resolves on the first frame after
+  // load; holding the splash avoids a visible reflow of every line of text.
+  const [fontsLoaded, fontError] = useFonts({
+    SourceSerif4_600SemiBold,
+    SourceSerif4_700Bold,
+    PublicSans_400Regular,
+    PublicSans_500Medium,
+    PublicSans_600SemiBold,
+    PublicSans_700Bold,
+    PublicSans_800ExtraBold,
+  });
+
+  useEffect(() => {
+    // A font that fails to load is not worth a stuck splash — fall back to system.
+    if (fontsLoaded || fontError) SplashScreen.hideAsync().catch(() => {});
+  }, [fontsLoaded, fontError]);
+
+  if (!fontsLoaded && !fontError) return null;
+
   return (
-    <ClerkProvider publishableKey={publishableKey} tokenCache={clerkTokenCache}>
-      <QueryClientProvider client={queryClient}>
-        <Stack screenOptions={{ headerShown: false }} />
-      </QueryClientProvider>
-    </ClerkProvider>
+    <ErrorBoundary>
+      <SafeAreaProvider>
+        <ClerkProvider publishableKey={publishableKey} tokenCache={clerkTokenCache}>
+          <QueryClientProvider client={queryClient}>
+            <AppLockGate>
+              <Stack screenOptions={{ headerShown: false }} />
+              <GoalCelebrationGate />
+              <GoalHousekeeping />
+              <OfflineBanner />
+            </AppLockGate>
+          </QueryClientProvider>
+        </ClerkProvider>
+      </SafeAreaProvider>
+    </ErrorBoundary>
   );
 }

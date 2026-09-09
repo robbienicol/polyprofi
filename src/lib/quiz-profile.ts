@@ -31,18 +31,49 @@ export function enforceRouteIntegrity(routes: Route[], target: number): Route[] 
   });
 }
 
-/** Map quiz market picks → route card categories from the AI. */
+/**
+ * Map quiz market picks → the route categories the builders actually emit.
+ *
+ * One entry per class that produces routes, and no more. An unmapped pick falls through
+ * to matching on its own name, which for a class nothing builds means an empty list —
+ * so a category listed here that no builder emits is a promise the search cannot keep.
+ */
 const QUIZ_TO_ROUTE_CATEGORIES: Record<string, string[]> = {
-  'Sports Predictions': ['Sports Betting', 'Sports', 'Polymarket'],
   Polymarket: ['Polymarket'],
   Crypto: ['Crypto'],
   Stocks: ['Stocks & ETFs', 'Stocks', 'Savings & Treasuries'],
-  Forex: ['Forex'],
 };
 
 const LONG_TIMEFRAMES = new Set<QuizAnswers['timeframe']>(['1year', '5years']);
 const MID_TIMEFRAMES = new Set<QuizAnswers['timeframe']>(['3months']);
 const SHORT_TIMEFRAMES = new Set<QuizAnswers['timeframe']>(['today', 'week']);
+
+/**
+ * Routes may resolve slightly after the selected deadline, but not in a different
+ * investing horizon. The grace window grows conservatively with the timeframe.
+ */
+export const TIMEFRAME_MATURITY_LIMITS: Record<QuizAnswers['timeframe'], number> = {
+  today: 2,
+  week: 10,
+  month: 37,
+  '3months': 104,
+  '1year': 395,
+  '5years': 1915,
+};
+
+export function timeframeMaturityLimit(timeframe: QuizAnswers['timeframe']): number {
+  return TIMEFRAME_MATURITY_LIMITS[timeframe];
+}
+
+function routeFitsTimeframe(route: Route, timeframe: QuizAnswers['timeframe']): boolean {
+  // A liquid (capital-preserved) route with no fixed maturity can be exited any time, so an
+  // unknown maturesInDays is fine. A binary route (Polymarket) is locked until resolution —
+  // an unresolved/unknown end date must not be waved through as "matches the deadline."
+  if (route.maturesInDays == null) return route.lossProfile !== 'binary';
+  return Number.isFinite(route.maturesInDays)
+    && route.maturesInDays > 0
+    && route.maturesInDays <= timeframeMaturityLimit(timeframe);
+}
 
 /**
  * Timeframe + return target set how strict routes are.
@@ -112,6 +143,93 @@ function applyRiskTolerance(
   return bounds;
 }
 
+/**
+ * The profile survey's amount buckets, as the top of each range in dollars — what the
+ * user told us they are willing to put in. "$100,000+" is open-ended, so it is held at
+ * its floor rather than invented upward. Keep the keys in sync with AMOUNTS in
+ * `@/app/profile-survey`; an unrecognised answer (or "Prefer not to say") yields null
+ * and the goal-derived stake is used instead.
+ */
+const SURVEY_AMOUNT_CEILING: Record<string, number> = {
+  'Under $1,000': 1_000,
+  '$1,000 - $5,000': 5_000,
+  '$5,000 - $25,000': 25_000,
+  '$25,000 - $100,000': 100_000,
+  '$100,000+': 100_000,
+};
+
+export function surveyAmountCeiling(investmentAmount: string | null | undefined): number | null {
+  if (!investmentAmount) return null;
+  return SURVEY_AMOUNT_CEILING[investmentAmount] ?? null;
+}
+
+/**
+ * Reference stake used to generate the route pool. The invest amount isn't asked
+ * up front any more — it's a live slider on the results screen — so pick one
+ * generous enough that the pool spans treasuries → longshots for any target.
+ *
+ * The survey ceiling raises it because the pool has to contain routes that are
+ * actually sized for the user's capital: a $100 goal alone caps this at $1,000, which
+ * is why someone with $25,000 to deploy used to find the slider pinned at $1,000.
+ */
+export function referenceStakeFor(target: number, investmentCeiling?: number | null): number {
+  const goalDerived = Math.max(1000, (target || 100) * 10);
+  return investmentCeiling && investmentCeiling > 0
+    ? Math.max(goalDerived, investmentCeiling)
+    : goalDerived;
+}
+
+/**
+ * Top of the invest slider. Doubling the expected amount is the point: a track that ends
+ * exactly at the default leaves the thumb pinned to the right with nowhere to drag, and
+ * raising the amount is the one move that brings safe, high-probability routes into
+ * range — they need capital, not luck. Someone who said "up to $10,000" can still reach
+ * $20,000 without typing.
+ */
+export function investmentSliderMaximum(
+  referenceStake: number,
+  investmentCeiling?: number | null,
+): number {
+  const base = investmentCeiling && investmentCeiling > 0 ? investmentCeiling : referenceStake;
+  return Math.max(1, base) * 2;
+}
+
+/** Timeframe as a person would say it at the end of a sentence. */
+const TIMEFRAME_WORDS: Record<QuizAnswers['timeframe'], string> = {
+  today: 'today',
+  week: 'this week',
+  month: 'this month',
+  '3months': 'in 3 months',
+  '1year': 'this year',
+  '5years': 'in 5 years',
+};
+
+/** Market picks as words. Keys are the quiz's own `value`s — see MARKETS in app/quiz. */
+const MARKET_WORDS: Record<string, string> = {
+  Stocks: 'stocks',
+  Crypto: 'crypto',
+  Polymarket: 'prediction markets',
+};
+
+/**
+ * One line naming what a saved search asked for, so a screen can show the answers
+ * back before offering to change them. Shared so Home and the results screen can
+ * never describe the same search two different ways.
+ */
+export function describeSearch(answers: QuizAnswers): string {
+  const goal = `$${Math.round(answers.target).toLocaleString()} ${TIMEFRAME_WORDS[answers.timeframe]}`;
+  const markets = answers.categories
+    .map((category) => MARKET_WORDS[category] ?? category.toLowerCase())
+    .filter((word, index, all) => all.indexOf(word) === index);
+  if (markets.length === 0) return `${goal} · any market`;
+  const listed = markets.length > 3
+    ? `${markets.length} markets`
+    : markets.length === 1
+      ? markets[0]
+      : `${markets.slice(0, -1).join(', ')} & ${markets[markets.length - 1]}`;
+  return `${goal} · ${listed}`;
+}
+
 export function buildRouteParams(answers: Omit<QuizAnswers, 'maxRiskLevel' | 'minProbability'>): QuizAnswers {
   const returnPct = answers.balance > 0 ? (answers.target / answers.balance) * 100 : 0;
   const bounds = deriveRiskBounds(answers.timeframe, returnPct);
@@ -135,10 +253,11 @@ function routeMatchesCategories(route: Route, quizCategories: string[]): boolean
  *   1) riskLevel ascending — the primary sort key.
  *   2) lossProfile — at the same riskLevel, capital-preserved ('partial') always beats
  *      all-or-nothing ('binary'). A stock that doesn't hit target still has your money;
- *      a losing sports/Polymarket bet doesn't. That asymmetry outranks raw odds.
+ *      a contract that resolves against you doesn't. That asymmetry outranks raw
+ *      probability.
  *   3) probability descending — last tiebreaker (and what the bar graph shows).
  * Exported so every screen that lists routes ranks them identically — duplicating this
- * comparator elsewhere is how a screen quietly ends up sorted "best odds first" instead.
+ * comparator elsewhere is how a screen quietly ends up sorted "highest chance first".
  */
 function sortSafestFirst(routes: Route[]): Route[] {
   return [...routes].sort((a, b) => {
@@ -153,7 +272,10 @@ function sortSafestFirst(routes: Route[]): Route[] {
 /** Client-side filter so quiz categories & risk bounds actually shape the feed. */
 export function filterRoutesForQuiz(routes: Route[], params: RouteParams): Route[] {
   let result = routes.filter(
-    (r) => r.riskLevel <= params.maxRiskLevel && r.probability >= params.minProbability
+    (r) =>
+      r.riskLevel <= params.maxRiskLevel
+      && r.probability >= params.minProbability
+      && routeFitsTimeframe(r, params.timeframe)
   );
 
   if (params.categories.length > 0) {
@@ -163,6 +285,13 @@ export function filterRoutesForQuiz(routes: Route[], params: RouteParams): Route
       /etf|treasury|savings|hysa|broad/i.test(`${r.category} ${r.strategy} ${r.platform}`)
     );
     result = [...new Map([...matched, ...baselines].map((r) => [r.id, r])).values()];
+  }
+
+  // Applied last, and to the baseline rescue above as well: a market someone asked
+  // us to leave out does not come back in through the safe-route back door.
+  const excluded = params.excludedCategories ?? [];
+  if (excluded.length > 0) {
+    result = result.filter((r) => !routeMatchesCategories(r, excluded));
   }
 
   return sortSafestFirst(result);
@@ -221,4 +350,77 @@ export function __selfCheck(): void {
   const [partialResult] = enforceRouteIntegrity([partialCoinflip], 300);
   console.assert(partialResult.riskLevel === 2, 'binary floor does not apply to capital-preserved (partial) routes');
   console.assert(partialResult.meetsTarget === true, 'expectedReturn $400 >= $300 target → meetsTarget true');
+
+  // The reported bug: a small profit goal pinned the slider at $1,000 no matter how much
+  // the user said they had. The survey answer has to raise it.
+  console.assert(referenceStakeFor(100) === 1000, 'a $100 goal alone still derives $1,000');
+  console.assert(
+    referenceStakeFor(100, surveyAmountCeiling('$5,000 - $25,000')) === 25_000,
+    'the survey ceiling raises a small goal\'s reference stake to what the user actually has',
+  );
+  console.assert(
+    referenceStakeFor(50_000, surveyAmountCeiling('Under $1,000')) === 500_000,
+    'a large goal is not dragged down below the pool it needs',
+  );
+  console.assert(surveyAmountCeiling('Prefer not to say') === null, 'a skipped answer sets no ceiling');
+  console.assert(surveyAmountCeiling(null) === null, 'a missing answer sets no ceiling');
+  console.assert(
+    investmentSliderMaximum(1000, 10_000) === 20_000,
+    'the slider doubles the stated amount — "up to $10k" can be dragged to $20k',
+  );
+  console.assert(
+    investmentSliderMaximum(1000, null) === 2000,
+    'with no survey answer the slider still doubles the goal-derived stake',
+  );
+
+  const weekParams: RouteParams = {
+    balance: 1000,
+    target: 100,
+    timeframe: 'week',
+    categories: [],
+    riskTolerance: 'balanced',
+    maxRiskLevel: 5,
+    minProbability: 0,
+  };
+  const nearWeek: Route = { ...voo, id: 'near-week', maturesInDays: 10 };
+  const afterWeek: Route = { ...voo, id: 'after-week', maturesInDays: 11 };
+  const twoYears: Route = { ...voo, id: 'two-years', maturesInDays: 730 };
+  const weekRoutes = filterRoutesForQuiz([twoYears, afterWeek, nearWeek], weekParams);
+  console.assert(
+    weekRoutes.length === 1 && weekRoutes[0].id === 'near-week',
+    'one-week quiz keeps the 10d near miss but hides 11d and two-year routes',
+  );
+
+  // the reported gap: "leave crypto out" has to hold even when no market was picked,
+  // and it must not be undone by the safe-route rescue.
+  const cryptoRoute: Route = { ...voo, id: 'crypto', category: 'Crypto' };
+  const etfRoute: Route = { ...voo, id: 'etf', category: 'Stocks & ETFs', strategy: 'broad market ETF' };
+  const noPreference: RouteParams = { ...weekParams, categories: [], excludedCategories: ['Crypto'] };
+  const excluded = filterRoutesForQuiz([cryptoRoute, etfRoute], noPreference);
+  console.assert(
+    excluded.length === 1 && excluded[0].id === 'etf',
+    'an excluded category is dropped even when categories is empty ("no preference" is not permission)',
+  );
+  const rescued = filterRoutesForQuiz(
+    [cryptoRoute, etfRoute],
+    { ...weekParams, categories: ['Polymarket'], excludedCategories: ['Stocks'] },
+  );
+  console.assert(
+    rescued.every((route) => route.id !== 'etf'),
+    'the ETF/treasury baseline rescue does not smuggle an excluded category back in',
+  );
+  console.assert(
+    filterRoutesForQuiz([cryptoRoute, etfRoute], weekParams).length === 2,
+    'a search saved before excludedCategories existed filters exactly as it used to',
+  );
+
+  // an unresolved Polymarket contract (no end date) must not get waved through as a match —
+  // only a liquid/capital-preserved route can skip the maturity check.
+  const unknownBinary: Route = { ...voo, id: 'unknown-binary', lossProfile: 'binary', maturesInDays: undefined };
+  const unknownPartial: Route = { ...voo, id: 'unknown-partial', lossProfile: 'partial', maturesInDays: undefined };
+  const unknownRoutes = filterRoutesForQuiz([unknownBinary, unknownPartial], weekParams);
+  console.assert(
+    unknownRoutes.length === 1 && unknownRoutes[0].id === 'unknown-partial',
+    'unknown maturity hides binary (locked) routes but still passes liquid (partial) ones',
+  );
 }

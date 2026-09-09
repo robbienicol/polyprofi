@@ -30,19 +30,26 @@ export function dailyVolatility(closes: number[], window = 90): number | null {
 }
 
 /**
- * P(close return over horizonTradingDays >= targetPct), zero-drift lognormal.
+ * P(close return over horizonTradingDays >= targetPct), lognormal.
  * horizonTradingDays: ~5/week, ~21/month, ~63/3mo, ~252/year (matches market-data.ts's offsets).
+ *
+ * annualDriftPct is an assumed annual return (compounded, in log space). Default 0 = the
+ * original zero-drift behavior ("how much does this wobble", no view on direction). Pass a
+ * modest, DISCLOSED value for assets with a genuine long-run tendency (e.g. a broad index
+ * fund) so their odds aren't understated. Keep it 0 for pure speculation.
  */
 export function probabilityOfTargetMove(
   dailyVol: number | null,
   targetPct: number,
-  horizonTradingDays: number
+  horizonTradingDays: number,
+  annualDriftPct = 0
 ): number | null {
   if (dailyVol == null || horizonTradingDays <= 0) return null;
   if (targetPct <= 0) return 100;
   if (dailyVol <= 0) return 0; // no volatility, can't make a positive move
   const sigmaT = dailyVol * Math.sqrt(horizonTradingDays);
-  const z = Math.log(1 + targetPct / 100) / sigmaT;
+  const driftT = Math.log(1 + annualDriftPct / 100) * (horizonTradingDays / 252);
+  const z = (Math.log(1 + targetPct / 100) - driftT) / sigmaT;
   return Math.max(0, Math.min(100, (1 - normalCdf(z)) * 100));
 }
 
@@ -66,4 +73,10 @@ export function __selfCheck(): void {
   console.assert(longHorizon > shortHorizon, 'more time → higher P(hit) for same target/vol');
 
   console.assert(probabilityOfTargetMove(null, 10, 21) === null, 'no vol data → null, not a fake number');
+
+  // positive drift raises P(hit) for a positive target; default stays zero-drift
+  const noDrift = probabilityOfTargetMove(0.01, 8, 252)!;
+  const withDrift = probabilityOfTargetMove(0.01, 8, 252, 8)!;
+  console.assert(withDrift > noDrift, 'assumed positive return raises P(hit)');
+  console.assert(probabilityOfTargetMove(0.01, 8, 252, 0) === noDrift, 'drift defaults to 0 (unchanged)');
 }

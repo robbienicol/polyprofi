@@ -4,29 +4,66 @@
     {
       "name": "Expo (all platforms)",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["start"],
+      "runtimeArgs": [
+        "start"
+      ],
       "port": 8081,
       "autoPort": false
     },
     {
       "name": "Expo (iOS)",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "ios"],
+      "runtimeArgs": [
+        "run",
+        "ios"
+      ],
       "port": 8081,
       "autoPort": false
     },
     {
       "name": "Expo (Android)",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "android"],
+      "runtimeArgs": [
+        "run",
+        "android"
+      ],
       "port": 8081,
       "autoPort": false
     },
     {
       "name": "Expo (Web)",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "web"],
+      "runtimeArgs": [
+        "run",
+        "web"
+      ],
       "port": 8081,
+      "autoPort": false
+    },
+    {
+      "name": "Expo (Web 8082)",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "expo",
+        "start",
+        "--web",
+        "--port",
+        "8082"
+      ],
+      "port": 8082,
+      "autoPort": false
+    },
+    {
+      "name": "Expo (Web 8090)",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "expo",
+        "start",
+        "--web",
+        "--port",
+        "8090"
+      ],
+      "port": 8090,
       "autoPort": false
     }
   ]

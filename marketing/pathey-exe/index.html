@@ -1,0 +1,739 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PATHEY.EXE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+  html,body{margin:0;height:100%;background:#141312;overflow:hidden}
+  body{display:grid;place-items:center}
+  /* Integer scale only. 480x270 * 4 = 1920x1080. */
+  #screen{width:1920px;height:1080px;image-rendering:pixelated;outline:none}
+  @media (max-width:1940px){ #screen{width:1440px;height:810px} }
+  @media (max-width:1460px){ #screen{width:960px;height:540px} }
+  @media (max-width:980px){ #screen{width:480px;height:270px} }
+</style>
+</head>
+<body>
+<canvas id="screen" width="480" height="270" tabindex="0"></canvas>
+<script>
+'use strict';
+
+/* ═══════════════════════════════════════════════════════════
+   PATHEY.EXE — linear demo
+   TITLE → WELCOME → CALIBRATE (4 dials) → GOAL → PLOT → ROUTE
+   Numbers and vehicles from src/api/client/playbook.ts
+   ═══════════════════════════════════════════════════════════ */
+
+const W = 480, H = 270;
+const cv = document.getElementById('screen');
+const ctx = cv.getContext('2d', { willReadFrequently: true });
+ctx.imageSmoothingEnabled = false;
+
+/* ── palette: built around brand #D9653D (tailwind.config.js) ── */
+const PAL = [
+  [0x14,0x13,0x12], // 0 BG    warm near-black
+  [0x1d,0x1b,0x19], // 1 PANEL
+  [0x75,0x6f,0x68], // 2 DIM   muted stone
+  [0xf7,0xf3,0xec], // 3 INK   warm off-white
+  [0xd9,0x65,0x3d], // 4 BRAND #D9653D
+  [0xeb,0xa1,0x83], // 5 GLOW  light clay
+  [0xdb,0x4b,0x4b], // 6 WARN  only ever used for bad odds
+];
+const BG=0, PANEL=1, DIM=2, INK=3, BRAND=4, GLOW=5, WARN=6;
+const css = i => 'rgb(' + PAL[i][0] + ',' + PAL[i][1] + ',' + PAL[i][2] + ')';
+
+/* ── the matrix, verbatim from the app ── */
+const TARGETS = [1,3,5,10,20,50,100,300,500];
+const COLS = ['TODAY','1 WEEK','1 MONTH','6 MONTHS','1 YEAR','5 YEARS'];
+/* The matrix has five columns. 6 MONTHS has no column of its own, so it reads the
+   1-MONTH one — the same nearest-conservative approximation timeframeToCol() already
+   makes for '3months' in playbook.ts. Approximated columns are marked EST on screen. */
+const COL_TO_MATRIX = [0, 1, 2, 2, 3, 4];
+const EST_COLS = new Set([3]);
+const mcol = () => COL_TO_MATRIX[G.ci];
+const MATRIX = {
+  1:   { best:[['Polymarket',85],['Polymarket',85],['T-bill / HYSA',99],['T-bill / HYSA',99],['T-bill / HYSA',99]],
+         second:[['Polymarket',80],['Polymarket',80],['Selling premium',92],['Selling premium',92],['Selling premium',95]] },
+  3:   { best:[['Polymarket',75],['Polymarket',75],['Selling premium',72],['T-bill / HYSA',95],['Broad ETF',92]],
+         second:[['Polymarket',65],['Polymarket',65],['Polymarket',65],['Selling premium',88],['Selling premium',90]] },
+  5:   { best:[['Polymarket',55],['Polymarket',58],['Selling premium',65],['Broad ETF',72],['Broad ETF',85]],
+         second:[['Polymarket',50],['Selling premium',55],['Growth stocks',55],['Selling premium',68],['Selling premium',82]] },
+  10:  { best:[['OTM options',25],['OTM options',28],['Growth stocks',40],['Broad ETF',62],['Broad ETF',78]],
+         second:[['Growth stocks',20],['Growth stocks',22],['OTM options',35],['Growth stocks',50],['Growth stocks',72]] },
+  20:  { best:[['OTM options',10],['OTM options',12],['Growth stocks',25],['Growth stocks',35],['Broad ETF',65]],
+         second:[['OTM options',8],['Growth stocks',10],['OTM options',18],['Growth stocks',30],['Growth stocks',60]] },
+  50:  { best:[['OTM options',4],['OTM options',6],['OTM options',12],['Growth stocks',20],['Growth stocks',45]],
+         second:[['OTM options',3],['OTM options',5],['OTM options',8],['Growth stocks',15],['Broad ETF',40]] },
+  100: { best:[['OTM options',2],['OTM options',3],['OTM options',6],['OTM options',12],['Growth stocks',30]],
+         second:[['OTM options',1],['OTM options',2],['OTM options',4],['Growth stocks',8],['Broad ETF',25]] },
+  300: { best:[['OTM options',0.5],['OTM options',1],['OTM options',2],['OTM options',5],['OTM options',12]],
+         second:[['OTM options',0.5],['OTM options',0.5],['OTM options',1],['OTM options',3],['OTM options',8]] },
+  500: { best:[['OTM options',0.5],['OTM options',0.5],['OTM options',1],['OTM options',3],['OTM options',8]],
+         second:[['OTM options',0.5],['OTM options',0.5],['OTM options',0.5],['OTM options',1],['OTM options',5]] },
+};
+/* riskLevel + market tier per vehicle (VEHICLE_META in playbook.ts) */
+const VEH = {
+  'T-bill / HYSA':  { risk: 1, binary: false },
+  'Broad ETF':      { risk: 1, binary: false },
+  'Growth stocks':  { risk: 3, binary: false },
+  'Selling premium':{ risk: 2, binary: false },
+  'OTM options':    { risk: 5, binary: true  },
+  'Polymarket':     { risk: 2, binary: true  },
+};
+const pctLabel = p => (p < 1 ? '<1%' : p + '%');
+const usd = n => '$' + Math.round(n).toLocaleString('en-US');
+
+/* ── the four components of the Pathey Score (GOAL_SCORE_WEIGHTS in src/lib/score.ts).
+   The app ships them at 35/25/30/10; here the user sets them. 0-10 each, normalised. ── */
+const WEIGHTS = [
+  { name: 'ODDS',        i: 7 },
+  { name: 'SAFETY',      i: 5 },
+  { name: 'CASH NEEDED', i: 6 },
+  { name: 'SPEED',       i: 2 },
+];
+/* whole percentages that always total 100 — the residual lands on the biggest weight */
+function weightPcts() {
+  const sum = WEIGHTS.reduce((a, w) => a + w.i, 0);
+  if (!sum) return WEIGHTS.map(() => 25);
+  const raw = WEIGHTS.map(w => w.i / sum * 100);
+  const out = raw.map(Math.round);
+  let big = 0;
+  raw.forEach((v, i) => { if (v > raw[big]) big = i; });
+  out[big] += 100 - out.reduce((a, b) => a + b, 0);
+  return out;
+}
+
+/* how much of the deadline each vehicle typically eats before it pays.
+   DEMO APPROXIMATION — the app reads route.maturesInDays; the playbook matrix has no maturity. */
+const MATURITY_FRAC = {
+  'T-bill / HYSA': 1.0, 'Broad ETF': 0.25, 'Growth stocks': 0.25,
+  'Selling premium': 0.6, 'OTM options': 0.9, 'Polymarket': 0.5,
+};
+const STAKES = [500, 1000, 2500, 5000, 8000, 15000, 25000, 50000];
+const clamp100 = v => Math.max(0, Math.min(100, v));
+
+/* goalEffectivenessScore(), ported from src/lib/score.ts with the user's weights.
+   target = the profit you asked for. required = the capital THIS route needs to
+   deliver it (stakeNeededForReturn in stake-rescore.ts). available = what you have. */
+function patheyScore(vehicle, p, target, required, available) {
+  const w = weightPcts().map(x => x / 100);
+  const reliability = clamp100(p);
+  const lossFraction = VEH[vehicle].binary ? 1 : null;
+  const principalProtection = lossFraction == null
+    ? ((6 - VEH[vehicle].risk) / 5) * 100
+    : (1 - lossFraction) * 100;
+  const capitalEfficiency = 100 * target / (target + required);
+  const timeEfficiency = Math.min(100, Math.max(50, 100 - 50 * MATURITY_FRAC[vehicle]));
+
+  const parts = [reliability, principalProtection, capitalEfficiency, timeEfficiency];
+  const contributions = parts.map((v, i) => v * w[i]);
+  const rawScore = contributions.reduce((a, b) => a + b, 0);
+
+  /* capital-destruction drag: scale by expected surviving capital */
+  const odds = clamp100(p) / 100;
+  const survival = lossFraction == null ? null : odds + (1 - odds) * (1 - lossFraction);
+  let score = survival == null ? rawScore : rawScore * survival;
+
+  /* affordability is a gate, not another weight — score.ts caps it at 49 */
+  const overBudget = required > available;
+  if (overBudget) score = Math.min(score, 49);
+  return { score: Math.round(score), parts, contributions, survival, overBudget };
+}
+
+/* ── goal step ── */
+const G = { si: 4, ti: 2, ci: 1, field: 0 };   // $8,000, +5%, 1 WEEK
+
+/* ── what Pathey says, 27 characters a line ── */
+const WELCOME = [
+  ['LOOKS LIKE ANOTHER', 'INVESTING APP? ITS NOT.'],
+  ['YOU DECIDE WHAT', 'YOU INVEST IN.'],
+  ['WE GIVE YOU THE BEST', 'ROUTES TO GET THERE.'],
+  ['LET ME SHOW YOU', 'WHAT I MEAN.'],
+];
+
+/* ── scene state ── */
+const S = {
+  scene: 'title', page: 0, sel: 0,
+  typed: 0, lines: [''], talk: null, tp: 0,
+  blink: 0, plot: 0, bars: [0, 0], confirm: false, fx: 0,
+};
+function say(l) { S.lines = l; S.typed = 0; }
+function goto(scene) {
+  S.scene = scene; S.sel = 0; S.page = 0; S.plot = 0; S.confirm = false;
+  S.talk = INTROS[scene] ? INTROS[scene]() : null;
+  S.tp = 0;
+}
+const INTROS = { sliders: dialsIntro, routes: routesIntro };
+
+/* what Pathey says when the dials first appear */
+function dialsIntro() {
+  return [
+    ['FIRST, YOU ADJUST THESE', 'TO YOUR LIKING.'],
+    ['DO YOU WANT TO TAKE RISKS', 'FOR BETTER ODDS?'],
+    ['DO YOU HAVE A LOT OF', 'CAPITAL TO INVEST?'],
+    ['DO YOU NEED IT TO', 'MATURE QUICKLY?'],
+  ];
+}
+
+/* what Pathey says when the list first appears — three pages, advanced with ENTER */
+function routesIntro() {
+  const top = routes()[0];
+  return [
+    ['THEN WE RANK ALL THE', 'WAYS YOU CAN HIT YOUR', 'FINANCIAL GOALS.'],
+    ['IT LOOKS LIKE', INSTRUMENT[top.v].name + ' HAS', 'THE BEST SCORE HERE.'],
+    ['LETS SEE WHY.'],
+  ];
+}
+
+/* ── candidate routes for the goal.
+   The matrix stores best+second per (target, timeframe), so one cell yields at most two.
+   We also pull the neighbouring target buckets — the app does the same thing, keeping
+   near-misses and labelling them "below current goal" (see route-results.ts). Each row
+   is scored against the profit IT actually delivers, not the one you asked for. ── */
+function routes() {
+  const stake = STAKES[G.si], want = TARGETS[G.ti], goal = stake * want / 100;
+  const picks = new Map();
+  [G.ti, G.ti - 1, G.ti + 1, G.ti - 2, G.ti + 2].forEach(bi => {
+    if (bi < 0 || bi >= TARGETS.length) return;
+    const t = TARGETS[bi], row = MATRIX[t];
+    [row.best[mcol()], row.second[mcol()]].forEach(([v, p]) => {
+      const prev = picks.get(v);
+      /* keep the entry closest to what was actually asked for */
+      if (prev && Math.abs(prev.t - want) <= Math.abs(t - want)) return;
+      picks.set(v, { v, p, t });
+    });
+  });
+  return [...picks.values()]
+    .map(r => {
+      /* stakeNeededForReturn(): the capital this route needs to make the profit you asked for */
+      const need = Math.ceil(goal * 100 / r.t);
+      return { ...r, need, ...patheyScore(r.v, r.p, goal, need, stake) };
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 4);
+}
+
+/* The concrete instrument behind each vehicle — same shape concreteInstrument() returns
+   in playbook.ts. ILLUSTRATIVE ONLY: the real app fills these from live tickers, odds
+   and prices. Nobody understands "Polymarket"; everybody understands France to beat Spain. */
+const INSTRUMENT = {
+  'T-bill / HYSA':   { name: '13-WEEK T-BILL',        kind: 'SAVINGS & TREASURIES',
+    act: 'BUY AT AUCTION. HOLD TO MATURITY.',    warn: 'FIXED RATE. IT BASICALLY NEVER MISSES.' },
+  'Broad ETF':       { name: 'VOO',                   kind: 'INDEX FUND',
+    act: 'BUY SHARES. IT TRACKS THE S&P 500.',   warn: 'IT DIPS, BUT YOU STILL HOLD THE SHARES.' },
+  'Growth stocks':   { name: 'NVDA',                  kind: 'GROWTH STOCK',
+    act: 'BUY SHARES. SELL WHEN YOU HIT TARGET.', warn: 'BIGGER SWINGS, IN BOTH DIRECTIONS.' },
+  'Selling premium': { name: 'COVERED CALLS ON AAPL', kind: 'OPTIONS INCOME',
+    act: 'SELL THE $250 CALL. KEEP THE PREMIUM.', warn: 'STEADY INCOME. YOUR UPSIDE IS CAPPED.' },
+  'OTM options':     { name: 'TSLA $520 CALLS',       kind: 'OUT-OF-THE-MONEY CALLS',
+    act: 'EXPIRES FRIDAY. A CHEAP BET ON A JUMP.', warn: 'MOST OF THE TIME IT EXPIRES WORTHLESS.' },
+  'Polymarket':      { name: 'FRANCE TO BEAT SPAIN',  kind: 'PREDICTION MARKET',
+    act: 'BUY YES AT 58c. IT SETTLES AT $1 OR $0.', warn: 'IT PAYS IN FULL OR IT PAYS NOTHING.' },
+};
+
+/* Quick facts, all read straight off this route's own numbers. */
+function facts(r) {
+  const stake = STAKES[G.si], goal = stake * TARGETS[G.ti] / 100;
+  return [
+    'HITS ' + pctLabel(r.p) + ' OF THE TIME',
+    r.survival != null ? 'A MISS COSTS YOU THE FULL STAKE'
+                       : 'A MISS LEAVES YOU HOLDING THE ASSET',
+    'NEEDS ' + usd(r.need) + ' TO MAKE ' + usd(goal),
+    MATURITY_FRAC[r.v] < 1 ? 'FREES UP BEFORE YOUR DEADLINE'
+                           : 'LOCKED UNTIL YOUR DEADLINE',
+  ];
+}
+
+/* ── audio: square-wave blips, no assets ── */
+let AC = null;
+function blip(f, d, type, g0) {
+  if (!AC) return;
+  const o = AC.createOscillator(), g = AC.createGain();
+  o.type = type || 'square'; o.frequency.value = f;
+  g.gain.setValueAtTime(g0 == null ? 0.05 : g0, AC.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.0001, AC.currentTime + d);
+  o.connect(g); g.connect(AC.destination);
+  o.start(); o.stop(AC.currentTime + d);
+}
+const sfx = {
+  move:  () => blip(320, 0.05),
+  tick:  () => blip(440, 0.03, 'square', 0.035),
+  type:  () => blip(760, 0.015, 'square', 0.02),
+  ok:    () => { blip(520, 0.06); setTimeout(() => blip(784, 0.10), 60); },
+  start: () => { [392,523,659,784].forEach((f, i) => setTimeout(() => blip(f, 0.10), i * 70)); },
+  fanfare: () => {
+    [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => blip(f, 0.11), i * 80));
+    [0, 1, 2, 3, 4, 5].forEach(i => setTimeout(() => blip(1400 + i * 180, 0.04, 'square', 0.03), 340 + i * 55));
+  },
+  deny:  () => { blip(150, 0.12, 'sawtooth', 0.05); setTimeout(() => blip(110, 0.18, 'sawtooth', 0.05), 90); },
+};
+
+/* ── draw helpers — everything lands on the 480x270 grid ── */
+function text(x, y, str, col, size) {
+  ctx.font = (size || 8) + 'px "Press Start 2P", monospace';
+  ctx.textBaseline = 'top'; ctx.fillStyle = css(col);
+  ctx.fillText(str, x, y);
+}
+function ctext(y, str, col, size) { text((W - str.length * (size || 8)) / 2 | 0, y, str, col, size); }
+function rect(x, y, w, h, col) { ctx.fillStyle = css(col); ctx.fillRect(x, y, w, h); }
+function frame(x, y, w, h, col, fill) {
+  if (fill != null) rect(x, y, w, h, fill);
+  rect(x, y, w, 1, col); rect(x, y + h - 1, w, 1, col);
+  rect(x, y, 1, h, col); rect(x + w - 1, y, 1, h, col);
+}
+/* framed panel with its label sitting in a notch cut out of the top border */
+function titled(x, y, w, h, bc, lbl, lc) {
+  frame(x, y, w, h, bc, PANEL);
+  rect(x + 4, y, lbl.length * 8 + 4, 1, BG);
+  text(x + 6, y - 4, lbl, lc);
+}
+function dot(x, y, col) { rect(x | 0, y | 0, 1, 1, col); }
+/* point at fraction t along a polyline, for markers that travel a route */
+function walk(pts, t) {
+  const segs = [];
+  let total = 0;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const d = Math.hypot(pts[i+1][0] - pts[i][0], pts[i+1][1] - pts[i][1]);
+    segs.push(d); total += d;
+  }
+  let want = t * total;
+  for (let i = 0; i < segs.length; i++) {
+    if (want <= segs[i] || i === segs.length - 1) {
+      const f = segs[i] ? Math.min(1, want / segs[i]) : 0;
+      return [pts[i][0] + (pts[i+1][0] - pts[i][0]) * f | 0,
+              pts[i][1] + (pts[i+1][1] - pts[i][1]) * f | 0];
+    }
+    want -= segs[i];
+  }
+  return pts[pts.length - 1];
+}
+function tri(x, y, col) { for (let i = 0; i < 4; i++) rect(x + i, y + i, 8 - i * 2, 1, col); }
+/* discrete cell bar — steps, never a smooth lerp */
+function bar(x, y, cells, filled, col, cw, ch) {
+  cw = cw || 5; ch = ch || 6;
+  for (let i = 0; i < cells; i++) {
+    const on = i < filled;
+    rect(x + i * (cw + 1), y, cw, ch, on ? col : PANEL);
+    if (!on) frame(x + i * (cw + 1), y, cw, ch, DIM);
+  }
+}
+function dottedLine(x0, y0, x1, y1, col, gap) {
+  const steps = Math.ceil(Math.hypot(x1 - x0, y1 - y0) / (gap || 2));
+  for (let s = 0; s <= steps; s++) dot(x0 + (x1 - x0) * s / steps, y0 + (y1 - y0) * s / steps, col);
+}
+
+/* ═══ scenes ═══ */
+
+function drawTitle() {
+  frame(6, 6, W - 12, H - 12, PANEL);
+
+  /* the route runs behind the device — the metaphor, stated once */
+  const path = [[26, 222], [112, 212], [152, 174], [240, 164], [302, 118], [420, 106], [452, 70]];
+  for (let i = 0; i < path.length - 1; i++)
+    dottedLine(path[i][0], path[i][1], path[i+1][0], path[i+1][1], DIM, 3);
+  rect(452, 58, 1, 13, BRAND); rect(453, 58, 9, 7, BRAND);
+  rect(25, 221, 3, 3, GLOW);
+
+  ctext(20, 'PATHEY', INK, 24);
+  ctext(50, 'NOT ADVICE. JUST THE MATH.', BRAND);
+
+  /* a 1px stepped bob — enough to read as alive, never enough to distract */
+  const bob = [0, 0, 1, 1][Math.floor(S.blink / 16) % 4];
+  phone(172, 62 + bob, 136, 158);
+
+  if ((S.blink % 44) < 28) ctext(238, 'PRESS START', GLOW);
+}
+
+/* pixel-art handset running the app — drawn, not screenshotted.
+   Three real vehicles at their real cell probabilities, scored live by patheyScore()
+   on an $8,000 stake, ranked by score. Prediction markets sit low on purpose: the
+   capital-destruction drag scales a binary route's score by p. */
+const MINI_ROUTES = [
+  ['T-bill / HYSA', 'T-BILL',      1,  3],
+  ['Broad ETF',     'VOO',        10,  3],
+  ['Polymarket',    'PREDICTIONS', 5,  1],
+];
+function phone(px, py, pw, ph) {
+  rect(px, py, pw, ph, DIM);
+  rect(px, py, 1, 1, BG); rect(px + pw - 1, py, 1, 1, BG);
+  rect(px, py + ph - 1, 1, 1, BG); rect(px + pw - 1, py + ph - 1, 1, 1, BG);
+  rect(px + 2, py + 2, pw - 4, ph - 4, BG);
+  rect(px + pw / 2 - 8, py + 5, 16, 2, DIM);          // earpiece
+  rect(px + pw / 2 - 14, py + ph - 10, 28, 3, DIM);   // home bar
+
+  const sx = px + 4, sy = py + 8, sw = pw - 8, sh = ph - 30;
+  rect(sx, sy, sw, sh, PANEL);
+
+  text(sx + 4, sy + 3, 'PATHEY', BRAND);
+  for (let i = 0; i < 3; i++) rect(sx + sw - 12 + i * 4, sy + 5, 2, 2, DIM);
+  rect(sx, sy + 14, sw, 1, DIM);
+  text(sx + 4, sy + 18, 'BY SCORE', DIM);
+
+  /* the route map, in miniature */
+  const mini = [[sx + 4, sy + 54], [sx + 34, sy + 48], [sx + 56, sy + 40], [sx + 92, sy + 36], [sx + 116, sy + 32]];
+  for (let i = 0; i < mini.length - 1; i++)
+    dottedLine(mini[i][0], mini[i][1], mini[i+1][0], mini[i+1][1], DIM, 3);
+  rect(sx + 116, sy + 26, 1, 7, BRAND); rect(sx + 117, sy + 26, 5, 4, BRAND);
+
+  /* the marker drives the route, then waits and starts over */
+  const [tx, ty] = walk(mini, Math.min(1, (S.blink % 96) / 64));
+  rect(tx - 2, ty - 2, 5, 5, PANEL);
+  rect(tx - 1, ty - 1, 3, 3, GLOW);
+
+  MINI_ROUTES.forEach(([veh, lbl, tgt, col], i) => {
+    const p = MATRIX[tgt].best[col][1], profit = 8000 * tgt / 100;
+    /* target = the profit, required = the stake it takes, available = the same stake */
+    const { score } = patheyScore(veh, p, profit, 8000, 8000);
+    const hot = score >= 35;
+    const cy = sy + 60 + i * 22;
+    frame(sx + 4, cy, sw - 8, 20, i === 0 ? BRAND : DIM, PANEL);
+    text(sx + 8, cy + 4, lbl, i === 0 ? INK : DIM);
+    text(sx + sw - 10 - String(score).length * 8, cy + 4, String(score), hot ? BRAND : WARN);
+    bar(sx + 8, cy + 14, 8, Math.max(1, Math.round(score / 100 * 8)), hot ? BRAND : WARN, 4, 3);
+  });
+}
+
+function drawWelcome() {
+  ctext(40, 'PATHEY', BRAND, 16);
+  rect(0, 66, W, 1, DIM);
+
+  /* the route climbs one leg per page — the metaphor, stated visually */
+  const path = [[40, 138], [130, 130], [180, 108], [270, 100], [330, 80], [424, 72]];
+  for (let i = 0; i < path.length - 1; i++)
+    dottedLine(path[i][0], path[i][1], path[i+1][0], path[i+1][1], DIM, 3);
+  rect(424, 60, 1, 13, BRAND); rect(425, 60, 9, 7, BRAND);
+  const leg = path[Math.min(path.length - 1, S.page + 1)];
+  rect(leg[0] - 2, leg[1] - 2, 5, 5, BG);
+  rect(leg[0] - 1, leg[1] - 1, 3, 3, GLOW);
+
+  dialogue(WELCOME[S.page], S.page < WELCOME.length - 1 ? 'PRESS ANY KEY' : 'PRESS ENTER');
+  for (let i = 0; i < WELCOME.length; i++)
+    rect(216 + i * 12, 146, 6, 6, i === S.page ? BRAND : PANEL);
+}
+
+function drawDials() {
+  header('PATHEY SCORE', 'STEP 1 OF 2');
+  text(16, 28, 'WHAT MATTERS MOST TO YOU?', INK);
+  const pcts = weightPcts();
+
+  WEIGHTS.forEach((w, i) => {
+    const y = 44 + i * 26, on = i === S.sel;
+    if (on) rect(8, y - 6, W - 16, 24, PANEL);
+    text(16, y, (on && (S.blink % 30) < 18 ? '>' : ' ') + w.name, on ? BRAND : DIM);
+    bar(136, y - 1, 10, w.i, on ? BRAND : DIM, 18, 9);
+    text(344, y, String(pcts[i]).padStart(2, ' ') + '%', on ? INK : DIM);
+  });
+
+  /* the box only exists while Pathey is talking — once done, the dials speak for themselves */
+  if (S.talk) dialogue(S.talk[S.tp], null);
+  footer(S.talk ? '' : 'UP/DN PICK', S.talk ? 'ENTER NEXT' : 'L/R WEIGHT', S.talk ? '' : 'ENTER NEXT');
+}
+
+function drawGoal() {
+  header('YOUR GOAL', 'STEP 2 OF 2');
+  const stake = STAKES[G.si], tgt = TARGETS[G.ti], profit = stake * tgt / 100;
+  const cur = (S.blink % 30) < 18 ? '>' : ' ';
+  const row = (i, y, q, val, suffix) => {
+    text(16, y, q, DIM);
+    if (G.field === i) rect(8, y + 12, W - 16, 22, PANEL);
+    text(16, y + 16, (G.field === i ? cur : ' ') + val, G.field === i ? BRAND : INK, 16);
+    if (suffix) text(360, y + 20, suffix, DIM);
+  };
+  row(0, 24, 'HOW MUCH ARE YOU PUTTING IN?', usd(stake));
+  row(1, 66, 'HOW MUCH DO YOU WANT TO MAKE?', '+' + usd(profit), '(+' + tgt + '%)');
+  row(2, 108, 'BY WHEN?', COLS[G.ci]);
+
+  dialogue(['THEN TELL PATHEY ABOUT', 'YOUR GOALS AND TIMELINE.'], null);
+  footer('UP/DN PICK', 'L/R ADJUST', 'ENTER PLOT');
+}
+
+function drawPlot() {
+  ctext(96, 'PLOTTING ROUTES', BRAND, 16);
+  const cells = 32, filled = Math.min(cells, Math.round(S.plot / 2));
+  bar((W - cells * 9) / 2, 130, cells, filled, BRAND, 8, 10);
+  const steps = ['READING THE ODDS', 'STRIPPING THE VIG', 'RANKING SAFEST FIRST', 'CHECKING YOUR FLOOR'];
+  ctext(160, steps[Math.min(steps.length - 1, Math.floor(S.plot / 16))], DIM);
+}
+
+function drawRoutes() {
+  const list = routes();
+  S.sel = Math.min(S.sel, list.length - 1);
+  header('ROUTES', COLS[G.ci] + (EST_COLS.has(G.ci) ? ' EST' : ''));
+  const stake = STAKES[G.si], tgt = TARGETS[G.ti];
+  text(16, 24, usd(stake) + ' TO ' + usd(stake * (1 + tgt / 100)), DIM);
+  text(392, 24, 'SCORE', DIM);
+
+  list.forEach((r, i) => {
+    const y = 36 + i * 29, on = i === S.sel;
+    frame(8, y, 464, 27, on ? BRAND : DIM, PANEL);
+    text(16, y + 5, (on && (S.blink % 30) < 18 ? '>' : ' ') + INSTRUMENT[r.v].name, on ? INK : DIM);
+    text(24, y + 16, 'HITS ' + pctLabel(r.p) + '   NEEDS ' + usd(r.need)
+      + (r.overBudget ? ' - OVER BUDGET' : ''), r.overBudget ? WARN : DIM);
+    text(r.score >= 100 ? 400 : 408, y + 5, String(r.score),
+         r.score >= 60 ? BRAND : r.score >= 35 ? INK : WARN, 16);
+  });
+
+  /* box only while Pathey is talking — the rows carry themselves after that */
+  if (S.talk) dialogue(S.talk[S.tp], null);
+  footer(S.talk ? '' : 'UP/DN PICK', S.talk ? 'ENTER NEXT' : 'ENTER OPEN', 'R RESTART');
+}
+
+/* You just took a route. RPG-grade celebration, one honest line at the end. */
+function drawAcquired() {
+  const r = routes()[S.sel], t = S.fx;
+  if (t < 3) { rect(0, 0, W, H, t % 2 ? GLOW : BRAND); return; }
+  rect(0, 0, W, H, BG);
+
+  /* spark burst on a golden-angle spiral — deterministic, so the loop replays identically */
+  const cx = 240, cy = 108;
+  for (let i = 0; i < 32; i++) {
+    const a = i * 2.39996, d = (t - 3) * (3 + (i % 5));
+    if (d > 8 && d < 150) {
+      const x = cx + Math.cos(a) * d, y = cy + Math.sin(a) * d * 0.6;
+      rect(x | 0, y | 0, 2, 2, i % 3 ? BRAND : GLOW);
+    }
+  }
+  for (const rad of [(t - 3) * 9, (t - 9) * 9]) {
+    if (rad > 0 && rad < 170)
+      for (let a = 0; a < 6.28; a += 0.09)
+        dot(cx + Math.cos(a) * rad, cy + Math.sin(a) * rad * 0.6, DIM);
+  }
+
+  ctext(72, 'ROUTE ACQUIRED', GLOW, t < 7 ? 16 : 24);
+  if (t > 8) ctext(112, INSTRUMENT[r.v].name, INK);
+
+  /* the bar fills toward the goal, and the money counts up to it */
+  if (t > 12) {
+    const stake = STAKES[G.si], goal = stake * TARGETS[G.ti] / 100;
+    const frac = Math.min(1, (t - 12) / 16), cells = 30;
+    bar((W - cells * 9) / 2, 140, cells, Math.round(frac * cells), BRAND, 8, 10);
+    ctext(158, usd(stake + goal * frac), BRAND, 16);
+    ctext(180, 'TARGET BY ' + COLS[G.ci], DIM);
+  }
+  if (t > 26) ctext(202, 'ADDED TO YOUR PLAN', DIM);
+  if (t > 34 && (S.blink % 40) < 24) ctext(238, 'PRESS ANY KEY', INK);
+}
+
+function drawDetail() {
+  const r = routes()[S.sel], ins = INSTRUMENT[r.v];
+  header('ROUTE', '+' + r.t + '%  ' + COLS[G.ci] + (EST_COLS.has(G.ci) ? ' EST' : ''));
+  text(16, 20, ins.name, INK, 16);
+  text(16, 40, ins.kind + '  -  NEEDS ' + usd(r.need), r.overBudget ? WARN : DIM);
+  text(360, 18, 'SCORE', DIM);
+  text(360, 28, String(Math.round(S.bars[0] || 0)),
+       r.score >= 60 ? BRAND : r.score >= 35 ? INK : WARN, 24);
+
+  titled(8, 54, 464, 60, DIM, 'HOW IT SCORED', BRAND);
+  const pcts = weightPcts();
+  WEIGHTS.forEach((w, i) => {
+    const y = 62 + i * 12;
+    text(16, y, w.name, DIM);
+    text(112, y, String(pcts[i]).padStart(2, ' ') + '%', DIM);
+    bar(152, y - 1, 20, Math.round(r.parts[i] / 100 * 20), BRAND, 5, 6);
+    text(284, y, '+' + r.contributions[i].toFixed(1), INK);
+  });
+  if (r.survival != null) text(352, 98, 'x' + r.survival.toFixed(2) + ' DRAG', WARN);
+
+  titled(8, 120, 464, 62, DIM, 'QUICK FACTS', BRAND);
+  facts(r).forEach((f, i) => {
+    const y = 130 + i * 13;
+    rect(18, y + 2, 3, 3, BRAND);
+    text(28, y, f, INK);
+  });
+
+  const lit = (S.blink % 24) < 12;
+  frame(116, 190, 248, 46, lit ? GLOW : BRAND, lit ? BRAND : PANEL);
+  ctext(202, 'ACQUIRE', lit ? BG : BRAND, 24);
+  ctext(244, 'PRESS  A', DIM);
+  text(8, 258, 'ESC BACK', DIM);
+  text(W - 8 - 10 * 8, 258, 'NOT ADVICE', DIM);
+}
+
+/* ── shared chrome ── */
+function header(left, right) {
+  rect(0, 0, W, 14, PANEL);
+  text(8, 4, 'PATHEY', BRAND);
+  text(72, 4, left, INK);
+  text(W - 8 - right.length * 8, 4, right, DIM);
+  rect(0, 14, W, 1, DIM);
+}
+function footer(a, b, c) {
+  text(8, 254, a, DIM);
+  text(120, 254, b, DIM);
+  text(240, 254, c, DIM);
+  text(W - 8 - 10 * 8, 254, 'NOT ADVICE', DIM);
+}
+/* The talker. Hard white box, 16px type, speaker nameplate — so it reads as a
+   character, not a status bar. 16px means ~27 characters a line: keep copy short. */
+/* The talker. Hard white box, 16px type, speaker nameplate — so it reads as a
+   character, not a status bar. 16px means ~27 characters a line, up to three lines. */
+function dialogue(target, hint, who) {
+  if (S.lines.join('\n') !== target.join('\n')) say(target);
+  const name = who || 'PATHEY';
+  const nw = name.length * 8 + 12;
+  rect(16, 158, nw, 14, BRAND);
+  frame(16, 158, nw, 14, GLOW);
+  text(22, 161, name, BG);
+
+  rect(8, 172, 464, 74, INK);
+  frame(8, 172, 464, 74, BRAND);
+  frame(11, 175, 458, 68, DIM);
+
+  const three = target.filter(Boolean).length > 2;
+  const y0 = three ? 180 : 188, step = three ? 22 : 26;
+  const shown = S.lines.join('\n').slice(0, S.typed).split('\n');
+  shown.forEach((ln, i) => text(26, y0 + i * step, ln, BG, 16));
+  if (S.typed >= S.lines.join('\n').length && (S.blink % 40) < 24) tri(444, 232, BG);
+  if (hint) text(W - 8 - hint.length * 8, 254, hint, DIM);
+}
+
+/* ── frame ── */
+function render() {
+  rect(0, 0, W, H, BG);
+  ({ title: drawTitle, welcome: drawWelcome, sliders: drawDials, goal: drawGoal,
+     plotting: drawPlot, routes: drawRoutes, detail: drawDetail,
+     acquired: drawAcquired })[S.scene]();
+  quantize();
+}
+
+/* Snap every pixel to the locked palette. Kills text antialiasing —
+   this is what separates real pixel art from a retro filter. */
+const qcache = new Int8Array(32768).fill(-1);
+function quantize() {
+  const img = ctx.getImageData(0, 0, W, H), d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const key = ((d[i] >> 3) << 10) | ((d[i+1] >> 3) << 5) | (d[i+2] >> 3);
+    let idx = qcache[key];
+    if (idx < 0) {
+      let best = 0, bd = 1e9;
+      for (let p = 0; p < PAL.length; p++) {
+        const dr = d[i]-PAL[p][0], dg = d[i+1]-PAL[p][1], db = d[i+2]-PAL[p][2];
+        const dist = dr*dr + dg*dg + db*db;
+        if (dist < bd) { bd = dist; best = p; }
+      }
+      idx = qcache[key] = best;
+    }
+    d[i] = PAL[idx][0]; d[i+1] = PAL[idx][1]; d[i+2] = PAL[idx][2]; d[i+3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+/* ── logic at 15fps: bars step, text types ── */
+function tick() {
+  S.blink++;
+  const full = S.lines.join('\n').length;
+  if (S.typed < full) { S.typed = Math.min(full, S.typed + 2); if (S.typed % 4 === 0) sfx.type(); }
+
+  if (S.scene === 'plotting') {
+    S.plot++;
+    if (S.plot > 66) { goto('routes'); S.bars = [0, 0]; sfx.ok(); }
+  }
+  if (S.scene === 'acquired') S.fx++;
+  if (S.scene === 'detail') {
+    const to = routes()[S.sel].score, cur = S.bars[0] || 0;
+    S.bars[0] = cur < to ? Math.min(to, cur + Math.max(2, (to - cur) * 0.3)) : to;
+  }
+}
+let last = 0, acc = 0;
+function loop(t) {
+  if (!last) last = t;
+  acc += t - last; last = t;
+  while (acc >= 1000 / 15) { tick(); acc -= 1000 / 15; }
+  render();
+  requestAnimationFrame(loop);
+}
+
+/* ── input ── */
+addEventListener('keydown', e => {
+  if (!AC) { try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (_) {} }
+  const k = e.key;
+  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' ','Enter'].includes(k)) e.preventDefault();
+  const up = k === 'ArrowUp', dn = k === 'ArrowDown', lf = k === 'ArrowLeft', rt = k === 'ArrowRight';
+
+  if (k === 'r' || k === 'R') { goto('title'); S.bars = [0,0]; sfx.move(); return; }
+
+  switch (S.scene) {
+    case 'title':
+      goto('welcome'); sfx.start(); break;
+
+    case 'welcome':
+      if (S.typed < S.lines.join('\n').length) { S.typed = 999; break; }  // skip the typing
+      if (S.page < WELCOME.length - 1) { S.page++; sfx.move(); }
+      else if (k === 'Enter' || k === ' ') { goto('sliders'); sfx.ok(); }
+      break;
+
+    case 'sliders': {
+      if (S.talk) {
+        if (k === 'Enter' || k === ' ') {
+          const full = S.lines.join('\n').length;
+          if (S.typed < full) { S.typed = full; break; }
+          if (++S.tp >= S.talk.length) S.talk = null;
+          sfx.move();
+        }
+        if (up || dn || lf || rt) S.talk = null;
+        break;
+      }
+      if (up) { S.sel = (S.sel + WEIGHTS.length - 1) % WEIGHTS.length; sfx.move(); }
+      if (dn) { S.sel = (S.sel + 1) % WEIGHTS.length; sfx.move(); }
+      const w = WEIGHTS[S.sel];
+      if (lf && w.i > 0) { w.i--; sfx.tick(); }
+      if (rt && w.i < 10) { w.i++; sfx.tick(); }
+      if (k === 'Enter') { goto('goal'); sfx.ok(); }
+      break;
+    }
+
+    case 'goal': {
+      if (up) { G.field = (G.field + 2) % 3; sfx.move(); }
+      if (dn) { G.field = (G.field + 1) % 3; sfx.move(); }
+      const key = ['si', 'ti', 'ci'][G.field];
+      const max = [STAKES.length, TARGETS.length, COLS.length][G.field] - 1;
+      if (lf && G[key] > 0) { G[key]--; sfx.tick(); }
+      if (rt && G[key] < max) { G[key]++; sfx.tick(); }
+      if (k === 'Enter') { goto('plotting'); S.bars = [0,0]; sfx.ok(); }
+      break;
+    }
+
+    case 'routes': {
+      /* while Pathey is talking, ENTER turns the page and the screen stays put */
+      if (S.talk) {
+        if (k === 'Enter' || k === ' ') {
+          const full = S.lines.join('\n').length;
+          if (S.typed < full) { S.typed = full; break; }      // first press finishes the line
+          if (++S.tp >= S.talk.length) S.talk = null;
+          sfx.move();
+        }
+        if (up || dn) S.talk = null;                          // or take control early
+        break;
+      }
+      const n = routes().length;
+      if (up) { S.sel = (S.sel + n - 1) % n; sfx.move(); }
+      if (dn) { S.sel = (S.sel + 1) % n; sfx.move(); }
+      if (k === 'Enter') {
+        const pick = routes()[S.sel];
+        S.scene = 'detail'; S.bars = [0, 0];
+        pick.p < 15 ? sfx.deny() : sfx.ok();
+      }
+      break;
+    }
+
+    case 'acquired':
+      if (S.fx > 34) { S.scene = 'detail'; sfx.move(); }
+      break;
+
+    case 'detail':
+      if (k === 'a' || k === 'A' || k === 'Enter') { S.scene = 'acquired'; S.fx = 0; sfx.fanfare(); }
+      if (k === 'Escape') { S.scene = 'routes'; sfx.move(); }
+      break;
+  }
+});
+cv.addEventListener('click', () => cv.focus());
+
+const start = () => { cv.focus(); requestAnimationFrame(loop); };
+if (document.fonts && document.fonts.load) document.fonts.load('8px "Press Start 2P"').then(start).catch(start);
+else start();
+</script>
+</body>
+</html>

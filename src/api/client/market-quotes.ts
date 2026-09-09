@@ -1,13 +1,18 @@
 import type { StockQuote, TreasuryBillYield } from '@/api/client/market-data-types';
+import { createInFlightCache } from '@/lib/in-flight-cache';
 import { isRecord, responseJson } from '@/lib/runtime-validation';
 import { dailyVolatility } from '@/lib/volatility-probability';
 
 const STOCK_SYMBOLS = [
-  'SPY', 'VOO', 'VTI', 'VXUS', 'QQQ', 'DIA', 'IWM', 'BND', 'SGOV', 'SHY', 'TLT', 'GLD', 'BRK-B',
-  'AAPL', 'TSLA', 'NVDA', 'MSFT', 'AMZN', 'META', '^IRX', '^FVX', '^TNX',
+  'SPY', 'VOO', 'VTI', 'VXUS', 'QQQ', 'DIA', 'IWM', 'BND', 'SGOV', 'SHY', 'TLT', 'GLD', 'SCHD', 'BRK-B',
+  'LQD', 'MUB', 'SCHP', 'BNDX',
+  'AAPL', 'TSLA', 'NVDA', 'MSFT', 'AMZN', 'META', 'GOOGL', 'V', 'JPM', 'WMT', 'JNJ', 'COST', 'XOM',
+  'BTC-USD', 'ETH-USD', 'SOL-USD',
+  '^IRX', '^FVX', '^TNX',
 ];
-const TREASURY_YEAR = new Date().getFullYear();
-const TREASURY_URL = `https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/${TREASURY_YEAR}/all?type=daily_treasury_bill_rates&field_tdr_date_value=${TREASURY_YEAR}&page&_format=csv`;
+function treasuryUrl(year: number): string {
+  return `https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/${year}/all?type=daily_treasury_bill_rates&field_tdr_date_value=${year}&page&_format=csv`;
+}
 const SGOV_URL = 'https://www.ishares.com/us/products/314116/ishares-0-3-month-treasury-bond-etf';
 const TREASURY_TERMS = [
   { label: '4-week T-bill', days: 28, column: '4 WEEKS COUPON EQUIVALENT' },
@@ -38,17 +43,50 @@ interface YahooQuotePayload {
   closes: number[];
 }
 
-let treasuryRequest: Promise<TreasuryBillYield[]> | null = null;
+/** Yields move once a day, so a few hours of reuse costs nothing. */
+const TREASURY_CACHE_MS = 6 * 60 * 60 * 1000;
 
+let treasuryRequest: Promise<TreasuryBillYield[]> | null = null;
+let treasuryCachedAt = 0;
+
+/**
+ * Caches only *successful* fetches. The previous version cached the promise
+ * unconditionally, so a single Treasury outage returned `[]` and pinned that
+ * empty list for the rest of the process lifetime — which silently removed the
+ * whole Savings & Treasuries class (T-bills *and* the HYSA route that depends on
+ * these yields) from every search until the next deploy.
+ */
 export async function fetchTreasuryBillYields(): Promise<TreasuryBillYield[]> {
-  if (treasuryRequest) return treasuryRequest;
-  treasuryRequest = fetchTreasuryBillYieldsUncached();
-  return treasuryRequest;
+  if (treasuryRequest && Date.now() - treasuryCachedAt < TREASURY_CACHE_MS) return treasuryRequest;
+
+  const request = fetchTreasuryBillYieldsUncached();
+  treasuryRequest = request;
+  treasuryCachedAt = Date.now();
+
+  const yields = await request;
+  // Drop an empty result so the next caller retries instead of inheriting the failure.
+  if (yields.length === 0 && treasuryRequest === request) {
+    treasuryRequest = null;
+    treasuryCachedAt = 0;
+  }
+  return yields;
 }
 
+/**
+ * The year is resolved per call, not at module load: a long-lived worker that
+ * crossed New Year would otherwise keep asking for last year's file forever.
+ * Early January that file has no rows yet, so fall back to the prior year.
+ */
 async function fetchTreasuryBillYieldsUncached(): Promise<TreasuryBillYield[]> {
+  const thisYear = new Date().getFullYear();
+  const current = await fetchTreasuryBillYieldsForYear(thisYear);
+  return current.length > 0 ? current : fetchTreasuryBillYieldsForYear(thisYear - 1);
+}
+
+async function fetchTreasuryBillYieldsForYear(year: number): Promise<TreasuryBillYield[]> {
+  const url = treasuryUrl(year);
   try {
-    const response = await fetch(TREASURY_URL, { headers: { Accept: 'text/csv' } });
+    const response = await fetch(url, { headers: { Accept: 'text/csv' } });
     if (!response.ok) return [];
     const [headerLine, latestLine] = (await response.text()).trim().split(/\r?\n/);
     if (!headerLine || !latestLine) return [];
@@ -65,7 +103,7 @@ async function fetchTreasuryBillYieldsUncached(): Promise<TreasuryBillYield[]> {
         yieldLabel: `${term.label} coupon-equivalent yield`,
         yieldAsOf,
         yieldSource: 'U.S. Treasury',
-        yieldSourceUrl: TREASURY_URL,
+        yieldSourceUrl: url,
       }] : [];
     });
   } catch (error) {
@@ -74,7 +112,23 @@ async function fetchTreasuryBillYieldsUncached(): Promise<TreasuryBillYield[]> {
   }
 }
 
+/**
+ * Quotes are the slow, target-independent half of a route search, and nothing about
+ * them depends on the user's goal. Caching them lets the survey warm them minutes
+ * before the search that needs them — see useRoutePrefetch. The TTL is long enough to
+ * cover a walk through the funnel and short enough that a returning user gets fresh
+ * prices. Treasury yields keep their own cache above, which has an empty-result guard
+ * this one deliberately does not copy. Live portfolio prices come from
+ * fetchTrackedAssetQuotes, not here, so this TTL never staleness-bites a position.
+ */
+const QUOTE_TTL_MS = 10 * 60_000;
+const getStocks = createInFlightCache<StockQuote[]>(QUOTE_TTL_MS);
+
 export async function fetchStocks(): Promise<StockQuote[]> {
+  return getStocks(fetchStocksUncached, 'quotes:stocks');
+}
+
+async function fetchStocksUncached(): Promise<StockQuote[]> {
   const [yieldResults, quoteResults] = await Promise.all([
     Promise.allSettled([fetchTreasuryYieldFact(), fetchSgovYieldFact()]),
     Promise.allSettled(STOCK_SYMBOLS.map(fetchStockQuote)),
@@ -87,6 +141,21 @@ export async function fetchStocks(): Promise<StockQuote[]> {
     .map((result) => result.status === 'fulfilled' ? result.value : null)
     .filter((quote): quote is StockQuote => quote !== null)
     .map((quote) => ({ ...quote, ...yields.get(quote.symbol) }));
+}
+
+/**
+ * Quotes for an arbitrary symbol list, for on-demand lookups (route search) rather
+ * than the fixed daily universe. No treasury yield facts are attached — those belong
+ * to the two symbols fetchStocks knows about, and a search hit is priced from its own
+ * volatility. A symbol Yahoo cannot resolve is dropped, never faked.
+ */
+export async function fetchStockQuotes(symbols: string[]): Promise<StockQuote[]> {
+  const wanted = [...new Set(symbols.filter(Boolean))];
+  if (wanted.length === 0) return [];
+  const settled = await Promise.allSettled(wanted.map(fetchStockQuote));
+  return settled
+    .map((result) => (result.status === 'fulfilled' ? result.value : null))
+    .filter((quote): quote is StockQuote => quote !== null);
 }
 
 async function fetchStockQuote(symbol: string): Promise<StockQuote | null> {

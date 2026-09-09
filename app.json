@@ -1,23 +1,24 @@
 {
   "expo": {
-    "name": "polyprofit",
+    "name": "Pathey",
+    "description": "Not advice. Just the math.",
     "slug": "polyprofit",
     "owner": "robbiehey",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "polyprofit",
+    "scheme": ["pathey", "polyprofit"],
     "userInterfaceStyle": "automatic",
     "ios": {
       "bundleIdentifier": "com.robbiehey.polyprofit",
-      "buildNumber": "1",
+      "buildNumber": "25",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#22C55E",
+        "backgroundColor": "#F7F3EC",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -25,7 +26,7 @@
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "output": "static",
+      "output": "server",
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
@@ -33,7 +34,7 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#141312",
           "android": {
             "image": "./assets/images/splash-icon.png",
             "imageWidth": 76
@@ -41,7 +42,13 @@
         }
       ],
       "expo-secure-store",
-      "expo-notifications"
+      "expo-notifications",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Use Face ID to quickly and securely unlock Pathey."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

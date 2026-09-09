@@ -1,9 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { Animated, Easing, View } from 'react-native';
 
+import { BrandMark } from '@/components/ui/BrandMark';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+
+/** Corner radius of a 72pt mark tile — matches the rounding BrandMark draws. */
+const MARK_RADIUS = 72 * 0.2237;
 
 const ANALYZE_STAGES = [
   'Reading live market data…',
@@ -61,12 +65,8 @@ export function AnalyzingLoader(): React.ReactElement {
             transform: [{ scale: ringScale }], opacity: ringOpacity,
           }}
         />
-        <Animated.View
-          style={{
-            width: 72, height: 72, borderRadius: Radius.xl, backgroundColor: Brand[500],
-            alignItems: 'center', justifyContent: 'center', transform: [{ scale }], ...Shadow.float,
-          }}>
-          <ThemedText style={{ fontSize: 38, fontWeight: '900', color: '#06140C' }}>$</ThemedText>
+        <Animated.View style={{ borderRadius: MARK_RADIUS, transform: [{ scale }], ...Shadow.float }}>
+          <BrandMark size={72} />
         </Animated.View>
       </View>
 
@@ -93,7 +93,7 @@ export function AnalyzingLoader(): React.ReactElement {
 
 /** Branded full-screen loader with a pulsing logo mark. Used at boot + route generation. */
 export function BrandLoader({
-  title = 'PolyProfit',
+  title = 'Pathey',
   subtitle,
 }: {
   title?: string;
@@ -134,17 +134,8 @@ export function BrandLoader({
           }}
         />
         {/* logo mark */}
-        <Animated.View
-          style={{
-            width: 72,
-            height: 72,
-            borderRadius: Radius.xl,
-            backgroundColor: Brand[500],
-            alignItems: 'center',
-            justifyContent: 'center',
-            transform: [{ scale }],
-          }}>
-          <Animated.Text style={{ fontSize: 38, fontWeight: '900', color: '#06140C' }}>$</Animated.Text>
+        <Animated.View style={{ borderRadius: MARK_RADIUS, transform: [{ scale }] }}>
+          <BrandMark size={72} />
         </Animated.View>
       </View>
       <View style={{ alignItems: 'center', gap: 6 }}>

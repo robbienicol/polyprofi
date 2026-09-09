@@ -19,10 +19,12 @@ interface PlaybookPick {
   vehicle: string;
   probability: number;
 }
-export interface PlaybookCell {
+interface PlaybookCell {
   best: PlaybookPick;
   second: PlaybookPick;
 }
+
+const pct = (p: number) => (p < 1 ? '<1%' : `${p}%`);
 
 // Column order per row: [day, week, month, year, fiveYears]
 type Cell = [string, number]; // [vehicle, prob]
@@ -86,7 +88,7 @@ function timeframeToCol(timeframe: string): Col {
 }
 
 // Pick the smallest target bucket >= the needed return, so we never overstate odds.
-function targetBucket(returnPct: number): (typeof TARGETS)[number] {
+export function targetBucket(returnPct: number): (typeof TARGETS)[number] {
   for (const t of TARGETS) if (returnPct <= t) return t;
   return 500;
 }
@@ -123,15 +125,6 @@ export function getPlaybook(returnPct: number, timeframe: string): PlaybookCell 
   const [bv, bp] = row.best[col];
   const [sv, sp] = row.second[col];
   return { best: { vehicle: bv, probability: bp }, second: { vehicle: sv, probability: sp } };
-}
-
-const pct = (p: number) => (p < 1 ? '<1%' : `${p}%`);
-
-export function formatPlaybook(cell: PlaybookCell, returnPct: number, timeframeLabel: string): string {
-  return `For a ${returnPct.toFixed(1)}% return over ${timeframeLabel}, the math-calibrated vehicles are:
-  1) ${cell.best.vehicle} — ~${pct(cell.best.probability)} hit probability
-  2) ${cell.second.vehicle} — ~${pct(cell.second.probability)} hit probability
-These two are injected automatically by the app with fixed risk levels — do NOT output them yourself or invent your own version of them. Use them only as the bar your other picks must justify: anything riskier than these baselines needs a clearly higher probability or a real catalyst to earn a spot above them.`;
 }
 
 interface VehicleMeta {

@@ -3,14 +3,19 @@ import { ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
+import { CategoryScale } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
+/**
+ * What the search genuinely routes to — one entry per class with a builder behind it.
+ * Sports and Forex were listed here for a long time with nothing generating a route in
+ * either, which made this screen a list of promises rather than of coverage.
+ */
 const CATEGORIES = [
-  { emoji: '📈', name: 'Stocks & Options', desc: 'ETFs, covered calls, and low-risk options on blue-chip stocks.', color: '#22c55e' },
-  { emoji: '₿', name: 'Crypto', desc: 'Spot trades and momentum plays on BTC, ETH, and top altcoins.', color: '#f59e0b' },
-  { emoji: '⚽', name: 'Sports Betting', desc: 'Moneyline favorites, spread bets, and same-game parlays.', color: '#22c55e' },
-  { emoji: '🔮', name: 'Polymarket', desc: 'Prediction markets on politics, sports outcomes, and world events.', color: '#a855f7' },
-  { emoji: '💱', name: 'Forex', desc: 'Major currency pairs with tight spreads and high liquidity.', color: '#f97316' },
+  { emoji: '🏦', name: 'Savings & Treasuries', desc: 'T-bills and high-yield savings, at their stated contractual yield.', color: CategoryScale.slate },
+  { emoji: '📈', name: 'Stocks & ETFs', desc: 'Broad index funds and large, liquid single names.', color: CategoryScale.haze },
+  { emoji: '₿', name: 'Crypto', desc: 'The largest, most liquid coins, priced off their own volatility.', color: CategoryScale.sand },
+  { emoji: '🔮', name: 'Prediction markets', desc: 'Market-implied probabilities on politics, sports and world events.', color: CategoryScale.clay },
 ] as const;
 
 export default function LearnScreen(): React.ReactElement {
@@ -24,7 +29,7 @@ export default function LearnScreen(): React.ReactElement {
           <View className="items-center gap-2 pb-2">
             <ThemedText type="subtitle">How it works</ThemedText>
             <ThemedText type="small" themeColor="textSecondary" className="text-center" style={{ maxWidth: 300 }}>
-              Set a profit goal. PolyProfit uses AI to find the best routes across every market — sorted safest to riskiest.
+              Set a profit goal. Pathey uses AI to find the best routes across every market — sorted safest to riskiest.
             </ThemedText>
           </View>
 
@@ -54,7 +59,8 @@ export default function LearnScreen(): React.ReactElement {
           ))}
 
           <ThemedText type="small" themeColor="textSecondary" className="text-center" style={{ opacity: 0.5 }}>
-            PolyProfit is for entertainment purposes only. Always research before investing or betting real money.
+            Pathey is informational only and does not give personalized advice. Always do your own
+            research before investing real money.
           </ThemedText>
         </ScrollView>
       </SafeAreaView>

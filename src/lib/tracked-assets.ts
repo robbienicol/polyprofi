@@ -73,3 +73,20 @@ export function trackedAssetFields(route: Route): {
     maturesInDays: route.maturesInDays,
   };
 }
+
+export function trackedPositionFields(route: Route, amount: number, openedAt: string): ReturnType<typeof trackedAssetFields> & {
+  assetQuantity?: number;
+  costBasis: number;
+  positionOpenedAt: string;
+} {
+  const asset = trackedAssetFields(route);
+  const costBasis = Math.max(0, amount);
+  return {
+    ...asset,
+    assetQuantity: asset.assetEntryPrice && asset.assetEntryPrice > 0
+      ? costBasis / asset.assetEntryPrice
+      : undefined,
+    costBasis,
+    positionOpenedAt: openedAt,
+  };
+}
