@@ -14,6 +14,7 @@ import { MarketComparisonCard } from "@/components/routes/MarketComparisonCard";
 import { RelatedRoutes } from "@/components/routes/RelatedRoutes";
 import { RouteCoach } from "@/components/routes/RouteCoach";
 import { RouteOpportunityCard } from "@/components/routes/RouteOpportunityCard";
+import { TrackRecordCard } from "@/components/routes/TrackRecordCard";
 import { ScoreMathCard } from "@/components/routes/ScoreMathCard";
 import { TrackRouteForm } from "@/components/routes/TrackRouteForm";
 import { ThemedText } from "@/components/themed-text";
@@ -30,6 +31,7 @@ import {
   tradeVenuesForRoute,
 } from "@/lib/route-actions";
 import type { TradeVenue } from "@/lib/route-actions";
+import { primaryCalibration, routeCalibrations } from "@/lib/route-calibration";
 import { goalEffectivenessScore } from "@/lib/score";
 import { rescoreForStake, stakeNeededForReturn } from "@/lib/stake-rescore";
 import { trackedPositionFields } from "@/lib/tracked-assets";
@@ -165,6 +167,12 @@ export default function RouteDetailScreen(): React.ReactElement {
     comparison,
   );
 
+  // How markets priced like this one have actually resolved. Empty for anything that
+  // is not a prediction market, and for a pick whose cohort is too thin to report —
+  // both ordinary, and both mean the card simply does not appear.
+  const calibrations = routeCalibrations(route, comparison);
+  const primaryTrackRecord = primaryCalibration(calibrations, destination);
+
   function beginAcquire(): void {
     if (added || isTracking) return;
     setAcquireAmount(String(stake));
@@ -292,6 +300,10 @@ export default function RouteDetailScreen(): React.ReactElement {
           ) : null}
 
           {comparison ? <MarketComparisonCard comparison={comparison} /> : null}
+
+          {primaryTrackRecord ? (
+            <TrackRecordCard primary={primaryTrackRecord} venues={calibrations} />
+          ) : null}
 
           {/* The score, and the arithmetic behind it. This is the screen where money
               gets committed, so the weighting the number came from is shown here
@@ -451,6 +463,13 @@ function TradeLink({
           }}
         >
           {venue.priceCents}¢{venue.cheapest ? " · cheapest" : ""}
+        </ThemedText>
+      ) : null}
+      {venue.feeCents != null ? (
+        <ThemedText
+          style={{ fontSize: 10, color: theme.textTertiary, fontVariant: ["tabular-nums"] }}
+        >
+          {venue.feeCents > 0 ? `+${venue.feeCents}¢ fee` : "no fee"}
         </ThemedText>
       ) : null}
     </Pressable>

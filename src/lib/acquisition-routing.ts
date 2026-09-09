@@ -124,6 +124,12 @@ export interface TradeVenue {
    * comparable quote — a single-venue route has nothing to be cheap or expensive against.
    */
   priceCents: number | null;
+  /**
+   * Estimated fee already folded into `priceCents`, broken back out for display, in cents
+   * per contract. Null alongside `priceCents`. Zero is a real value (Polymarket has none),
+   * not "unknown" — always render it rather than hiding a zero-fee line.
+   */
+  feeCents: number | null;
   /** Cheapest venue carrying a quote. Never set when there is only one venue, or on a tie. */
   cheapest: boolean;
 }
@@ -149,11 +155,13 @@ export function tradeVenuesForRoute(
   comparison: {
     polymarketPrice: number;
     kalshiPrice: number;
+    polymarketRawPrice: number;
+    kalshiRawPrice: number;
     betterPlatform: 'polymarket' | 'kalshi' | 'tie';
   } | null,
 ): TradeVenue[] {
   const single = (destination: TradeDestination): TradeVenue[] => [
-    { destination, label: tradeDestinationLabel(destination), priceCents: null, cheapest: false },
+    { destination, label: tradeDestinationLabel(destination), priceCents: null, feeCents: null, cheapest: false },
   ];
   if (!comparison || nativeVenue(route) !== 'polymarket') {
     return single(preferredTradeDestination(route, preferredPlatforms));
@@ -163,12 +171,14 @@ export function tradeVenuesForRoute(
       destination: 'polymarket',
       label: tradeDestinationLabel('polymarket'),
       priceCents: Math.round(comparison.polymarketPrice * 100),
+      feeCents: Math.round((comparison.polymarketPrice - comparison.polymarketRawPrice) * 100),
       cheapest: comparison.betterPlatform === 'polymarket',
     },
     {
       destination: 'kalshi',
       label: tradeDestinationLabel('kalshi'),
       priceCents: Math.round(comparison.kalshiPrice * 100),
+      feeCents: Math.round((comparison.kalshiPrice - comparison.kalshiRawPrice) * 100),
       cheapest: comparison.betterPlatform === 'kalshi',
     },
   ];
@@ -255,7 +265,10 @@ export function __selfCheck(): void {
   );
 
   // ── venue list ────────────────────────────────────────────────────────────
-  const cheaperOnKalshi = { polymarketPrice: 0.62, kalshiPrice: 0.59, betterPlatform: 'kalshi' as const };
+  const cheaperOnKalshi = {
+    polymarketPrice: 0.62, kalshiPrice: 0.59,
+    polymarketRawPrice: 0.62, kalshiRawPrice: 0.57, betterPlatform: 'kalshi' as const,
+  };
   const bothVenues = tradeVenuesForRoute(prediction, undefined, cheaperOnKalshi);
   console.assert(
     bothVenues.length === 2 && bothVenues[0].destination === 'kalshi' && bothVenues[0].cheapest,
@@ -266,11 +279,16 @@ export function __selfCheck(): void {
     'each venue reports its own net price in cents',
   );
   console.assert(
+    bothVenues[0].feeCents === 2 && bothVenues[1].feeCents === 0,
+    'the fee folded into a venue\'s net price is broken back out for display',
+  );
+  console.assert(
     bothVenues.filter((venue) => venue.cheapest).length === 1,
     'exactly one venue is flagged cheapest',
   );
   const tied = tradeVenuesForRoute(prediction, undefined, {
-    polymarketPrice: 0.6, kalshiPrice: 0.6, betterPlatform: 'tie',
+    polymarketPrice: 0.6, kalshiPrice: 0.6,
+    polymarketRawPrice: 0.6, kalshiRawPrice: 0.6, betterPlatform: 'tie',
   });
   console.assert(
     tied.length === 2 && tied[0].destination === 'polymarket' && tied.every((venue) => !venue.cheapest),
