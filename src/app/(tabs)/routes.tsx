@@ -14,7 +14,6 @@ import { useSavingsGoal } from '@/api/hooks/useSavingsGoal';
 import { useTrackedBets } from '@/api/hooks/useTrackedBets';
 import { RouteFilters } from '@/components/routes/RouteFilters';
 import { RouteSearchBar } from '@/components/routes/RouteSearchBar';
-import { ScoreWeightSliders } from '@/components/routes/ScoreWeightSliders';
 import { RoutesHeader } from '@/components/routes/RoutesHeader';
 import { TrackRouteForm } from '@/components/routes/TrackRouteForm';
 import { RouteCard } from '@/components/molecules/RouteCard';
@@ -28,10 +27,8 @@ import { scheduleWeeklyReminder } from '@/lib/notifications';
 import { parseEntryPrice } from '@/lib/parse-bet-line';
 import { investmentSliderMaximum } from '@/lib/quiz-profile';
 import { openTradeDestination, preferredTradeDestination, tradeDestinationLabel } from '@/lib/route-actions';
-import { activeKeyword, assetSectionsActive, buildRouteResults, groupRoutesByAssetClass, groupRoutesByChance, predictionFacetsActive, resolveInvestmentAmount, routeMatchesKeyword, searchOutcome, shouldOfferCapitalSafe } from '@/lib/route-results';
-import type { RouteAssetSection, RouteFilters as Filters } from '@/lib/route-results';
-import { DEFAULT_PREFERENCES } from '@/lib/preferences';
-import { normalizeScoreWeights, SCORE_WEIGHT_KEYS, type ScoreWeights } from '@/lib/score';
+import { activeKeyword, buildRouteResults, groupRoutesByChance, predictionFacetsActive, resolveInvestmentAmount, routeMatchesKeyword, searchOutcome, shouldOfferCapitalSafe } from '@/lib/route-results';
+import type { RouteFilters as Filters } from '@/lib/route-results';
 import { rescoreForStake } from '@/lib/stake-rescore';
 import { trackedPositionFields } from '@/lib/tracked-assets';
 import type { Route, RouteParams, SavedRoutesBatch } from '@/types/routes';
@@ -56,7 +53,7 @@ export default function RoutesScreen(): React.ReactElement {
   const { quizAnswers, isLoading: quizLoading } = useQuizAnswers();
   const { history, saveGeneratedRoutes } = useSavedRoutes();
   const { setPreview } = useRoutePreview();
-  const { preferences, update: updatePreferences } = usePreferences();
+  const { preferences } = usePreferences();
   const { allGoals, confirmGoal } = useSavingsGoal();
   const { trackBet } = useTrackedBets();
 
@@ -151,16 +148,23 @@ export default function RoutesScreen(): React.ReactElement {
 
   // The user's own weighting of the four score components. Held in preferences, not
   // screen state: someone who has said they cannot afford to lose the stake means it
-  // on their next search too.
+  // on their next search too. Editing it lives in Settings now — this screen only
+  // reads it to rank the list.
   const scoreWeights = preferences.scoreWeights;
-  const defaultWeights = DEFAULT_PREFERENCES.scoreWeights;
-  const usingDefaultWeights = SCORE_WEIGHT_KEYS.every((key) => scoreWeights[key] === defaultWeights[key]);
-  const [showScoreWeights, setShowScoreWeights] = useState(false);
 
-  function setScoreWeights(next: ScoreWeights): void {
-    updatePreferences({ scoreWeights: next });
-    setVisibleCount(30);
-  }
+  // Collapsed by default so the list is what's on screen once loading ends,
+  // not a stack of controls above it. The count on the toggle is what tells
+  // someone their filters are still applied while it's closed.
+  const [showFilters, setShowFilters] = useState(false);
+  const activeFilterCount = [
+    filters.category !== null,
+    filters.lossProfile !== null,
+    filters.minimumProbability > 0,
+    filters.sort !== 'score',
+    filters.predictionTopic !== null,
+    filters.maxDaysToResolve != null,
+    filters.groupByChance,
+  ].filter(Boolean).length;
 
   // Memoised: this rescores, scores and ranks the entire pool, and it used to run on
   // every render — including every event the investment slider fires while being
@@ -346,22 +350,15 @@ export default function RoutesScreen(): React.ReactElement {
           pulledInCount={searchRoutes.length}
         />
         {ranked.length > 0 && (
-          <RouteFilters
-            filters={filters}
-            categories={ranked.map((route) => route.category)}
-            onChange={setFiltersAndReset}
-          />
-        )}
-        {ranked.length > 0 && (
           <>
             <Pressable
-              onPress={() => setShowScoreWeights((open) => !open)}
+              onPress={() => setShowFilters((open) => !open)}
               accessibilityRole="button"
               className="flex-row items-center justify-between active:opacity-70"
               style={{
                 borderRadius: Radius.lg,
                 borderWidth: 1,
-                borderColor: usingDefaultWeights ? theme.border : Brand[500] + '3D',
+                borderColor: activeFilterCount === 0 ? theme.border : Brand[500] + '3D',
                 backgroundColor: theme.backgroundElement,
                 paddingHorizontal: 14,
                 paddingVertical: 12,
@@ -369,24 +366,23 @@ export default function RoutesScreen(): React.ReactElement {
               }}>
               <View className="flex-1">
                 <ThemedText style={{ fontSize: 13, fontWeight: '800', color: theme.text }}>
-                  What makes a good route for you
+                  Filters
                 </ThemedText>
                 <ThemedText style={{ fontSize: 11, color: theme.textSecondary, marginTop: 2 }}>
-                  {usingDefaultWeights
-                    ? 'Ranked on chance, safety, cash needed and speed — set how much each counts'
-                    : scoreWeightSummary(scoreWeights)}
+                  {activeFilterCount === 0
+                    ? 'Asset class, chance, sort and more'
+                    : `${activeFilterCount} filter${activeFilterCount === 1 ? '' : 's'} active`}
                 </ThemedText>
               </View>
               <ThemedText style={{ fontSize: 13, fontWeight: '800', color: Brand[500] }}>
-                {showScoreWeights ? 'Done' : 'Adjust'}
+                {showFilters ? 'Done' : 'Edit'}
               </ThemedText>
             </Pressable>
-            {showScoreWeights ? (
-              <ScoreWeightSliders
-                weights={scoreWeights}
-                onChange={setScoreWeights}
-                onReset={() => setScoreWeights(defaultWeights)}
-                isDefault={usingDefaultWeights}
+            {showFilters ? (
+              <RouteFilters
+                filters={filters}
+                categories={ranked.map((route) => route.category)}
+                onChange={setFiltersAndReset}
               />
             ) : null}
           </>
@@ -406,14 +402,7 @@ export default function RoutesScreen(): React.ReactElement {
               {group.routes.map(renderRoute)}
             </View>
           ))
-          : assetSectionsActive(filters)
-            ? groupRoutesByAssetClass(visibleRoutes).map((section) => (
-              <View key={section.assetClass} className="gap-3">
-                <AssetSectionHeader section={section} />
-                {section.routes.map(renderRoute)}
-              </View>
-            ))
-            : visibleRoutes.map(renderRoute)}
+          : visibleRoutes.map(renderRoute)}
         {visibleCount < filtered.length && (
           <Pressable onPress={() => setVisibleCount((count) => count + 30)} className="items-center active:opacity-70" style={{ borderRadius: Radius.md, paddingVertical: 12, borderWidth: 1, borderColor: theme.border, backgroundColor: theme.backgroundElement }}>
             <ThemedText style={{ fontSize: 13, fontWeight: '800', color: Brand[500] }}>Show 30 more · {filtered.length - visibleCount} remaining</ThemedText>
@@ -485,38 +474,6 @@ function CapitalSafeNudge({ target, amount, onRaiseInvestment }: {
           Invest up to ${amount.toLocaleString()}
         </ThemedText>
       </Pressable>
-    </View>
-  );
-}
-
-/**
- * Header for one asset-class section.
- *
- * The list is sectioned rather than blended so the answer it gives reads as "here are
- * your options in each kind of market" instead of "here is our top pick" — which, on a
- * mixed ranking, can be a prediction-market contract sitting above every fund and bill.
- * The note under the label says how that class's probability is arrived at, so a
- * market-implied number is never mistaken for a modelled one, or the reverse.
- */
-function AssetSectionHeader({ section }: { section: RouteAssetSection }): React.ReactElement {
-  const theme = useTheme();
-
-  return (
-    <View style={{ gap: 4, paddingHorizontal: 4, paddingTop: 10 }}>
-      <View className="flex-row items-center" style={{ gap: 8 }}>
-        <ThemedText style={{ fontSize: 13, fontWeight: '900', color: theme.text, letterSpacing: -0.2 }}>
-          {section.label}
-        </ThemedText>
-        <View style={{ flex: 1, height: 1, backgroundColor: theme.border }} />
-        <ThemedText style={{ fontSize: 11, color: theme.textTertiary, fontVariant: ['tabular-nums'] }}>
-          {section.routes.length} route{section.routes.length === 1 ? '' : 's'}
-        </ThemedText>
-      </View>
-      {section.note ? (
-        <ThemedText style={{ fontSize: 11, lineHeight: 16, color: theme.textTertiary }}>
-          {section.note}
-        </ThemedText>
-      ) : null}
     </View>
   );
 }
@@ -633,22 +590,6 @@ function EmptyFiltered({ filters, unlockAmount, onRaiseInvestment, onClear }: {
       </Pressable>
     </View>
   );
-}
-
-/** The weighting in one line, for the collapsed row: what the user leaned into. */
-function scoreWeightSummary(weights: ScoreWeights): string {
-  const labels: Record<keyof ScoreWeights, string> = {
-    reliability: 'chance',
-    principalProtection: 'safety',
-    capitalEfficiency: 'less cash',
-    timeEfficiency: 'speed',
-  };
-  const shares = normalizeScoreWeights(weights);
-  const ordered = [...SCORE_WEIGHT_KEYS].sort((a, b) => shares[b] - shares[a]);
-  return `Your weighting · ${ordered
-    .filter((key) => shares[key] > 0)
-    .map((key) => `${labels[key]} ${Math.round(shares[key] * 100)}%`)
-    .join(' · ')}`;
 }
 
 function timeframeLabel(timeframe: RouteParams['timeframe']): string {

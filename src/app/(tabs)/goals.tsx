@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Animated, Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -206,6 +206,11 @@ function GoalRow({
 }): React.ReactElement {
   const theme = useTheme();
   const money = useMoney();
+  const swipeableRef = useRef<Swipeable>(null);
+  // A tap that lands while the row is swiped open (or mid-close from the swipe
+  // release) must close it rather than open the goal — otherwise the same
+  // press that was aimed at Delete falls through to the card underneath.
+  const openRef = useRef(false);
 
   const netGain = progress?.netGain ?? 0;
   const staked = progress?.staked ?? 0;
@@ -218,14 +223,23 @@ function GoalRow({
 
   return (
     <Swipeable
+      ref={swipeableRef}
       renderRightActions={(_progress, dragX) => (
         <SwipeDeleteAction dragX={dragX} onPress={onSwipeDelete} />
       )}
       overshootRight={false}
       rightThreshold={40}
+      onSwipeableWillOpen={() => { openRef.current = true; }}
+      onSwipeableClose={() => { openRef.current = false; }}
       containerStyle={{ marginBottom: 0 }}>
       <Pressable
-        onPress={onPress}
+        onPress={() => {
+          if (openRef.current) {
+            swipeableRef.current?.close();
+            return;
+          }
+          onPress();
+        }}
         accessibilityRole="button"
         accessibilityLabel={
           openEnded

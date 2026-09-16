@@ -10,6 +10,7 @@ import { useBiometricLock } from '@/api/hooks/useBiometricLock';
 import { useDeleteAccount } from '@/api/hooks/useDeleteAccount';
 import { usePreferences } from '@/api/hooks/usePreferences';
 import { useSavingsGoal } from '@/api/hooks/useSavingsGoal';
+import { ScoreWeightSliders } from '@/components/routes/ScoreWeightSliders';
 import { ThemedText } from '@/components/themed-text';
 import {
   SettingsChoiceRow,
@@ -18,10 +19,12 @@ import {
   SettingsSwitchRow,
 } from '@/components/ui/settings';
 import { Brand, OnBrand, Radius, Semantic, Shadow } from '@/constants/theme';
+import { useDevSeedDemoData } from '@/hooks/use-dev-seed-demo-data';
 import { useTheme } from '@/hooks/use-theme';
 import { requestAppRating } from '@/lib/app-rating';
 import { requestNotificationPermission, syncWeeklyReminder } from '@/lib/notifications';
-import { ACQUISITION_PLATFORMS, CURRENCIES, currencyMeta, type CurrencyCode } from '@/lib/preferences';
+import { ACQUISITION_PLATFORMS, CURRENCIES, currencyMeta, DEFAULT_PREFERENCES, type CurrencyCode } from '@/lib/preferences';
+import { normalizeScoreWeights, SCORE_WEIGHT_KEYS, type ScoreWeights } from '@/lib/score';
 import type { AcquisitionPlatform } from '@/types/bets';
 
 const SUPPORT_EMAIL = 'team@usepathey.com';
@@ -46,6 +49,11 @@ export default function SettingsScreen(): React.ReactElement {
   const { deleteAccount, isDeleting } = useDeleteAccount();
   const [deleteError, setDeleteError] = useState('');
   const [currencyOpen, setCurrencyOpen] = useState(false);
+  const [showScoreWeights, setShowScoreWeights] = useState(false);
+  const usingDefaultScoreWeights = SCORE_WEIGHT_KEYS.every(
+    (key) => preferences.scoreWeights[key] === DEFAULT_PREFERENCES.scoreWeights[key]
+  );
+  const devSeed = useDevSeedDemoData();
 
   const togglePlatform = useCallback(
     (platform: AcquisitionPlatform, enabled: boolean) => {
@@ -222,13 +230,6 @@ export default function SettingsScreen(): React.ReactElement {
                 onSelect={(currency) => update({ currency })}
               />
             ) : null}
-            <SettingsSwitchRow
-              icon="🛡"
-              label="Conservative projections"
-              description="Assume stocks & crypto return 0% in portfolio math"
-              value={preferences.conservativeProjections}
-              onValueChange={(conservativeProjections) => update({ conservativeProjections })}
-            />
             <SettingsRow
               icon={goals[0]?.emoji ?? '🎯'}
               label="Goals"
@@ -262,6 +263,37 @@ export default function SettingsScreen(): React.ReactElement {
                 onValueChange={(next) => togglePlatform(platform.value, next)}
               />
             ))}
+          </SettingsSection>
+
+          {/* Ranking */}
+          <SettingsSection
+            title="Ranking"
+            footer={
+              usingDefaultScoreWeights
+                ? 'Ranked on chance, safety, cash needed and speed — set how much each counts.'
+                : scoreWeightSummary(preferences.scoreWeights)
+            }>
+            <SettingsRow
+              icon="🎯"
+              label="What makes a good route for you"
+              chevron={false}
+              onPress={() => setShowScoreWeights((open) => !open)}
+              accessory={
+                <ThemedText style={{ fontSize: 13, fontWeight: '800', color: Brand[500] }}>
+                  {showScoreWeights ? 'Done' : 'Adjust'}
+                </ThemedText>
+              }
+            />
+            {showScoreWeights ? (
+              <View style={{ paddingHorizontal: 14, paddingBottom: 14 }}>
+                <ScoreWeightSliders
+                  weights={preferences.scoreWeights}
+                  onChange={(next) => update({ scoreWeights: next })}
+                  onReset={() => update({ scoreWeights: DEFAULT_PREFERENCES.scoreWeights })}
+                  isDefault={usingDefaultScoreWeights}
+                />
+              </View>
+            ) : null}
           </SettingsSection>
 
           {/* Notifications */}
@@ -306,6 +338,30 @@ export default function SettingsScreen(): React.ReactElement {
             <SettingsRow icon="ℹ️" label="Version" value={version} />
           </SettingsSection>
 
+          {/* Developer — never renders in a release build */}
+          {devSeed.available ? (
+            <SettingsSection
+              title="Developer"
+              footer="Fills this account with two goals and eight aged positions — some up, some down, some flat — so the used-for-weeks screens have something real to show.">
+              <SettingsRow
+                icon="🧪"
+                label="Seed demo data"
+                disabled={devSeed.loading}
+                chevron={false}
+                onPress={() => void devSeed.run()}
+                accessory={devSeed.loading ? <ActivityIndicator color={Brand[500]} /> : undefined}
+              />
+              <SettingsRow
+                icon="🧹"
+                label="Clear demo data"
+                disabled={devSeed.loading}
+                chevron={false}
+                onPress={() => void devSeed.clear()}
+                accessory={devSeed.loading ? <ActivityIndicator color={Brand[500]} /> : undefined}
+              />
+            </SettingsSection>
+          ) : null}
+
           {/* Danger zone */}
           <SettingsSection>
             <SettingsRow icon="🚪" label="Sign out" tone="danger" chevron={false} onPress={confirmSignOut} />
@@ -335,4 +391,20 @@ export default function SettingsScreen(): React.ReactElement {
       </SafeAreaView>
     </View>
   );
+}
+
+/** The weighting in one line, for the collapsed row: what the user leaned into. */
+function scoreWeightSummary(weights: ScoreWeights): string {
+  const labels: Record<keyof ScoreWeights, string> = {
+    reliability: 'chance',
+    principalProtection: 'safety',
+    capitalEfficiency: 'less cash',
+    timeEfficiency: 'speed',
+  };
+  const shares = normalizeScoreWeights(weights);
+  const ordered = [...SCORE_WEIGHT_KEYS].sort((a, b) => shares[b] - shares[a]);
+  return `Your weighting · ${ordered
+    .filter((key) => shares[key] > 0)
+    .map((key) => `${labels[key]} ${Math.round(shares[key] * 100)}%`)
+    .join(' · ')}`;
 }

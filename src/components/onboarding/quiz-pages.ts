@@ -25,7 +25,7 @@
 
 import type { PageCopy } from '@/components/onboarding/quiz-kit';
 import { deviceCountry } from '@/lib/device-region';
-import type { LossReaction, SurveyAnswers } from '@/lib/onboarding-profile';
+import type { SurveyAnswers } from '@/lib/onboarding-profile';
 
 export const PAGE_IDS = [
   'outcome',
@@ -33,25 +33,19 @@ export const PAGE_IDS = [
   // hit the number" is the app's whole pitch, so what they're open to hearing
   // about has to be asked before anything else is assumed about them.
   'markets',
-  // Only reachable by toggling "Cut spending" on above — see PAGE_VISIBLE.
-  // Optional like the notification ask even then: connecting is a real
-  // permission grant (real transaction history), so it gets its own page and
-  // its own skip rather than a question with a default answer.
-  'bank_connect',
   'experience',
-  'starting_point',
-  // The first of two working pauses. Four answers in is where a run starts to
+  // The first of two working pauses. Three answers in is where a run starts to
   // feel like a form, so this is where the app does something with them and says
   // so — every bar it fills is named after something they actually said.
   'profiling',
   'capital',
   'horizon',
-  'loss_reaction',
-  // Asked once loss_reaction is fresh rather than right after `markets`: people
-  // are far more certain about what they will not touch than about what they
-  // want, and that certainty is easier to reach after picturing a loss.
-  'avoid_markets',
-  'avoid_platforms',
+  // What routes to, and — folded in rather than a separate gated page — the
+  // one real permission grant in the whole run. Bank connect used to be its
+  // own page, reachable only by toggling "Cut spending" on above; now it is
+  // just the fourth card here, so connecting is never buried behind an
+  // unrelated answer.
+  'platforms',
   // The second pause, and the one doing real work on the markets just picked.
   'scan',
   'notifications',
@@ -60,19 +54,8 @@ export const PAGE_IDS = [
 
 export type PageId = (typeof PAGE_IDS)[number];
 
-/**
- * Pages that only make sense given an earlier answer. Anything not listed here
- * is always shown — this is the exception list, not an exhaustive Record, so a
- * newly added page defaults to visible without a decision at this call site.
- */
-const PAGE_VISIBLE: Partial<Record<PageId, (answers: SurveyAnswers) => boolean>> = {
-  // Asking to connect a bank when they never said they wanted to cut spending
-  // would be a non sequitur — the page only exists to make that question real.
-  bank_connect: (a) => a.markets.includes('Cut spending'),
-};
-
-export function isPageVisible(id: PageId, answers: SurveyAnswers): boolean {
-  return PAGE_VISIBLE[id]?.(answers) ?? true;
+export function isPageVisible(_id: PageId, _answers: SurveyAnswers): boolean {
+  return true;
 }
 
 /* ----------------------------------------------------------------- options */
@@ -135,20 +118,14 @@ export const SCAN_TASK_COUNT = 3;
  */
 export const CAN_CONTINUE: Record<PageId, (answers: SurveyAnswers) => boolean> = {
   outcome: (a) => Boolean(a.outcome),
-  // Like notifications, this page hides the shared footer and drives its own
-  // pair of buttons — connecting and skipping both advance directly.
-  bank_connect: () => true,
   experience: (a) => Boolean(a.experience),
-  starting_point: (a) => Boolean(a.ageRange),
   profiling: () => true,
   capital: (a) => Boolean(a.amount),
   horizon: (a) => Boolean(a.horizon),
-  loss_reaction: (a) => Boolean(a.lossReaction),
   // No market is a real answer: it means "show me everything".
   markets: () => true,
-  // Both exclusion pages are opt-in; skipping one means "nothing is off limits".
-  avoid_markets: () => true,
-  avoid_platforms: () => true,
+  // Every service starts added; nothing here is required to move on.
+  platforms: () => true,
   scan: () => true,
   notifications: () => true,
   review: () => true,
@@ -174,13 +151,6 @@ const EXPERIENCE_ACKS: Record<string, string> = {
   Professional: 'Understood. Raw pricing and sourcing, and we will stay out of your way.',
 };
 
-const LOSS_ACKS: Record<LossReaction, string> = {
-  sell: "Knowing that about yourself is worth a lot. We'll start where the return is fixed.",
-  hold: "That patience is an advantage. Slower picks suit you.",
-  buy: "You can sit through a swing, so the sharper end stays on the table.",
-  unsure: "Nobody knows until it happens. We'll show you the downside before you commit, not after.",
-};
-
 const HORIZON_ACKS: Record<string, string> = {
   weeks: "A few weeks is tight, so we'll be straight with you about what that costs.",
   months: 'A few months is a sensible window. That opens up most of what we price.',
@@ -203,7 +173,6 @@ export function buildPageCopy(
 ): Record<PageId, PageCopy> {
   const outcome = answers.outcome === SOMETHING_ELSE ? answers.outcomeOther.trim() : answers.outcome ?? '';
   const markets = phraseList([...answers.markets]);
-  const avoided = phraseList([...answers.avoidMarkets]);
 
   return {
     outcome: {
@@ -220,27 +189,12 @@ export function buildPageCopy(
       title: 'What ways do you\nwant to make it happen?',
       helper: 'Toggle on everything you want us to check — investing, saving, cutting spending, or all of it. Leave it blank and we check everything.',
     },
-    bank_connect: {
-      ack: markets ? `${markets}. Let's start with what's already yours.` : null,
-      title: "Want us to see what\nyou're already spending?",
-      helper: "Connect your bank and we'll weigh real spending — a subscription, a coffee habit — right alongside every market. Skip it and we'll only work from what you tell us.",
-    },
     experience: {
-      ack: answers.bankConnected
-        ? "Connected. We'll factor in what you actually spend."
-        : markets
-          ? `${markets}. Now every pick has something to aim at.`
-          : outcome ? `${outcome}. Now every pick has something to aim at.` : null,
+      ack: markets
+        ? `${markets}. Now every pick has something to aim at.`
+        : outcome ? `${outcome}. Now every pick has something to aim at.` : null,
       title: "What's your experience\nwith investing?",
       helper: 'There is no wrong answer here. It only sets how much we explain along the way.',
-    },
-    starting_point: {
-      ack: EXPERIENCE_ACKS[answers.experience ?? ''] ?? null,
-      title: 'A little about you.',
-      // The old helper promised that where you live decides what we show you.
-      // Nothing ever read the country, so the promise was not kept — and the
-      // device knows the answer anyway. Age is the only thing asked here now.
-      helper: 'One question, and only so the numbers we show you are pitched at the right stage.',
     },
     profiling: {
       // Named for what it is doing with their answers, not for the wait.
@@ -248,6 +202,7 @@ export function buildPageCopy(
       helper: null,
     },
     capital: {
+      ack: EXPERIENCE_ACKS[answers.experience ?? ''] ?? null,
       title: 'Roughly how much are\nyou looking to invest?',
       helper: 'A ballpark is fine, and no amount is too small. Think of it as a ceiling — we will never suggest more than this.',
     },
@@ -256,22 +211,10 @@ export function buildPageCopy(
       title: "What's your timeframe?",
       helper: 'This decides how long a pick is allowed to take before it pays out.',
     },
-    loss_reaction: {
+    platforms: {
       ack: HORIZON_ACKS[answers.horizon ?? ''] ?? null,
-      title: 'Your $500 drops to $400\novernight. What do you do?',
-      helper: "The honest answer is the useful one — this is the question that keeps you out of things you would regret.",
-    },
-    avoid_markets: {
-      ack: answers.lossReaction ? LOSS_ACKS[answers.lossReaction] : null,
-      title: 'Anything you would\nrather we left out?',
-      helper: 'We will never show you these, however well they score. Leave it blank if nothing is off limits.',
-    },
-    avoid_platforms: {
-      ack: avoided
-        ? `${avoided} is off the table. You will not see it again.`
-        : null,
-      title: 'Any apps you would\nrather not use?',
-      helper: 'Every pick has to be bought somewhere. We will only route you to the ones you keep.',
+      title: 'Where do you want\nus to look?',
+      helper: 'Every pick has to be bought somewhere. Drop any of these and we stop routing you there — and while you\'re here, connecting a bank weighs real spending alongside every pick.',
     },
     scan: {
       // "what X and Y looks like" would need the verb to agree with a list whose

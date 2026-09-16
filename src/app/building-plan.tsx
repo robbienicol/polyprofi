@@ -1,4 +1,4 @@
-import { useRouter, type Href } from 'expo-router';
+import { Stack, useFocusEffect, useRouter, type Href } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -121,10 +121,28 @@ export default function BuildingPlanScreen(): React.ReactElement {
     finishReplay();
   }, [answers, finishReplay, isLoading, profile.notifications, saveProfile, updatePreferences]);
 
-  const done = useCallback(() => router.replace('/plan-ready' as Href), [router]);
+  // Set the instant the bars finish, so a way back onto this screen after that
+  // — a swipe-back gesture reveals it briefly before the pop completes, the
+  // Android hardware back button, a browser back on web — finds the plan
+  // already built and moves straight on, instead of parking on a fully-loaded
+  // screen with no button and nothing left to wait for.
+  const finished = useRef(false);
+  const done = useCallback(() => {
+    finished.current = true;
+    router.replace('/plan-ready' as Href);
+  }, [router]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (finished.current) done();
+    }, [done])
+  );
 
   return (
     <View className="flex-1" style={{ backgroundColor: theme.background }}>
+      {/* This screen only ever runs forward on its own timer — swiping back off
+          it mid-loop would leave the write in flight with nothing on screen. */}
+      <Stack.Screen options={{ gestureEnabled: false }} />
       <OnboardingGlow />
       <SafeAreaView className="flex-1">
         {isLoading ? null : <BuildStages tasks={tasks} onDone={done} />}
