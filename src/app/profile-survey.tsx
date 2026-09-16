@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Animated, Easing, Pressable, ScrollView, TextInput, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useBankConnect } from '@/api/hooks/useBankConnect';
 import { useOnboardingProfile } from '@/api/hooks/useOnboardingProfile';
 import { useRoutePrefetch } from '@/api/hooks/useRoutePrefetch';
 import { OnboardingGlow } from '@/components/onboarding/OnboardingPreviews';
@@ -13,8 +14,9 @@ import {
   buildPageCopy,
   CAN_CONTINUE,
   EXPERIENCE_LEVELS,
+  isPageVisible,
   MARKETS,
-    OUTCOMES,
+  OUTCOMES,
   PAGE_IDS,
   profilingTasks,
   SCAN_TASK_COUNT,
@@ -25,14 +27,12 @@ import {
 } from '@/components/onboarding/quiz-pages';
 import { BrandMark } from '@/components/ui/BrandMark';
 import { ThemedText } from '@/components/themed-text';
-import { Brand, OnBrand, Radius, Shadow } from '@/constants/theme';
+import { Brand, OnBrand, Radius, Semantic, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import {
   EMPTY_ANSWERS,
   HORIZONS,
   LOSS_REACTIONS,
-  MOTIVATIONS,
-  type Motivation,
   type NotificationChoice,
   type SurveyAnswers,
 } from '@/lib/onboarding-profile';
@@ -110,13 +110,20 @@ function SurveyForm({
     }).start();
   }, [index, track, progress]);
 
+  // Skips past any page whose PAGE_VISIBLE predicate says it doesn't apply —
+  // bank_connect chief among them, reachable only by toggling "Cut spending"
+  // on the markets page just before it.
   const advance = useCallback(() => {
-    setIndex((current) => Math.min(PAGE_IDS.length - 1, current + 1));
-  }, []);
+    let next = index + 1;
+    while (next < PAGE_IDS.length - 1 && !isPageVisible(PAGE_IDS[next], answers)) next++;
+    setIndex(Math.min(PAGE_IDS.length - 1, next));
+  }, [index, answers]);
 
   const back = useCallback(() => {
-    setIndex((current) => Math.max(0, current - 1));
-  }, []);
+    let prev = index - 1;
+    while (prev > 0 && !isPageVisible(PAGE_IDS[prev], answers)) prev--;
+    setIndex(Math.max(0, prev));
+  }, [index, answers]);
 
   const nearby = useCallback((target: number) => Math.abs(target - index) <= RENDER_WINDOW, [index]);
 
@@ -124,15 +131,6 @@ function SurveyForm({
 
   const set = useCallback(<K extends keyof SurveyAnswers>(key: K, value: SurveyAnswers[K]) => {
     setAnswers((current) => ({ ...current, [key]: value }));
-  }, []);
-
-  const toggleMotivation = useCallback((value: Motivation) => {
-    setAnswers((current) => ({
-      ...current,
-      motivations: current.motivations.includes(value)
-        ? current.motivations.filter((item) => item !== value)
-        : [...current.motivations, value],
-    }));
   }, []);
 
   /** Multi-select toggle for any of the three string-list answers. */
@@ -183,7 +181,7 @@ function SurveyForm({
   const unlocked = CAN_CONTINUE[pageId](answers);
   const isLast = index === PAGE_IDS.length - 1;
   // Both loaders drive themselves; the notification page has its own two buttons.
-  const hidesFooter = pageId === 'scan' || pageId === 'profiling' || pageId === 'notifications';
+  const hidesFooter = pageId === 'scan' || pageId === 'profiling' || pageId === 'notifications' || pageId === 'bank_connect';
 
   const pageStyle = {
     width,
@@ -253,9 +251,13 @@ function SurveyForm({
                       active: pageIndex === index,
                       askingPermission,
                       set,
-                      toggleMotivation,
                       toggleIn,
                       onScanDone: advance,
+                      onBankConnected: () => {
+                        set('bankConnected', true);
+                        advance();
+                      },
+                      onSkipBankConnect: advance,
                       onEnableNotifications: enableNotifications,
                       onSkipNotifications: skipNotifications,
                       onJumpTo: setIndex,
@@ -304,33 +306,19 @@ interface BodyProps {
   active: boolean;
   askingPermission: boolean;
   set: <K extends keyof SurveyAnswers>(key: K, value: SurveyAnswers[K]) => void;
-  toggleMotivation: (value: Motivation) => void;
   toggleIn: (key: 'markets' | 'avoidMarkets' | 'avoidPlatforms', value: string) => void;
   onScanDone: () => void;
+  onBankConnected: () => void;
+  onSkipBankConnect: () => void;
   onEnableNotifications: () => void;
   onSkipNotifications: () => void;
   onJumpTo: (index: number) => void;
 }
 
 function renderPageBody(props: BodyProps): React.ReactElement | null {
-  const { id, answers, set, toggleMotivation, toggleIn } = props;
+  const { id, answers, set, toggleIn } = props;
 
   switch (id) {
-    case 'motivation':
-      return (
-        <Options>
-          {MOTIVATIONS.map((option) => (
-            <Choice
-              key={option}
-              label={option}
-              multi
-              selected={answers.motivations.includes(option)}
-              onPress={() => toggleMotivation(option)}
-            />
-          ))}
-        </Options>
-      );
-
     case 'outcome':
       return (
         <View style={{ gap: 12 }}>
@@ -354,6 +342,15 @@ function renderPageBody(props: BodyProps): React.ReactElement | null {
             />
           ) : null}
         </View>
+      );
+
+    case 'bank_connect':
+      return (
+        <BankConnectAsk
+          connected={answers.bankConnected}
+          onConnected={props.onBankConnected}
+          onSkip={props.onSkipBankConnect}
+        />
       );
 
     case 'experience':
@@ -598,6 +595,111 @@ function LoaderBars({ tasks, onDone }: { tasks: string[]; onDone: () => void }):
 }
 
 /**
+ * The bank-connect ask. Opens Plaid Link on "Connect", writes `bankConnected`
+ * and advances on a real success, and treats a plain user-closed-Link exit as
+ * neither — no error shown, button just goes back to idle.
+ *
+ * `connected` comes from the stored answer, not only from this mount's own
+ * hook state — someone who connects, backs up a page, and returns should see
+ * the done state rather than the connect button again.
+ */
+function BankConnectAsk({
+  connected,
+  onConnected,
+  onSkip,
+}: {
+  connected: boolean;
+  onConnected: () => void;
+  onSkip: () => void;
+}): React.ReactElement {
+  const theme = useTheme();
+  const bank = useBankConnect();
+  const done = connected || bank.connected;
+
+  useEffect(() => {
+    if (bank.connected) onConnected();
+  }, [bank.connected, onConnected]);
+
+  return (
+    <View style={{ flex: 1, gap: 16, justifyContent: 'space-between' }}>
+      <View style={{ gap: 10 }}>
+        <SpendPreviewRow emoji="☕" label="Coffee shops" note="12 trips this month" />
+        <SpendPreviewRow emoji="🎬" label="Netflix" note="$15.49/mo, easy to cancel" muted />
+      </View>
+
+      <View style={{ gap: 9 }}>
+        {bank.error ? (
+          <ThemedText style={{ fontSize: 12, color: Semantic.negative, textAlign: 'center' }}>
+            {bank.error}
+          </ThemedText>
+        ) : null}
+        <Pressable
+          onPress={() => void bank.connect()}
+          disabled={bank.connecting || done}
+          accessibilityRole="button"
+          className="py-4 items-center active:opacity-85"
+          style={{
+            borderRadius: Radius.lg,
+            backgroundColor: Brand[500],
+            opacity: bank.connecting || done ? 0.6 : 1,
+            ...Shadow.card,
+          }}>
+          <ThemedText style={{ fontSize: 16, fontWeight: '800', color: OnBrand }}>
+            {done ? 'Connected ✓' : bank.connecting ? 'Connecting…' : 'Connect my bank'}
+          </ThemedText>
+        </Pressable>
+        {!done ? (
+          <Pressable
+            onPress={onSkip}
+            disabled={bank.connecting}
+            accessibilityRole="button"
+            className="py-3 items-center active:opacity-60">
+            <ThemedText style={{ fontSize: 14, fontWeight: '700', color: theme.textTertiary }}>
+              I&apos;ll do this later
+            </ThemedText>
+          </Pressable>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+/** One row of the "here's what we'd catch" preview on the bank-connect page. */
+function SpendPreviewRow({
+  emoji,
+  label,
+  note,
+  muted,
+}: {
+  emoji: string;
+  label: string;
+  note: string;
+  muted?: boolean;
+}): React.ReactElement {
+  const theme = useTheme();
+  return (
+    <View
+      className="flex-row items-center"
+      style={{
+        gap: 11,
+        padding: 12,
+        borderRadius: Radius.lg,
+        backgroundColor: theme.backgroundElevated,
+        borderWidth: 1,
+        borderColor: theme.border,
+        opacity: muted ? 0.7 : 1,
+        ...Shadow.card,
+      }}>
+      <ThemedText style={{ fontSize: 20 }}>{emoji}</ThemedText>
+      <View style={{ flex: 1, gap: 1 }}>
+        <ThemedText style={{ fontSize: 13, fontWeight: '800', color: theme.text }}>{label}</ThemedText>
+        <ThemedText style={{ fontSize: 11.5, color: theme.textSecondary }}>{note}</ThemedText>
+      </View>
+    </View>
+  );
+}
+
+/**
  * The permission ask. It shows the actual banner rather than describing one, so
  * what is being agreed to is the thing that will really arrive.
  */
@@ -688,12 +790,17 @@ function ReviewPage({
   const theme = useTheme();
 
   const rows: { label: string; value: string; page: PageId }[] = [
-    { label: 'Why', value: answers.motivations.join(', ') || '—', page: 'motivation' },
     {
       label: 'Goal',
       value: (answers.outcome === SOMETHING_ELSE ? answers.outcomeOther.trim() : answers.outcome) || '—',
       page: 'outcome',
     },
+    { label: 'Ways', value: answers.markets.join(', ') || 'Everything', page: 'markets' },
+    // Only a real row when the bank_connect page was actually reachable —
+    // otherwise this points at a page the quiz itself skipped past.
+    ...(answers.markets.includes('Cut spending')
+      ? [{ label: 'Bank', value: answers.bankConnected ? 'Connected' : 'Not connected', page: 'bank_connect' as const }]
+      : []),
     { label: 'Experience', value: answers.experience || '—', page: 'experience' },
     { label: 'Can put in', value: answers.amount || '—', page: 'capital' },
     {
@@ -706,7 +813,6 @@ function ReviewPage({
       value: LOSS_REACTIONS.find((item) => item.value === answers.lossReaction)?.label ?? '—',
       page: 'loss_reaction',
     },
-    { label: 'Markets', value: answers.markets.join(', ') || 'Everything', page: 'markets' },
     {
       label: 'Never show',
       value: [...answers.avoidMarkets, ...platformLabels(answers.avoidPlatforms)].join(', ') || 'Nothing ruled out',

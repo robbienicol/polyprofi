@@ -15,6 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useOnboarding } from "@/api/hooks/useOnboarding";
 import { useOnboardingProfile } from "@/api/hooks/useOnboardingProfile";
+import { BrandMark } from "@/components/ui/BrandMark";
 import {
   OnboardingGlow,
   renderOnboardingPreview,
@@ -212,26 +213,7 @@ function OnboardingCarousel({ initialName }: { initialName: string }): React.Rea
                     ←
                   </ThemedText>
                 </Pressable>
-                <View
-                  style={{
-                    width: 26,
-                    height: 26,
-                    borderRadius: Radius.sm,
-                    backgroundColor: Brand[500],
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  <ThemedText
-                    style={{
-                      fontSize: 14,
-                      fontWeight: "900",
-                      color: OnBrand,
-                    }}
-                  >
-                    $
-                  </ThemedText>
-                </View>
+                <BrandMark size={26} />
                 <ThemedText
                   style={{
                     fontSize: 15,
@@ -535,12 +517,6 @@ function WelcomeSlide({
     <View className="flex-1 justify-center" style={{ gap: short ? 20 : 28 }}>
       <Animated.View
         style={{
-          width: short ? 62 : 74,
-          height: short ? 62 : 74,
-          borderRadius: Radius.xl,
-          backgroundColor: Brand[500],
-          alignItems: "center",
-          justifyContent: "center",
           opacity: mark,
           transform: [
             {
@@ -550,18 +526,11 @@ function WelcomeSlide({
               }),
             },
           ],
+          borderRadius: Radius.xl,
           ...Shadow.float,
         }}
       >
-        <ThemedText
-          style={{
-            fontSize: short ? 32 : 38,
-            fontWeight: "900",
-            color: OnBrand,
-          }}
-        >
-          $
-        </ThemedText>
+        <BrandMark size={short ? 62 : 74} />
       </Animated.View>
 
       <View style={{ gap: 10 }}>

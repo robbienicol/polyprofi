@@ -158,7 +158,7 @@ export function groupRoutesByChance(routes: Route[]): RouteGroup[] {
  * contract sitting at the top of a mixed list reads as "our top pick", where the honest
  * framing is "here is the best of each kind". Ranking is preserved *within* a section.
  */
-export type RouteAssetClass = 'cash' | 'funds' | 'crypto' | 'other' | 'prediction';
+export type RouteAssetClass = 'cuts' | 'cash' | 'funds' | 'crypto' | 'other' | 'prediction';
 
 export interface RouteAssetSection {
   assetClass: RouteAssetClass;
@@ -169,10 +169,17 @@ export interface RouteAssetSection {
 }
 
 /**
- * Section order, safest instrument class first. Prediction markets sit last on purpose —
- * not hidden, but never the thing the list opens with.
+ * Section order, safest first — a spending cut isn't an instrument at all, but it beats
+ * every one of them on safety (nothing at risk) and cost (nothing put down), so it opens
+ * the list rather than getting folded into "Other". Prediction markets sit last on
+ * purpose — not hidden, but never the thing the list opens with.
  */
 const ASSET_SECTIONS: readonly { assetClass: RouteAssetClass; label: string; note: string }[] = [
+  {
+    assetClass: 'cuts',
+    label: 'Cut spending',
+    note: 'No money down — cancel or cut back, and the saving counts toward your goal.',
+  },
   {
     assetClass: 'cash',
     label: 'Treasuries & cash',
@@ -202,6 +209,9 @@ const ASSET_SECTIONS: readonly { assetClass: RouteAssetClass; label: string; not
 
 /** Which section a route belongs to, read off what it actually is. */
 export function routeAssetClass(route: Route): RouteAssetClass {
+  // Checked first and off the flag itself, not the category text — a spending cut is
+  // never mistaken for a bucket it happens to share wording with (e.g. "Savings").
+  if (route.noCapitalRequired) return 'cuts';
   const text = `${route.category} ${route.platform}`;
   if (/savings|treasur/i.test(text)) return 'cash';
   if (/stock|etf|fund/i.test(text)) return 'funds';
@@ -653,14 +663,19 @@ export function __selfCheck(): void {
   const cashRoute: Route = { ...reportedRoute, id: 'tbill', category: 'Savings & Treasuries', platform: 'TreasuryDirect', lossProfile: 'partial' };
   const fundRoute: Route = { ...reportedRoute, id: 'voo', category: 'Stocks & ETFs', platform: 'Brokerage', lossProfile: 'partial' };
   const coinRoute: Route = { ...reportedRoute, id: 'btc', category: 'Crypto', platform: 'Coinbase', lossProfile: 'partial' };
-  const sections = groupRoutesByAssetClass([reportedRoute, coinRoute, cashRoute, fundRoute]);
+  const cutRoute: Route = { ...reportedRoute, id: 'cut-netflix', category: 'Cut spending', platform: 'Your bank account', lossProfile: 'partial', noCapitalRequired: true };
+  const sections = groupRoutesByAssetClass([reportedRoute, coinRoute, cashRoute, fundRoute, cutRoute]);
   console.assert(
-    sections.map((section) => section.assetClass).join(',') === 'cash,funds,crypto,prediction',
-    'sections run safest class first, with prediction markets last',
+    sections.map((section) => section.assetClass).join(',') === 'cuts,cash,funds,crypto,prediction',
+    'sections run safest first — spending cuts ahead of even cash — with prediction markets last',
   );
   console.assert(
     sections.every((section) => section.routes.length === 1),
     'every route lands in exactly one section',
+  );
+  console.assert(
+    routeAssetClass({ ...cashRoute, category: 'Savings & Treasuries', noCapitalRequired: true }) === 'cuts',
+    'the zero-capital flag wins even when the category text also reads like cash',
   );
   console.assert(
     routeAssetClass({ ...reportedRoute, category: 'Sports Betting', platform: 'Sportsbook' }) === 'prediction',

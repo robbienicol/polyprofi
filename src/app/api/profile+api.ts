@@ -25,6 +25,7 @@ interface UserProfileRow {
   signup_reason: string | null;
   investment_amount: string | null;
   profile_completed_at: string | null;
+  bank_connected: boolean;
 }
 
 export interface UserProfilePayload {
@@ -36,6 +37,7 @@ export interface UserProfilePayload {
   signupReason: string | null;
   investmentAmount: string | null;
   completed: boolean;
+  bankConnected: boolean;
 }
 
 function toPayload(row: UserProfileRow | undefined): UserProfilePayload {
@@ -48,6 +50,7 @@ function toPayload(row: UserProfileRow | undefined): UserProfilePayload {
     signupReason: row?.signup_reason ?? null,
     investmentAmount: row?.investment_amount ?? null,
     completed: row?.profile_completed_at != null,
+    bankConnected: row?.bank_connected ?? false,
   };
 }
 
@@ -57,7 +60,7 @@ export async function GET(request: Request): Promise<Response> {
 
   const rows = await sql`
     SELECT age_range, country, financial_goal, investing_experience, markets_interested,
-      signup_reason, investment_amount, profile_completed_at
+      signup_reason, investment_amount, profile_completed_at, bank_connected
     FROM users WHERE clerk_id = ${userId}
   ` as UserProfileRow[];
 
@@ -86,15 +89,16 @@ export async function POST(request: Request): Promise<Response> {
   const marketsInterested = stringArray(body.marketsInterested);
   const signupReason = stringOrNull(body.signupReason);
   const investmentAmount = stringOrNull(body.investmentAmount);
+  const bankConnected = body.bankConnected === true;
 
   const rows = await sql`
     INSERT INTO users (
       clerk_id, age_range, country, financial_goal, investing_experience, markets_interested,
-      signup_reason, investment_amount, profile_completed_at
+      signup_reason, investment_amount, profile_completed_at, bank_connected
     )
     VALUES (
       ${userId}, ${ageRange}, ${country}, ${financialGoal}, ${investingExperience}, ${marketsInterested},
-      ${signupReason}, ${investmentAmount}, now()
+      ${signupReason}, ${investmentAmount}, now(), ${bankConnected}
     )
     ON CONFLICT (clerk_id) DO UPDATE SET
       age_range = EXCLUDED.age_range,
@@ -104,9 +108,12 @@ export async function POST(request: Request): Promise<Response> {
       markets_interested = EXCLUDED.markets_interested,
       signup_reason = EXCLUDED.signup_reason,
       investment_amount = EXCLUDED.investment_amount,
-      profile_completed_at = EXCLUDED.profile_completed_at
+      profile_completed_at = EXCLUDED.profile_completed_at,
+      -- Once true, stays true: a later save (e.g. re-running onboarding without
+      -- reconnecting) must not erase a bank connection that already happened.
+      bank_connected = users.bank_connected OR EXCLUDED.bank_connected
     RETURNING age_range, country, financial_goal, investing_experience, markets_interested,
-      signup_reason, investment_amount, profile_completed_at
+      signup_reason, investment_amount, profile_completed_at, bank_connected
   ` as UserProfileRow[];
 
   return Response.json(toPayload(rows[0]));

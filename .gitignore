@@ -58,3 +58,4 @@ example
 
 # signed app binaries — regenerate via eas build
 *.ipa
+.calibration-cache/

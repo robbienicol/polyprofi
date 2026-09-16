@@ -1,8 +1,8 @@
 /**
  * Everything the first-run funnel learns about someone that the server profile
  * has no column for — the name they gave, the consent they ticked, and the
- * answers the revamped quiz added (motivation, loss reaction, check-in
- * cadence, what they said to the notification ask).
+ * answers the revamped quiz added (loss reaction, check-in cadence, what they
+ * said to the notification ask).
  *
  * Stored as one JSON blob under a single AsyncStorage key, sanitized on read,
  * so adding a question never needs a key or a migration. Same contract as
@@ -32,18 +32,6 @@ export const HORIZONS = [
 
 export type Horizon = (typeof HORIZONS)[number]['value'];
 
-/** What brought them here. Multi-select — most people have more than one reason. */
-export const MOTIVATIONS = [
-  'Grow what I have',
-  'Make my money work harder',
-  'Stay ahead of inflation',
-  'Understand how it works',
-  'Reach one specific goal',
-  'Stop guessing at it',
-] as const;
-
-export type Motivation = (typeof MOTIVATIONS)[number];
-
 /** Their answer to the permission ask. `null` means they haven't been asked yet. */
 export type NotificationChoice = 'enabled' | 'skipped' | null;
 
@@ -55,7 +43,6 @@ export type NotificationChoice = 'enabled' | 'skipped' | null;
  * is the thing that actually performs the save.
  */
 export interface SurveyAnswers {
-  motivations: Motivation[];
   outcome: string | null;
   outcomeOther: string;
   experience: string | null;
@@ -68,10 +55,13 @@ export interface SurveyAnswers {
   avoidMarkets: string[];
   /** Platform values from ACQUISITION_PLATFORMS they do not want routed to. */
   avoidPlatforms: string[];
+  /** Whether they connected a bank on the bank-connect page. Never a secret itself
+   *  — the access token it produced lives server-side in `plaid_items`, keyed on
+   *  their Clerk id, not in this locally-stored blob. */
+  bankConnected: boolean;
 }
 
 export const EMPTY_ANSWERS: SurveyAnswers = {
-  motivations: [],
   outcome: null,
   outcomeOther: '',
   experience: null,
@@ -82,6 +72,7 @@ export const EMPTY_ANSWERS: SurveyAnswers = {
   markets: [],
   avoidMarkets: [],
   avoidPlatforms: [],
+  bankConnected: false,
 };
 
 export interface OnboardingProfile {
@@ -139,9 +130,6 @@ function sanitizeAnswers(value: unknown): SurveyAnswers {
   if (!isRecord(value)) return EMPTY_ANSWERS;
 
   return {
-    motivations: strings(value.motivations).filter((item): item is Motivation =>
-      (MOTIVATIONS as readonly string[]).includes(item)
-    ),
     outcome: stringOrNull(value.outcome),
     outcomeOther: typeof value.outcomeOther === 'string' ? value.outcomeOther : '',
     experience: stringOrNull(value.experience),
@@ -158,6 +146,7 @@ function sanitizeAnswers(value: unknown): SurveyAnswers {
     markets: strings(value.markets),
     avoidMarkets: strings(value.avoidMarkets),
     avoidPlatforms: strings(value.avoidPlatforms),
+    bankConnected: value.bankConnected === true,
   };
 }
 

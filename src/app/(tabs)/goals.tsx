@@ -1,6 +1,7 @@
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import React, { useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
+import { Animated, Pressable, RefreshControl, ScrollView, View } from 'react-native';
+import { Swipeable } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { GoalProgress, useGoalsProgress } from '@/api/hooks/useGoalProgress';
@@ -47,6 +48,7 @@ export default function GoalsScreen(): React.ReactElement {
   };
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [swipeDeletingId, setSwipeDeletingId] = useState<string | null>(null);
   const selected = goals.filter((goal) => selectedIds.includes(goal.id));
 
   const toggleSelected = (goalId: string): void => {
@@ -81,6 +83,21 @@ export default function GoalsScreen(): React.ReactElement {
       clearSelection();
     } finally {
       setDeleting(false);
+    }
+  };
+
+  // Same reassign-then-remove shape as deleteSelected, for the single goal a swipe
+  // exposes. Guarded by swipeDeletingId rather than the shared `deleting` flag, so
+  // swiping one row never gets blocked by a bulk delete in flight on another.
+  const deleteSwiped = async (goalId: string): Promise<void> => {
+    if (swipeDeletingId) return;
+    setSwipeDeletingId(goalId);
+    try {
+      const fallback = goals.find((goal) => goal.id !== goalId)?.id;
+      await reassignBets({ fromGoalId: goalId, toGoalId: fallback });
+      removeGoals([goalId]);
+    } finally {
+      setSwipeDeletingId(null);
     }
   };
 
@@ -156,6 +173,7 @@ export default function GoalsScreen(): React.ReactElement {
                 selected={selectedIds.includes(goal.id)}
                 onToggleSelected={() => toggleSelected(goal.id)}
                 onPress={() => router.push(`/goal/${goal.id}`)}
+                onSwipeDelete={() => void deleteSwiped(goal.id)}
               />
             ))
           )}
@@ -177,12 +195,14 @@ function GoalRow({
   selected,
   onToggleSelected,
   onPress,
+  onSwipeDelete,
 }: {
   goal: SavingsGoal;
   progress: GoalProgress | undefined;
   selected: boolean;
   onToggleSelected: () => void;
   onPress: () => void;
+  onSwipeDelete: () => void;
 }): React.ReactElement {
   const theme = useTheme();
   const money = useMoney();
@@ -197,128 +217,136 @@ function GoalRow({
   const gainColor = netGain > 0 ? Semantic.positive : netGain < 0 ? Semantic.negative : theme.textSecondary;
 
   return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={
-        openEnded
-          ? `${goal.label}, open-ended, ${money(netGain, { decimals: 0, signed: true })} in net gains`
-          : `${goal.label}, ${Math.round(fraction * 100)} percent of ${money(goal.targetAmount ?? 0, { decimals: 0 })}`
-      }
-      className="active:opacity-90"
-      style={{
-        borderRadius: Radius.xl,
-        backgroundColor: theme.backgroundElevated,
-        borderWidth: achieved || selected ? 1.5 : 1,
-        borderColor: selected ? Brand[500] : achieved ? Semantic.positive : theme.border,
-        padding: 16,
-        gap: 14,
-        ...Shadow.card,
-      }}>
-      <View className="flex-row items-center" style={{ gap: 12 }}>
-        {/* The tick sits inside the row but takes its own taps, so selecting a goal
-            and opening it stay separate gestures. */}
-        <Pressable
-          onPress={onToggleSelected}
-          accessibilityRole="checkbox"
-          accessibilityState={{ checked: selected }}
-          // react-native-web does not turn accessibilityState into aria-checked, so on
-          // web the box announced as unchecked however it looked.
-          aria-checked={selected}
-          accessibilityLabel={`Select ${goal.label}`}
-          hitSlop={10}
-          className="active:opacity-60"
-          style={{
-            width: 24,
-            height: 24,
-            borderRadius: Radius.sm,
-            borderWidth: 1.5,
-            borderColor: selected ? Brand[500] : theme.borderStrong,
-            backgroundColor: selected ? Brand[500] : 'transparent',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}>
-          {selected ? (
-            <ThemedText style={{ fontSize: 13, fontWeight: '900', color: OnBrand, lineHeight: 16 }}>✓</ThemedText>
-          ) : null}
-        </Pressable>
-
-        <View
-          style={{
-            width: 48,
-            height: 48,
-            borderRadius: Radius.md,
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: achieved ? Semantic.positive + '22' : theme.backgroundSelected,
-          }}>
-          <ThemedText style={{ fontSize: 25 }}>{goal.emoji}</ThemedText>
-        </View>
-
-        <View className="flex-1" style={{ gap: 3 }}>
-          <View className="flex-row items-center" style={{ gap: 6 }}>
-            <ThemedText style={{ fontSize: 16, fontWeight: '800', color: theme.text, letterSpacing: -0.2, flexShrink: 1 }} numberOfLines={1}>
-              {goal.label}
-            </ThemedText>
-            {achieved ? <Tag label="REACHED 🎉" color={Semantic.positive} /> : null}
-          </View>
-          <ThemedText style={{ fontSize: 12, color: theme.textTertiary, ...MONO }} numberOfLines={1}>
-            {openEnded ? 'No finish line' : `${money(goal.targetAmount ?? 0, { decimals: 0 })} target`}
-            {activeCount > 0
-              ? ` · ${activeCount} position${activeCount === 1 ? '' : 's'}`
-              : ' · nothing working yet'}
-          </ThemedText>
-        </View>
-
-        {openEnded ? null : (
-          <ThemedText style={{ fontSize: 22, fontWeight: '900', color: achieved ? Semantic.positive : theme.text, ...MONO }}>
-            {Math.round(fraction * 100)}%
-          </ThemedText>
-        )}
-      </View>
-
-      {/* An open-ended goal has nothing to fill, so it reports its gains instead. */}
-      {openEnded ? (
-        <View className="flex-row items-baseline justify-between">
-          <ThemedText style={{ fontSize: 17, fontWeight: '800', color: gainColor, ...MONO }}>
-            {money(netGain, { decimals: 0, signed: true })}
-          </ThemedText>
-          <ThemedText style={{ fontSize: 12, color: theme.textTertiary, ...MONO }}>
-            {staked > 0 ? `on ${money(staked, { decimals: 0 })} invested` : 'nothing invested yet'}
-          </ThemedText>
-        </View>
-      ) : (
-        <View style={{ gap: 7 }}>
-          <View style={{ height: 9, borderRadius: Radius.pill, backgroundColor: theme.backgroundSelected, overflow: 'hidden' }}>
-            {/* An empty bar stays empty — a minimum-width sliver reads as progress
-                that hasn't happened. */}
-            {fraction > 0 ? (
-              <View
-                style={{
-                  width: `${Math.max(fraction * 100, 2)}%`,
-                  height: '100%',
-                  borderRadius: Radius.pill,
-                  backgroundColor: Brand[500],
-                }}
-              />
-            ) : null}
-          </View>
-          <View className="flex-row items-baseline justify-between">
-            <ThemedText style={{ fontSize: 13, fontWeight: '800', color: gainColor, ...MONO }}>
-              {money(netGain, { decimals: 0, signed: true })} net
-              {staked > 0 ? (
-                <ThemedText style={{ fontSize: 12, fontWeight: '600', color: theme.textTertiary }}>
-                  {' '}· {money(staked, { decimals: 0 })} staked
-                </ThemedText>
-              ) : null}
-            </ThemedText>
-            <ThemedText style={{ fontSize: 12, fontWeight: '700', color: theme.textSecondary, ...MONO }}>
-              {achieved ? 'Goal reached' : `${money(remaining, { decimals: 0 })} to go`}
-            </ThemedText>
-          </View>
-        </View>
+    <Swipeable
+      renderRightActions={(_progress, dragX) => (
+        <SwipeDeleteAction dragX={dragX} onPress={onSwipeDelete} />
       )}
-    </Pressable>
+      overshootRight={false}
+      rightThreshold={40}
+      containerStyle={{ marginBottom: 0 }}>
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={
+          openEnded
+            ? `${goal.label}, open-ended, ${money(netGain, { decimals: 0, signed: true })} in net gains`
+            : `${goal.label}, ${Math.round(fraction * 100)} percent of ${money(goal.targetAmount ?? 0, { decimals: 0 })}`
+        }
+        className="active:opacity-90"
+        style={{
+          borderRadius: Radius.xl,
+          backgroundColor: theme.backgroundElevated,
+          borderWidth: achieved || selected ? 1.5 : 1,
+          borderColor: selected ? Brand[500] : achieved ? Semantic.positive : theme.border,
+          padding: 16,
+          gap: 14,
+          ...Shadow.card,
+        }}>
+        <View className="flex-row items-center" style={{ gap: 12 }}>
+          {/* The tick sits inside the row but takes its own taps, so selecting a goal
+              and opening it stay separate gestures. */}
+          <Pressable
+            onPress={onToggleSelected}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: selected }}
+            // react-native-web does not turn accessibilityState into aria-checked, so on
+            // web the box announced as unchecked however it looked.
+            aria-checked={selected}
+            accessibilityLabel={`Select ${goal.label}`}
+            hitSlop={10}
+            className="active:opacity-60"
+            style={{
+              width: 24,
+              height: 24,
+              borderRadius: Radius.sm,
+              borderWidth: 1.5,
+              borderColor: selected ? Brand[500] : theme.borderStrong,
+              backgroundColor: selected ? Brand[500] : 'transparent',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}>
+            {selected ? (
+              <ThemedText style={{ fontSize: 13, fontWeight: '900', color: OnBrand, lineHeight: 16 }}>✓</ThemedText>
+            ) : null}
+          </Pressable>
+  
+          <View
+            style={{
+              width: 48,
+              height: 48,
+              borderRadius: Radius.md,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: achieved ? Semantic.positive + '22' : theme.backgroundSelected,
+            }}>
+            <ThemedText style={{ fontSize: 25 }}>{goal.emoji}</ThemedText>
+          </View>
+  
+          <View className="flex-1" style={{ gap: 3 }}>
+            <View className="flex-row items-center" style={{ gap: 6 }}>
+              <ThemedText style={{ fontSize: 16, fontWeight: '800', color: theme.text, letterSpacing: -0.2, flexShrink: 1 }} numberOfLines={1}>
+                {goal.label}
+              </ThemedText>
+              {achieved ? <Tag label="REACHED 🎉" color={Semantic.positive} /> : null}
+            </View>
+            <ThemedText style={{ fontSize: 12, color: theme.textTertiary, ...MONO }} numberOfLines={1}>
+              {openEnded ? 'No finish line' : `${money(goal.targetAmount ?? 0, { decimals: 0 })} target`}
+              {activeCount > 0
+                ? ` · ${activeCount} position${activeCount === 1 ? '' : 's'}`
+                : ' · nothing working yet'}
+            </ThemedText>
+          </View>
+  
+          {openEnded ? null : (
+            <ThemedText style={{ fontSize: 22, fontWeight: '900', color: achieved ? Semantic.positive : theme.text, ...MONO }}>
+              {Math.round(fraction * 100)}%
+            </ThemedText>
+          )}
+        </View>
+  
+        {/* An open-ended goal has nothing to fill, so it reports its gains instead. */}
+        {openEnded ? (
+          <View className="flex-row items-baseline justify-between">
+            <ThemedText style={{ fontSize: 17, fontWeight: '800', color: gainColor, ...MONO }}>
+              {money(netGain, { decimals: 0, signed: true })}
+            </ThemedText>
+            <ThemedText style={{ fontSize: 12, color: theme.textTertiary, ...MONO }}>
+              {staked > 0 ? `on ${money(staked, { decimals: 0 })} invested` : 'nothing invested yet'}
+            </ThemedText>
+          </View>
+        ) : (
+          <View style={{ gap: 7 }}>
+            <View style={{ height: 9, borderRadius: Radius.pill, backgroundColor: theme.backgroundSelected, overflow: 'hidden' }}>
+              {/* An empty bar stays empty — a minimum-width sliver reads as progress
+                  that hasn't happened. */}
+              {fraction > 0 ? (
+                <View
+                  style={{
+                    width: `${Math.max(fraction * 100, 2)}%`,
+                    height: '100%',
+                    borderRadius: Radius.pill,
+                    backgroundColor: Brand[500],
+                  }}
+                />
+              ) : null}
+            </View>
+            <View className="flex-row items-baseline justify-between">
+              <ThemedText style={{ fontSize: 13, fontWeight: '800', color: gainColor, ...MONO }}>
+                {money(netGain, { decimals: 0, signed: true })} net
+                {staked > 0 ? (
+                  <ThemedText style={{ fontSize: 12, fontWeight: '600', color: theme.textTertiary }}>
+                    {' '}· {money(staked, { decimals: 0 })} staked
+                  </ThemedText>
+                ) : null}
+              </ThemedText>
+              <ThemedText style={{ fontSize: 12, fontWeight: '700', color: theme.textSecondary, ...MONO }}>
+                {achieved ? 'Goal reached' : `${money(remaining, { decimals: 0 })} to go`}
+              </ThemedText>
+            </View>
+          </View>
+        )}
+      </Pressable>
+    </Swipeable>
   );
 }
 
@@ -413,6 +441,33 @@ function SelectionBar({
         </View>
       )}
     </View>
+  );
+}
+
+/**
+ * The red panel a leftward swipe reveals behind a goal row. No extra confirm step —
+ * the swipe itself, plus a deliberate tap on the button it uncovers, is friction
+ * enough, same as swiping a Mail message.
+ */
+function SwipeDeleteAction({
+  dragX,
+  onPress,
+}: {
+  dragX: Animated.AnimatedInterpolation<number>;
+  onPress: () => void;
+}): React.ReactElement {
+  const trans = dragX.interpolate({ inputRange: [-88, 0], outputRange: [0, 88], extrapolate: 'clamp' });
+  return (
+    <Animated.View style={{ width: 88, transform: [{ translateX: trans }] }}>
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel="Delete goal"
+        className="flex-1 items-center justify-center active:opacity-80"
+        style={{ flex: 1, borderRadius: Radius.xl, backgroundColor: Semantic.negative }}>
+        <ThemedText style={{ fontSize: 13, fontWeight: '800', color: '#FFFFFF' }}>Delete</ThemedText>
+      </Pressable>
+    </Animated.View>
   );
 }
 

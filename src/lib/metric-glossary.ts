@@ -111,6 +111,22 @@ export const METRIC_EXPLAINERS = {
     why: 'This is the measured number on the screen. Everything else here is a forecast; this one is not.',
     reading: 'It covers what you have told the app about. It is not a balance read from your brokerage account.',
   },
+  historicalHitRate: {
+    title: 'How often this actually happened',
+    what: 'Out of the settled markets that were priced like this one, the share that ended up happening.',
+    why: 'A price here is a probability: 91 cents means the market thinks it is 91 percent likely. Because these markets end in a definite yes or no, that claim can be checked against what really happened rather than taken on trust.',
+    reading:
+      'It describes a group of past markets, not this one. This market has its own answer coming, and it can land either way whatever the group did.',
+    workedOut:
+      'Settled markets from the same venue, topic and price range, sampled at about the same distance from their end date. The range shown is the band the true rate is very likely to sit in, given how many markets were counted.',
+  },
+  historicalReturn: {
+    title: 'What the group returned',
+    what: 'What putting the same amount into every one of those past markets would have returned, per market, after fees.',
+    why: 'The hit rate alone does not tell you whether the price was worth paying. Something that happens 84 percent of the time is a bad buy at 91 cents and a good one at 70.',
+    reading:
+      'A backward-looking figure for a group of markets, not a forecast for this one and not a rate of return over time.',
+  },
 } as const satisfies Record<string, MetricExplainer>;
 
 export type MetricKey = keyof typeof METRIC_EXPLAINERS;

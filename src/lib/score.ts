@@ -153,9 +153,12 @@ export function goalEffectivenessScore(
   const principalProtection = lossFraction == null ? riskSafety : (1 - lossFraction) * 100;
 
   const validTarget = Number.isFinite(context.target) && context.target > 0;
+  // >= 0, not > 0: a route that genuinely needs no capital (a spending cut,
+  // say) is the *best* case for this component, not a missing one. `!= null`
+  // already separates "known to be $0" from "never told us" below.
   const validRequiredInvestment = context.requiredInvestment != null
     && Number.isFinite(context.requiredInvestment)
-    && context.requiredInvestment > 0;
+    && context.requiredInvestment >= 0;
   const requiredInvestment = context.requiredInvestment ?? 0;
   const capitalEfficiency = validTarget && validRequiredInvestment
     ? 100 * context.target / (context.target + requiredInvestment)
@@ -335,6 +338,13 @@ export function __selfCheck(): void {
   invariant(efficient.capitalEfficiency === 50, 'capital score should be 50 when stake equals goal');
   invariant(expensive.capitalEfficiency === 25, 'capital score should be 25 when stake is 3x goal');
   invariant(efficient.score > expensive.score, 'less capital must win when every other input matches');
+
+  // A route that genuinely needs no capital (a spending cut) must read as maximally
+  // capital-efficient and never get caught by the "we don't know" cap.
+  const noCapital = goalEffectivenessScore(mk({ id: 'no-capital' }), context(0));
+  invariant(noCapital.capitalEfficiency === 100, `zero-cost route should be 100% capital-efficient, got ${noCapital.capitalEfficiency}`);
+  invariant(noCapital.capReason !== 'insufficient_data', 'a known $0 cost is not missing data');
+  invariant(noCapital.capReason !== 'over_budget', '$0 can never be over budget');
 
   const overBudget = goalEffectivenessScore(mk({}), context(3000, 1000));
   invariant(overBudget.score === 49 && overBudget.capReason === 'over_budget', 'over-budget route must cap at 49');

@@ -52,6 +52,9 @@ function maturityLabel(days: number): string {
 }
 
 function returnAtStake(route: Route, refStake: number, stake: number): number {
+  // A spending cut (or anything else flagged zero-capital) pays the same fixed amount
+  // whatever stake the user dials in — there is no position size to scale.
+  if (route.noCapitalRequired) return route.expectedReturn;
   const sourcedYield = route.investmentFacts?.yieldPct;
   const days = sourcedYieldDays(route);
   if (sourcedYield != null && days != null) {
@@ -72,6 +75,8 @@ function returnAtStake(route: Route, refStake: number, stake: number): number {
 }
 
 export function stakeNeededForReturn(route: Route, refStake: number, target: number): number | null {
+  // Costs nothing to take, whatever the goal — never priced by the target/rate ratio below.
+  if (route.noCapitalRequired) return 0;
   if (target <= 0) return null;
   const profitAtReferenceStake = returnAtStake(route, refStake, refStake);
   if (profitAtReferenceStake <= 0) return null;
@@ -201,5 +206,19 @@ export function __selfCheck(): void {
   console.assert(
     hysaRescored.description.startsWith('Put your $1,000 in a high-yield online savings account'),
     'the lead-in is replaced rather than doubled for a "Park your $X in" description',
+  );
+
+  // ── zero-capital routes (spending cuts) ───────────────────────────────────
+  const cut: Route = {
+    id: 'cut', category: 'Cut spending', emoji: '✂️', description: '', riskLevel: 1,
+    probability: 95, expectedReturn: 180, platform: '', strategy: '',
+    lossProfile: 'partial', meetsTarget: true, noCapitalRequired: true,
+  };
+  console.assert(stakeNeededForReturn(cut, 1000, 500) === 0, 'a zero-capital route needs $0 to hit any target');
+  console.assert(returnAtStake(cut, 1000, 0) === 180, 'its payout ignores the stake it is rescored to');
+  console.assert(returnAtStake(cut, 1000, 5000) === 180, 'and does not scale up at a larger stake either');
+  console.assert(
+    rescoreForStake([cut], 1000, 0, 100)[0].expectedReturn === 180,
+    'rescoring to $0 stake — what a $0 requirement selects — must not zero out the saving',
   );
 }

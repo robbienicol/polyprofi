@@ -28,8 +28,16 @@ import { deviceCountry } from '@/lib/device-region';
 import type { LossReaction, SurveyAnswers } from '@/lib/onboarding-profile';
 
 export const PAGE_IDS = [
-  'motivation',
   'outcome',
+  // Moved up to be the second question, not buried mid-quiz: "every way to
+  // hit the number" is the app's whole pitch, so what they're open to hearing
+  // about has to be asked before anything else is assumed about them.
+  'markets',
+  // Only reachable by toggling "Cut spending" on above — see PAGE_VISIBLE.
+  // Optional like the notification ask even then: connecting is a real
+  // permission grant (real transaction history), so it gets its own page and
+  // its own skip rather than a question with a default answer.
+  'bank_connect',
   'experience',
   'starting_point',
   // The first of two working pauses. Four answers in is where a run starts to
@@ -39,10 +47,9 @@ export const PAGE_IDS = [
   'capital',
   'horizon',
   'loss_reaction',
-  'markets',
-  // Asked straight after the opposite question, while the same list is fresh.
-  // Exclusions are worth their own page: people are far more certain about what
-  // they will not touch than about what they want.
+  // Asked once loss_reaction is fresh rather than right after `markets`: people
+  // are far more certain about what they will not touch than about what they
+  // want, and that certainty is easier to reach after picturing a loss.
   'avoid_markets',
   'avoid_platforms',
   // The second pause, and the one doing real work on the markets just picked.
@@ -52,6 +59,21 @@ export const PAGE_IDS = [
 ] as const;
 
 export type PageId = (typeof PAGE_IDS)[number];
+
+/**
+ * Pages that only make sense given an earlier answer. Anything not listed here
+ * is always shown — this is the exception list, not an exhaustive Record, so a
+ * newly added page defaults to visible without a decision at this call site.
+ */
+const PAGE_VISIBLE: Partial<Record<PageId, (answers: SurveyAnswers) => boolean>> = {
+  // Asking to connect a bank when they never said they wanted to cut spending
+  // would be a non sequitur — the page only exists to make that question real.
+  bank_connect: (a) => a.markets.includes('Cut spending'),
+};
+
+export function isPageVisible(id: PageId, answers: SurveyAnswers): boolean {
+  return PAGE_VISIBLE[id]?.(answers) ?? true;
+}
 
 /* ----------------------------------------------------------------- options */
 
@@ -86,11 +108,15 @@ export const AMOUNTS = [
 ] as const;
 
 /**
- * Only classes the search can actually route to. Sports markets and Currencies used to
- * sit here and mapped onto categories nothing builds, so picking either narrowed the
- * search to nothing — see SEARCH_CATEGORY_BY_MARKET in @/lib/onboarding-profile.
+ * Only classes the search can actually route to, plus "Cut spending" — not a
+ * market at all, and not yet mapped in SEARCH_CATEGORY_BY_MARKET (nothing
+ * builds a spending-cut route yet), so it degrades the same way a stale label
+ * does: `filter(Boolean)` there drops it and the search widens instead of
+ * narrowing to nothing. Sports markets and Currencies used to sit here and
+ * mapped onto categories nothing builds either — see that comment.
  */
 export const MARKETS = [
+  { label: 'Cut spending', emoji: '✂️' },
   { label: 'Stocks & ETFs', emoji: '📈' },
   { label: 'Savings & T-bills', emoji: '🏦' },
   { label: 'Crypto', emoji: '₿' },
@@ -108,8 +134,10 @@ export const SCAN_TASK_COUNT = 3;
  * can leave. Statements and the permission ask return true.
  */
 export const CAN_CONTINUE: Record<PageId, (answers: SurveyAnswers) => boolean> = {
-  motivation: (a) => a.motivations.length > 0,
   outcome: (a) => Boolean(a.outcome),
+  // Like notifications, this page hides the shared footer and drives its own
+  // pair of buttons — connecting and skipping both advance directly.
+  bank_connect: () => true,
   experience: (a) => Boolean(a.experience),
   starting_point: (a) => Boolean(a.ageRange),
   profiling: () => true,
@@ -173,33 +201,36 @@ export function buildPageCopy(
   answers: SurveyAnswers,
   name: string,
 ): Record<PageId, PageCopy> {
-  // Not lowercased: these are written phrases, and "grow what i already have"
-  // is what folding a sentence that contains "I" gets you.
-  const motivations = phraseList([...answers.motivations]);
   const outcome = answers.outcome === SOMETHING_ELSE ? answers.outcomeOther.trim() : answers.outcome ?? '';
   const markets = phraseList([...answers.markets]);
   const avoided = phraseList([...answers.avoidMarkets]);
 
   return {
-    motivation: {
-      // No read-back here: nothing has been asked yet. The question is framed as
-      // a decision they already made rather than as "why are you here?", which
-      // reads like a form asking them to justify themselves.
-      title: name
-        ? `${name}, what made you take charge of your money?`
-        : 'What made you take charge of your money?',
-      helper: 'Pick all that apply. It decides what we show you first.',
-    },
     outcome: {
-      ack: motivations ? `${motivations}. That is a good reason to start.` : null,
-      // Not "what's the money for?" — that reads like being asked to account for
-      // yourself. This asks about the thing they want, which is the same answer
-      // from the friendlier end.
+      // No read-back here: nothing has been asked yet. Not "what's the money
+      // for?" either — that reads like being asked to account for yourself.
+      // This asks about the thing they want, which is the same answer from
+      // the friendlier end.
+      ack: null,
       title: 'What are you\nworking towards?',
       helper: 'Pick whichever is closest. You can add more goals later.',
     },
+    markets: {
+      ack: outcome ? `${outcome}. Good goal.` : null,
+      title: 'What ways do you\nwant to make it happen?',
+      helper: 'Toggle on everything you want us to check — investing, saving, cutting spending, or all of it. Leave it blank and we check everything.',
+    },
+    bank_connect: {
+      ack: markets ? `${markets}. Let's start with what's already yours.` : null,
+      title: "Want us to see what\nyou're already spending?",
+      helper: "Connect your bank and we'll weigh real spending — a subscription, a coffee habit — right alongside every market. Skip it and we'll only work from what you tell us.",
+    },
     experience: {
-      ack: outcome ? `${outcome}. Now every pick has something to aim at.` : null,
+      ack: answers.bankConnected
+        ? "Connected. We'll factor in what you actually spend."
+        : markets
+          ? `${markets}. Now every pick has something to aim at.`
+          : outcome ? `${outcome}. Now every pick has something to aim at.` : null,
       title: "What's your experience\nwith investing?",
       helper: 'There is no wrong answer here. It only sets how much we explain along the way.',
     },
@@ -230,13 +261,8 @@ export function buildPageCopy(
       title: 'Your $500 drops to $400\novernight. What do you do?',
       helper: "The honest answer is the useful one — this is the question that keeps you out of things you would regret.",
     },
-    markets: {
-      ack: answers.lossReaction ? LOSS_ACKS[answers.lossReaction] : null,
-      title: 'Any markets you\nare drawn to?',
-      helper: 'Optional — leave it blank and we sweep everything. This only changes what we lead with.',
-    },
     avoid_markets: {
-      ack: markets ? `${markets}. Noted.` : null,
+      ack: answers.lossReaction ? LOSS_ACKS[answers.lossReaction] : null,
       title: 'Anything you would\nrather we left out?',
       helper: 'We will never show you these, however well they score. Leave it blank if nothing is off limits.',
     },

@@ -10,6 +10,13 @@ export interface MarketComparison {
   kalshiSeriesTicker: string;
   polymarketPrice: number; // net of fees
   kalshiPrice: number; // net of fees
+  /**
+   * The same two prices as the venues actually quote them. Calibration buckets on the
+   * quoted price, because that is what the historical table was built from — netting a
+   * fee in first can push a contract across a bucket edge and answer for the wrong cohort.
+   */
+  polymarketRawPrice: number;
+  kalshiRawPrice: number;
   betterPlatform: 'polymarket' | 'kalshi' | 'tie';
   edgeCents: number;
 }
@@ -60,6 +67,8 @@ export async function resolveMarketComparison(route: Route): Promise<MarketCompa
     kalshiSeriesTicker: kalshiMarket.seriesTicker,
     polymarketPrice,
     kalshiPrice,
+    polymarketRawPrice: rawPolymarketPrice,
+    kalshiRawPrice: rawKalshiPrice,
     betterPlatform,
     edgeCents,
   };

@@ -1,4 +1,5 @@
 import '@/global.css';
+import 'react-native-gesture-handler';
 
 import {
   PublicSans_400Regular,
@@ -19,6 +20,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { Stack, router, usePathname, type Href } from 'expo-router';
 import { useEffect, useRef } from 'react';
 import { useColorScheme } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { useGoalMaintenance } from '@/api/hooks/useGoalMaintenance';
@@ -114,18 +116,20 @@ export default function RootLayout(): React.ReactElement | null {
 
   return (
     <ErrorBoundary>
-      <SafeAreaProvider>
-        <ClerkProvider publishableKey={publishableKey} tokenCache={clerkTokenCache}>
-          <QueryClientProvider client={queryClient}>
-            <AppLockGate>
-              <Stack screenOptions={{ headerShown: false }} />
-              <GoalCelebrationGate />
-              <GoalHousekeeping />
-              <OfflineBanner />
-            </AppLockGate>
-          </QueryClientProvider>
-        </ClerkProvider>
-      </SafeAreaProvider>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <SafeAreaProvider>
+          <ClerkProvider publishableKey={publishableKey} tokenCache={clerkTokenCache}>
+            <QueryClientProvider client={queryClient}>
+              <AppLockGate>
+                <Stack screenOptions={{ headerShown: false }} />
+                <GoalCelebrationGate />
+                <GoalHousekeeping />
+                <OfflineBanner />
+              </AppLockGate>
+            </QueryClientProvider>
+          </ClerkProvider>
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
     </ErrorBoundary>
   );
 }

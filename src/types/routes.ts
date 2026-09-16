@@ -94,6 +94,14 @@ export interface Route {
   exitPlan?: ExitPlan;
   // true if expectedReturn >= user's target
   meetsTarget: boolean;
+  /**
+   * True only for a route that needs no stake at all — a detected spending cut, chief
+   * among them. `expectedReturn` is a fixed dollar amount that does not scale with any
+   * chosen stake, so `returnAtStake`/`stakeNeededForReturn` in @/lib/stake-rescore read
+   * this flag rather than trying to recover a rate from expectedReturn/refStake, which
+   * would either divide by a stake of 0 or scale a fixed saving as if it were a position.
+   */
+  noCapitalRequired?: boolean;
   expertSentiment?: ExpertSentiment;
   investmentFacts?: RouteInvestmentFacts;
   marketQuality?: MarketQualityFacts;

@@ -72,10 +72,12 @@ function toProfileInput(answers: SurveyAnswers): UserProfileInput {
     financialGoal: outcome,
     investingExperience: answers.experience,
     marketsInterested: answers.markets,
-    // The multi-select "why are you here" collapses to one string for the
-    // column; the full list stays in the local blob.
-    signupReason: answers.motivations.join(', ') || null,
+    // The quiz no longer asks a "why are you here" question, so this column
+    // has nothing to write — left null rather than dropped from the input, to
+    // avoid a migration for a column older profiles still have data in.
+    signupReason: null,
     investmentAmount: answers.amount === SKIP ? null : answers.amount,
+    bankConnected: answers.bankConnected,
   };
 }
 

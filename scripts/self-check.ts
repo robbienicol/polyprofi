@@ -1,6 +1,8 @@
 import { __selfCheck as checkPlaybook } from '@/api/client/playbook';
 import { __selfCheck as checkAssetSearch } from '@/lib/asset-search';
 import { __selfCheck as checkBetMonitorMatch } from '@/lib/bet-monitor-match';
+import { __selfCheck as checkCalibration } from '@/lib/calibration';
+import { __selfCheck as checkRouteCalibration } from '@/lib/route-calibration';
 import { __selfCheck as checkDeviceRegion } from '@/lib/device-region';
 import { __selfCheck as checkGainAlerts } from '@/lib/gain-alerts';
 import { __selfCheck as checkEtfRoutes } from '@/lib/etf-routes';
@@ -22,6 +24,7 @@ import { __selfCheck as checkQuizProfile } from '@/lib/quiz-profile';
 import { __selfCheck as checkRouteExpectedValue } from '@/lib/route-expected-value';
 import { __selfCheck as checkSavingsTreasuryRoutes } from '@/lib/savings-treasury-routes';
 import { __selfCheck as checkScore } from '@/lib/score';
+import { __selfCheck as checkSpendingCutRoutes } from '@/lib/spending-cut-routes';
 import { __selfCheck as checkSavingsGoal } from '@/lib/savings-goal';
 import { __selfCheck as checkSportsMarketMatch } from '@/lib/sports-market-match';
 import { __selfCheck as checkStakeRescore } from '@/lib/stake-rescore';
@@ -31,6 +34,8 @@ const checks = [
   ['playbook', checkPlaybook],
   ['asset search', checkAssetSearch],
   ['bet monitor matching', checkBetMonitorMatch],
+  ['calibration', checkCalibration],
+  ['route calibration', checkRouteCalibration],
   ['gain alerts', checkGainAlerts],
   ['device region', checkDeviceRegion],
   ['etf routes', checkEtfRoutes],
@@ -52,6 +57,7 @@ const checks = [
   ['route expected value', checkRouteExpectedValue],
   ['savings & treasury routes', checkSavingsTreasuryRoutes],
   ['goal score', checkScore],
+  ['spending cut routes', checkSpendingCutRoutes],
   ['savings goal migration', checkSavingsGoal],
   ['sports market match', checkSportsMarketMatch],
   ['stake rescore', checkStakeRescore],

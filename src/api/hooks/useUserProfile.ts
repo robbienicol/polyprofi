@@ -14,6 +14,7 @@ export interface UserProfileInput {
   marketsInterested: string[];
   signupReason: string | null;
   investmentAmount: string | null;
+  bankConnected: boolean;
 }
 
 interface ProfileQueryData {

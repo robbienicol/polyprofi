@@ -1,22 +1,30 @@
-import React, { useEffect, useState } from 'react';
-import { Animated, Easing, useWindowDimensions, View } from 'react-native';
+import React, { useEffect, useState } from "react";
+import { Animated, Easing, View, useWindowDimensions } from "react-native";
 
 import {
   BREAKDOWN_FACTORS,
-  CLOSING_PROOF,
   COACH_SCRIPT,
   COACH_STARTERS,
+  MATH_DISCLAIMER,
   OnboardingSlide,
   RANKED_PREVIEW,
+  SCORE_FACTORS,
   SWEEP_MARKETS,
-} from '@/components/onboarding/onboarding-data';
-import { ThemedText } from '@/components/themed-text';
-import { Brand, OnBrand, Radius, RiskScale, Semantic, Shadow } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+} from "@/components/onboarding/onboarding-data";
+import { ThemedText } from "@/components/themed-text";
+import {
+  Brand,
+  OnBrand,
+  Radius,
+  RiskScale,
+  Semantic,
+  Shadow,
+} from "@/constants/theme";
+import { useTheme } from "@/hooks/use-theme";
 
-export { OnboardingGlow } from '@/components/onboarding/OnboardingGlow';
+export { OnboardingGlow } from "@/components/onboarding/OnboardingGlow";
 
-const MONO = { fontVariant: ['tabular-nums' as const] };
+const MONO = { fontVariant: ["tabular-nums" as const] };
 
 /**
  * `active` is true only for the slide currently on screen. Previews use it to replay
@@ -46,7 +54,7 @@ function Panel({
   chipColor,
   children,
 }: {
-  title: string;
+  title: React.ReactNode;
   chip?: string;
   chipColor?: string;
   children: React.ReactNode;
@@ -58,12 +66,13 @@ function Panel({
     <View
       style={{
         borderRadius: Radius.xl,
-        overflow: 'hidden',
+        overflow: "hidden",
         backgroundColor: theme.backgroundElevated,
         borderWidth: 1,
         borderColor: theme.border,
         ...Shadow.card,
-      }}>
+      }}
+    >
       <View
         className="flex-row items-center justify-between"
         style={{
@@ -72,8 +81,16 @@ function Panel({
           backgroundColor: theme.backgroundElement,
           borderBottomWidth: 1,
           borderBottomColor: theme.border,
-        }}>
-        <ThemedText style={{ fontSize: 10, fontWeight: '800', letterSpacing: 0.8, color: theme.textTertiary }}>
+        }}
+      >
+        <ThemedText
+          style={{
+            fontSize: 10,
+            fontWeight: "800",
+            letterSpacing: 0.8,
+            color: theme.textTertiary,
+          }}
+        >
           {title}
         </ThemedText>
         {chip ? (
@@ -84,12 +101,29 @@ function Panel({
               paddingHorizontal: 8,
               paddingVertical: 3,
               borderRadius: Radius.pill,
-              backgroundColor: accent + '18',
+              backgroundColor: accent + "18",
               borderWidth: 1,
-              borderColor: accent + '3D',
-            }}>
-            <View style={{ width: 5, height: 5, borderRadius: 999, backgroundColor: accent }} />
-            <ThemedText style={{ fontSize: 9, fontWeight: '800', letterSpacing: 0.4, color: accent }}>{chip}</ThemedText>
+              borderColor: accent + "3D",
+            }}
+          >
+            <View
+              style={{
+                width: 5,
+                height: 5,
+                borderRadius: 999,
+                backgroundColor: accent,
+              }}
+            />
+            <ThemedText
+              style={{
+                fontSize: 9,
+                fontWeight: "800",
+                letterSpacing: 0.4,
+                color: accent,
+              }}
+            >
+              {chip}
+            </ThemedText>
           </View>
         ) : null}
       </View>
@@ -99,7 +133,13 @@ function Panel({
 }
 
 /** Fades + lifts its children in once on mount. Used for the scripted coach exchange. */
-function FadeIn({ children, delay = 0 }: { children: React.ReactNode; delay?: number }): React.ReactElement {
+function FadeIn({
+  children,
+  delay = 0,
+}: {
+  children: React.ReactNode;
+  delay?: number;
+}): React.ReactElement {
   const [progress] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
@@ -118,10 +158,257 @@ function FadeIn({ children, delay = 0 }: { children: React.ReactNode; delay?: nu
     <Animated.View
       style={{
         opacity: progress,
-        transform: [{ translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }],
-      }}>
+        transform: [
+          {
+            translateY: progress.interpolate({
+              inputRange: [0, 1],
+              outputRange: [10, 0],
+            }),
+          },
+        ],
+      }}
+    >
       {children}
     </Animated.View>
+  );
+}
+
+/* ------------------------------------------------------------------ slide 0a: quiz */
+
+/**
+ * The question shown is a priority ranking of the exact same four things
+ * `SCORE_FACTORS` uses on the next slide — so the link is not just claimed in
+ * copy, it's the same four rows reappearing, reordered by what the person said
+ * mattered most.
+ */
+function QuizPreview({ active }: PreviewProps): React.ReactElement {
+  const theme = useTheme();
+
+  return (
+    <View
+      className="flex-1 justify-center"
+      style={{ opacity: active ? 1 : 0.98 }}
+    >
+      <Panel title="RANK WHAT MATTERS" chip="BUILDS YOUR SCORE">
+        <ThemedText
+          style={{
+            fontSize: 14,
+            fontWeight: "800",
+            color: theme.text,
+            lineHeight: 19,
+            paddingHorizontal: 2,
+          }}
+        >
+          Put these in order of importance to you
+        </ThemedText>
+        <View style={{ gap: 6, marginTop: 2 }}>
+          {SCORE_FACTORS.map((factor, index) => (
+            <View
+              key={factor.label}
+              className="flex-row items-center"
+              style={{
+                gap: 10,
+                paddingHorizontal: 10,
+                paddingVertical: 8,
+                borderRadius: Radius.md,
+                backgroundColor: theme.backgroundElement,
+                borderWidth: 1,
+                borderColor: theme.border,
+              }}
+            >
+              <View
+                style={{
+                  width: 20,
+                  height: 20,
+                  borderRadius: 999,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor: Brand[500] + "18",
+                }}
+              >
+                <ThemedText
+                  style={{
+                    fontSize: 10.5,
+                    fontWeight: "900",
+                    color: Brand[500],
+                    ...MONO,
+                  }}
+                >
+                  {index + 1}
+                </ThemedText>
+              </View>
+              <ThemedText style={{ fontSize: 14 }}>{factor.emoji}</ThemedText>
+              <ThemedText
+                style={{
+                  fontSize: 12.5,
+                  fontWeight: "700",
+                  color: theme.text,
+                  flex: 1,
+                }}
+                numberOfLines={1}
+              >
+                {factor.label}
+              </ThemedText>
+              <ThemedText style={{ fontSize: 13, color: theme.textTertiary }}>
+                ☰
+              </ThemedText>
+            </View>
+          ))}
+        </View>
+      </Panel>
+      <ThemedText
+        style={{
+          fontSize: 10.5,
+          color: theme.textTertiary,
+          textAlign: "center",
+          marginTop: 10,
+        }}
+      >
+        These 4 things build every score
+      </ThemedText>
+    </View>
+  );
+}
+
+/* ------------------------------------------------------------------ slide 0b: score */
+
+/**
+ * "The Score™" reveal, with the real weight breakdown: the same four factors and
+ * percentages `DEFAULT_SCORE_WEIGHTS` starts every route at (src/lib/score.ts).
+ */
+function ScorePreview({ active }: PreviewProps): React.ReactElement {
+  const theme = useTheme();
+  const compact = useCompact();
+
+  return (
+    <View
+      className="flex-1 justify-center"
+      style={{ opacity: active ? 1 : 0.98 }}
+    >
+      <Panel
+        title={
+          <>
+            THE SCORE
+            <ThemedText
+              style={{
+                fontSize: 7,
+                fontWeight: "800",
+                position: "relative",
+                top: -3,
+              }}
+            >
+              {" "}
+              ™
+            </ThemedText>
+          </>
+        }
+        chip="0–100"
+      >
+        <View
+          className="items-center"
+          style={{ paddingVertical: compact ? 4 : 8, gap: 4 }}
+        >
+          <View className="flex-row items-baseline" style={{ gap: 4 }}>
+            <ThemedText
+              style={{
+                fontSize: 44,
+                fontWeight: "900",
+                color: Semantic.positive,
+                letterSpacing: -1,
+                ...MONO,
+              }}
+            >
+              91
+            </ThemedText>
+            <ThemedText
+              style={{
+                fontSize: 13,
+                fontWeight: "800",
+                color: theme.textTertiary,
+              }}
+            >
+              /100
+            </ThemedText>
+          </View>
+          <ThemedText
+            style={{ fontSize: 11, color: theme.textSecondary }}
+            numberOfLines={1}
+          >
+            Starbucks — twice a week
+          </ThemedText>
+        </View>
+
+        <View
+          style={{
+            height: 1,
+            backgroundColor: theme.border,
+            marginHorizontal: 2,
+          }}
+        />
+
+        {SCORE_FACTORS.map((factor) => {
+          const maxWeight = Math.max(...SCORE_FACTORS.map((f) => f.weight));
+          return (
+            <View
+              key={factor.label}
+              style={{
+                gap: 5,
+                paddingHorizontal: 10,
+                paddingVertical: compact ? 3 : 5,
+              }}
+            >
+              <View className="flex-row items-center" style={{ gap: 9 }}>
+                <ThemedText style={{ fontSize: 14 }}>{factor.emoji}</ThemedText>
+                <View className="flex-1">
+                  <ThemedText
+                    style={{
+                      fontSize: 12,
+                      fontWeight: "700",
+                      color: theme.text,
+                    }}
+                  >
+                    {factor.label}
+                  </ThemedText>
+                  <ThemedText
+                    style={{ fontSize: 10, color: theme.textTertiary }}
+                    numberOfLines={1}
+                  >
+                    {factor.note}
+                  </ThemedText>
+                </View>
+                <ThemedText
+                  style={{
+                    fontSize: 13,
+                    fontWeight: "900",
+                    color: Brand[500],
+                    ...MONO,
+                  }}
+                >
+                  {factor.weight}%
+                </ThemedText>
+              </View>
+              <View
+                style={{
+                  height: 4,
+                  borderRadius: 2,
+                  backgroundColor: theme.backgroundSelected,
+                  overflow: "hidden",
+                }}
+              >
+                <View
+                  style={{
+                    width: `${(factor.weight / maxWeight) * 100}%`,
+                    height: 4,
+                    borderRadius: 2,
+                    backgroundColor: Brand[500],
+                  }}
+                />
+              </View>
+            </View>
+          );
+        })}
+      </Panel>
+    </View>
   );
 }
 
@@ -162,7 +449,10 @@ function SweepPreview({ active }: PreviewProps): React.ReactElement {
 
   useEffect(() => {
     if (!active) return;
-    const id = setInterval(() => setStep((current) => (current + 1) % total), SWEEP_STEP_MS);
+    const id = setInterval(
+      () => setStep((current) => (current + 1) % total),
+      SWEEP_STEP_MS,
+    );
     return () => clearInterval(id);
   }, [active, total]);
 
@@ -184,23 +474,26 @@ function SweepPreview({ active }: PreviewProps): React.ReactElement {
   const done = step >= SWEEP_MARKETS.length;
 
   return (
-    <View className="flex-1 justify-center" style={{ opacity: active ? 1 : 0.98 }}>
-      <Panel title="CHECKING EVERY MARKET" chip={done ? 'DONE' : 'LIVE'}>
+    <View
+      className="flex-1 justify-center"
+      style={{ opacity: active ? 1 : 0.98 }}
+    >
+      <Panel title="CHECKING EVERY WAY" chip={done ? "DONE" : "LIVE"}>
         <View>
           {/* The beam. Sits behind the rows and slides down with the step, so
               what lights a row and what moves the light are one clock. */}
           <Animated.View
             pointerEvents="none"
             style={{
-              position: 'absolute',
+              position: "absolute",
               left: -12,
               right: -12,
               height: rowHeight,
               borderRadius: Radius.md,
-              backgroundColor: Brand[500] + '1F',
+              backgroundColor: Brand[500] + "1F",
               borderTopWidth: 1,
               borderBottomWidth: 1,
-              borderColor: Brand[500] + '4D',
+              borderColor: Brand[500] + "4D",
               // Fades out once it has run off the end of the list.
               opacity: done ? 0 : 1,
               transform: [
@@ -215,15 +508,27 @@ function SweepPreview({ active }: PreviewProps): React.ReactElement {
           />
 
           {SWEEP_MARKETS.map((market, index) => (
-            <SweepRow key={market.label} market={market} lit={step > index} height={rowHeight} />
+            <SweepRow
+              key={market.label}
+              market={market}
+              lit={step > index}
+              height={rowHeight}
+            />
           ))}
         </View>
       </Panel>
 
-      <ThemedText style={{ fontSize: 10.5, color: theme.textTertiary, textAlign: 'center', marginTop: 10 }}>
+      <ThemedText
+        style={{
+          fontSize: 10.5,
+          color: theme.textTertiary,
+          textAlign: "center",
+          marginTop: 10,
+        }}
+      >
         {done
-          ? `All ${SWEEP_MARKETS.length} markets checked · ranked safest first`
-          : `Checked ${step} of ${SWEEP_MARKETS.length} markets…`}
+          ? `All ${SWEEP_MARKETS.length} ways checked · ranked safest first`
+          : `Checked ${step} of ${SWEEP_MARKETS.length} ways…`}
       </ThemedText>
     </View>
   );
@@ -261,12 +566,19 @@ function SweepRow({
           numberOfLines={1}
           style={{
             fontSize: 12.5,
-            fontWeight: '700',
-            color: anim.interpolate({ inputRange: [0, 1], outputRange: [theme.textTertiary, theme.text] }),
-          }}>
+            fontWeight: "700",
+            color: anim.interpolate({
+              inputRange: [0, 1],
+              outputRange: [theme.textTertiary, theme.text],
+            }),
+          }}
+        >
           {market.label}
         </Animated.Text>
-        <ThemedText style={{ fontSize: 10, color: theme.textTertiary }} numberOfLines={1}>
+        <ThemedText
+          style={{ fontSize: 10, color: theme.textTertiary }}
+          numberOfLines={1}
+        >
           {market.note}
         </ThemedText>
       </View>
@@ -278,13 +590,23 @@ function SweepRow({
           width: 20,
           height: 20,
           borderRadius: 999,
-          alignItems: 'center',
-          justifyContent: 'center',
+          alignItems: "center",
+          justifyContent: "center",
           backgroundColor: Brand[500],
           opacity: anim,
-          transform: [{ scale: anim.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] }) }],
-        }}>
-        <ThemedText style={{ fontSize: 11, fontWeight: '900', color: OnBrand }}>✓</ThemedText>
+          transform: [
+            {
+              scale: anim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0.4, 1],
+              }),
+            },
+          ],
+        }}
+      >
+        <ThemedText style={{ fontSize: 11, fontWeight: "900", color: OnBrand }}>
+          ✓
+        </ThemedText>
       </Animated.View>
     </View>
   );
@@ -292,15 +614,28 @@ function SweepRow({
 
 /* ------------------------------------------------------------------ slide 2: rank */
 
+// Same three-tier read as the real route card's score badge (RouteCard.tsx) — a
+// good/fair/poor color the user learns here and recognizes for real once they're in.
+const scoreColor = (score: number): string =>
+  score >= 75
+    ? Semantic.positive
+    : score >= 50
+      ? Semantic.caution
+      : Semantic.negative;
+
 function RankPreview({ active }: PreviewProps): React.ReactElement {
   const theme = useTheme();
   const compact = useCompact();
 
   return (
-    <View className="flex-1 justify-center" style={{ opacity: active ? 1 : 0.98 }}>
-      <Panel title="OPTIONS FOR YOUR GOAL" chip="SIDE BY SIDE">
+    <View
+      className="flex-1 justify-center"
+      style={{ opacity: active ? 1 : 0.98 }}
+    >
+      <Panel title="OPTIONS FOR YOUR GOAL" chip="SCORED">
         {RANKED_PREVIEW.map((row, index) => {
           const rc = RiskScale[row.riskLevel - 1] ?? theme.textTertiary;
+          const sc = scoreColor(row.score);
           return (
             <View
               key={row.name}
@@ -308,27 +643,87 @@ function RankPreview({ active }: PreviewProps): React.ReactElement {
                 paddingHorizontal: 10,
                 paddingVertical: compact ? 7 : 9,
                 borderRadius: Radius.md,
-                backgroundColor: index % 2 === 0 ? theme.backgroundElement : 'transparent',
-              }}>
+                backgroundColor:
+                  index % 2 === 0 ? theme.backgroundElement : "transparent",
+              }}
+            >
               <View className="flex-row items-center" style={{ gap: 9 }}>
                 <ThemedText style={{ fontSize: 14 }}>{row.emoji}</ThemedText>
                 <View className="flex-1">
-                  <ThemedText style={{ fontSize: 12.5, fontWeight: '700', color: theme.text }} numberOfLines={1}>
+                  <ThemedText
+                    style={{
+                      fontSize: 12.5,
+                      fontWeight: "700",
+                      color: theme.text,
+                    }}
+                    numberOfLines={1}
+                  >
                     {row.name}
                   </ThemedText>
                   <View className="flex-row items-center" style={{ gap: 5 }}>
-                    <View style={{ width: 5, height: 5, borderRadius: 999, backgroundColor: rc }} />
-                    <ThemedText style={{ fontSize: 10, color: theme.textTertiary }} numberOfLines={1}>
+                    <View
+                      style={{
+                        width: 5,
+                        height: 5,
+                        borderRadius: 999,
+                        backgroundColor: rc,
+                      }}
+                    />
+                    <ThemedText
+                      style={{ fontSize: 10, color: theme.textTertiary }}
+                      numberOfLines={1}
+                    >
                       {row.platform} · {row.note}
                     </ThemedText>
                   </View>
+                </View>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "baseline",
+                    gap: 3,
+                    paddingHorizontal: 8,
+                    paddingVertical: 3,
+                    borderRadius: Radius.pill,
+                    backgroundColor: sc + "1A",
+                    borderWidth: 1,
+                    borderColor: sc + "3D",
+                  }}
+                >
+                  <ThemedText
+                    style={{
+                      fontSize: 13,
+                      fontWeight: "900",
+                      color: sc,
+                      ...MONO,
+                    }}
+                  >
+                    {row.score}
+                  </ThemedText>
+                  <ThemedText
+                    style={{
+                      fontSize: 9,
+                      fontWeight: "800",
+                      color: theme.textTertiary,
+                      letterSpacing: 0.3,
+                    }}
+                  >
+                    /100
+                  </ThemedText>
                 </View>
               </View>
             </View>
           );
         })}
       </Panel>
-      <ThemedText style={{ fontSize: 10.5, color: theme.textTertiary, textAlign: 'center', marginTop: 10 }}>
+      <ThemedText
+        style={{
+          fontSize: 10.5,
+          color: theme.textTertiary,
+          textAlign: "center",
+          marginTop: 10,
+        }}
+      >
         Chance · downside · cash required · time to resolve
       </ThemedText>
     </View>
@@ -342,30 +737,71 @@ function BreakdownPreview({ active }: PreviewProps): React.ReactElement {
   const compact = useCompact();
 
   return (
-    <View className="flex-1 justify-center" style={{ opacity: active ? 1 : 0.98 }}>
+    <View
+      className="flex-1 justify-center"
+      style={{ opacity: active ? 1 : 0.98 }}
+    >
       <Panel title="ROUTE FACTS · VOO" chip="SOURCE-LINKED">
-        <View className="flex-row items-center justify-between" style={{ paddingHorizontal: 10, paddingBottom: 2 }}>
+        <View
+          className="flex-row items-center justify-between"
+          style={{ paddingHorizontal: 10, paddingBottom: 2 }}
+        >
           <View>
-            <ThemedText style={{ fontSize: 11, color: theme.textSecondary }}>S&P 500 ETF</ThemedText>
-            <ThemedText style={{ fontSize: 18, fontWeight: '900', color: theme.text }}>VOO</ThemedText>
+            <ThemedText style={{ fontSize: 11, color: theme.textSecondary }}>
+              S&P 500 ETF
+            </ThemedText>
+            <ThemedText
+              style={{ fontSize: 18, fontWeight: "900", color: theme.text }}
+            >
+              VOO
+            </ThemedText>
           </View>
-          <ThemedText style={{ fontSize: 10, fontWeight: '800', color: Brand[500] }}>LIVE QUOTE</ThemedText>
+          <ThemedText
+            style={{ fontSize: 10, fontWeight: "800", color: Brand[500] }}
+          >
+            LIVE QUOTE
+          </ThemedText>
         </View>
 
-        <View style={{ height: 1, backgroundColor: theme.border, marginHorizontal: 2 }} />
+        <View
+          style={{
+            height: 1,
+            backgroundColor: theme.border,
+            marginHorizontal: 2,
+          }}
+        />
 
         {BREAKDOWN_FACTORS.map((factor) => (
-          <View key={factor.label} style={{ paddingHorizontal: 10, paddingVertical: 5 }}>
+          <View
+            key={factor.label}
+            style={{ paddingHorizontal: 10, paddingVertical: 5 }}
+          >
             <View className="flex-row items-center justify-between">
-              <ThemedText style={{ fontSize: 11.5, fontWeight: '600', color: theme.textSecondary }}>{factor.label}</ThemedText>
-              <ThemedText style={{ fontSize: 11.5, fontWeight: '800', color: theme.text }}>
+              <ThemedText
+                style={{
+                  fontSize: 11.5,
+                  fontWeight: "600",
+                  color: theme.textSecondary,
+                }}
+              >
+                {factor.label}
+              </ThemedText>
+              <ThemedText
+                style={{ fontSize: 11.5, fontWeight: "800", color: theme.text }}
+              >
                 {factor.value}
               </ThemedText>
             </View>
           </View>
         ))}
 
-        <View style={{ height: 1, backgroundColor: theme.border, marginHorizontal: 2 }} />
+        <View
+          style={{
+            height: 1,
+            backgroundColor: theme.border,
+            marginHorizontal: 2,
+          }}
+        />
 
         {compact ? null : (
           <View
@@ -373,21 +809,42 @@ function BreakdownPreview({ active }: PreviewProps): React.ReactElement {
               marginHorizontal: 6,
               padding: 10,
               borderRadius: Radius.md,
-              backgroundColor: Semantic.caution + '12',
+              backgroundColor: Semantic.caution + "12",
               borderWidth: 1,
-              borderColor: Semantic.caution + '33',
+              borderColor: Semantic.caution + "33",
               gap: 3,
-            }}>
-            <ThemedText style={{ fontSize: 9.5, fontWeight: '800', color: Semantic.caution, letterSpacing: 0.4 }}>
+            }}
+          >
+            <ThemedText
+              style={{
+                fontSize: 9.5,
+                fontWeight: "800",
+                color: Semantic.caution,
+                letterSpacing: 0.4,
+              }}
+            >
               IF IT GOES AGAINST YOU
             </ThemedText>
-            <ThemedText style={{ fontSize: 11, color: theme.textSecondary, lineHeight: 16 }}>
-              Capital preserved — a drawdown, not a wipeout. All-or-nothing routes say so, right here.
+            <ThemedText
+              style={{
+                fontSize: 11,
+                color: theme.textSecondary,
+                lineHeight: 16,
+              }}
+            >
+              Capital preserved — a drawdown, not a wipeout. All-or-nothing
+              routes say so, right here.
             </ThemedText>
           </View>
         )}
 
-        <ThemedText style={{ fontSize: 10, color: theme.textTertiary, paddingHorizontal: 10 }}>
+        <ThemedText
+          style={{
+            fontSize: 10,
+            color: theme.textTertiary,
+            paddingHorizontal: 10,
+          }}
+        >
           Live quote · source and timestamp shown on every route
         </ThemedText>
       </Panel>
@@ -403,7 +860,12 @@ function TypingDots(): React.ReactElement {
 
   useEffect(() => {
     const loop = Animated.loop(
-      Animated.timing(progress, { toValue: 1, duration: 1050, easing: Easing.linear, useNativeDriver: true })
+      Animated.timing(progress, {
+        toValue: 1,
+        duration: 1050,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
     );
     loop.start();
     return () => loop.stop();
@@ -413,7 +875,7 @@ function TypingDots(): React.ReactElement {
     <View
       className="flex-row items-center"
       style={{
-        alignSelf: 'flex-start',
+        alignSelf: "flex-start",
         gap: 4,
         paddingHorizontal: 12,
         paddingVertical: 11,
@@ -421,7 +883,8 @@ function TypingDots(): React.ReactElement {
         backgroundColor: theme.backgroundElement,
         borderWidth: 1,
         borderColor: theme.border,
-      }}>
+      }}
+    >
       {[0, 1, 2].map((index) => (
         <Animated.View
           key={index}
@@ -449,7 +912,10 @@ function CoachPreview({ active }: PreviewProps): React.ReactElement {
 
   useEffect(() => {
     if (!active || stage >= 3) return;
-    const timer = setTimeout(() => setStage(stage + 1), [700, 600, 1300][stage]);
+    const timer = setTimeout(
+      () => setStage(stage + 1),
+      [700, 600, 1300][stage],
+    );
     return () => clearTimeout(timer);
   }, [active, stage]);
 
@@ -467,9 +933,21 @@ function CoachPreview({ active }: PreviewProps): React.ReactElement {
             backgroundColor: theme.backgroundElement,
             borderWidth: 1,
             borderColor: theme.border,
-          }}>
-          <ThemedText style={{ fontSize: 10.5, color: theme.textTertiary }}>Reading this route</ThemedText>
-          <ThemedText style={{ fontSize: 10.5, fontWeight: '800', color: Brand[500], ...MONO }}>VOO · 82/100</ThemedText>
+          }}
+        >
+          <ThemedText style={{ fontSize: 10.5, color: theme.textTertiary }}>
+            Reading this route
+          </ThemedText>
+          <ThemedText
+            style={{
+              fontSize: 10.5,
+              fontWeight: "800",
+              color: Brand[500],
+              ...MONO,
+            }}
+          >
+            VOO · 82/100
+          </ThemedText>
         </View>
 
         {/* Starter prompts double as filler while the scripted exchange plays in. */}
@@ -481,35 +959,58 @@ function CoachPreview({ active }: PreviewProps): React.ReactElement {
                 paddingHorizontal: 9,
                 paddingVertical: 5,
                 borderRadius: Radius.pill,
-                backgroundColor: index === 0 && stage >= 1 ? Brand[500] + '1F' : theme.backgroundElement,
+                backgroundColor:
+                  index === 0 && stage >= 1
+                    ? Brand[500] + "1F"
+                    : theme.backgroundElement,
                 borderWidth: 1,
-                borderColor: index === 0 && stage >= 1 ? Brand[500] + '3D' : theme.border,
-              }}>
+                borderColor:
+                  index === 0 && stage >= 1 ? Brand[500] + "3D" : theme.border,
+              }}
+            >
               <ThemedText
                 style={{
                   fontSize: 10.5,
-                  fontWeight: '700',
-                  color: index === 0 && stage >= 1 ? Brand[500] : theme.textSecondary,
-                }}>
+                  fontWeight: "700",
+                  color:
+                    index === 0 && stage >= 1
+                      ? Brand[500]
+                      : theme.textSecondary,
+                }}
+              >
                 {starter}
               </ThemedText>
             </View>
           ))}
         </View>
 
-        <View style={{ gap: 7, minHeight: compact ? 128 : 150, justifyContent: 'flex-end' }}>
+        <View
+          style={{
+            gap: 7,
+            minHeight: compact ? 128 : 150,
+            justifyContent: "flex-end",
+          }}
+        >
           {stage >= 1 ? (
             <FadeIn>
               <View
                 style={{
-                  alignSelf: 'flex-end',
-                  maxWidth: '86%',
+                  alignSelf: "flex-end",
+                  maxWidth: "86%",
                   paddingHorizontal: 12,
                   paddingVertical: 9,
                   borderRadius: Radius.lg,
                   backgroundColor: Brand[500],
-                }}>
-                <ThemedText style={{ fontSize: 12.5, fontWeight: '700', color: OnBrand, lineHeight: 18 }}>
+                }}
+              >
+                <ThemedText
+                  style={{
+                    fontSize: 12.5,
+                    fontWeight: "700",
+                    color: OnBrand,
+                    lineHeight: 18,
+                  }}
+                >
                   {question.text}
                 </ThemedText>
               </View>
@@ -522,16 +1023,21 @@ function CoachPreview({ active }: PreviewProps): React.ReactElement {
             <FadeIn>
               <View
                 style={{
-                  alignSelf: 'flex-start',
-                  maxWidth: '92%',
+                  alignSelf: "flex-start",
+                  maxWidth: "92%",
                   paddingHorizontal: 12,
                   paddingVertical: 10,
                   borderRadius: Radius.lg,
                   backgroundColor: theme.backgroundElement,
                   borderWidth: 1,
                   borderColor: theme.border,
-                }}>
-                <ThemedText style={{ fontSize: 12.5, color: theme.text, lineHeight: 18 }}>{answer.text}</ThemedText>
+                }}
+              >
+                <ThemedText
+                  style={{ fontSize: 12.5, color: theme.text, lineHeight: 18 }}
+                >
+                  {answer.text}
+                </ThemedText>
               </View>
             </FadeIn>
           ) : null}
@@ -548,10 +1054,26 @@ function CoachPreview({ active }: PreviewProps): React.ReactElement {
             backgroundColor: theme.backgroundElement,
             borderWidth: 1,
             borderColor: theme.border,
-          }}>
-          <ThemedText style={{ fontSize: 12, color: theme.textTertiary, flex: 1 }}>Ask why, risk, sizing…</ThemedText>
-          <View style={{ paddingHorizontal: 11, paddingVertical: 7, borderRadius: Radius.md, backgroundColor: Brand[500] }}>
-            <ThemedText style={{ fontSize: 11, fontWeight: '800', color: OnBrand }}>Send</ThemedText>
+          }}
+        >
+          <ThemedText
+            style={{ fontSize: 12, color: theme.textTertiary, flex: 1 }}
+          >
+            Ask why, risk, sizing…
+          </ThemedText>
+          <View
+            style={{
+              paddingHorizontal: 11,
+              paddingVertical: 7,
+              borderRadius: Radius.md,
+              backgroundColor: Brand[500],
+            }}
+          >
+            <ThemedText
+              style={{ fontSize: 11, fontWeight: "800", color: OnBrand }}
+            >
+              Send
+            </ThemedText>
           </View>
         </View>
       </Panel>
@@ -559,88 +1081,55 @@ function CoachPreview({ active }: PreviewProps): React.ReactElement {
   );
 }
 
-/* ------------------------------------------------------------------ slide 5: close */
+/* ------------------------------------------------------------------ slide 6: math */
 
-function ClosePreview(): React.ReactElement {
-  // Static by design: the closing slide should read as a finished plan, not an animation.
+/**
+ * The last slide, deliberately flat: no chart, no score, no emoji-and-checkmark
+ * proof rows like the others — just the formula and three plain lines, because
+ * the point of this one is that it is not another pitch beat.
+ */
+function MathPreview({ active }: PreviewProps): React.ReactElement {
   const theme = useTheme();
-  const compact = useCompact();
 
   return (
-    <View className="flex-1 justify-center" style={{ gap: 10 }}>
-      <Panel title="YOUR GOAL" chip="1 MIN SETUP">
-        <View className="flex-row items-center justify-between" style={{ paddingHorizontal: 10, paddingVertical: 2 }}>
-          <View>
-            <ThemedText style={{ fontSize: 10, fontWeight: '800', letterSpacing: 0.6, color: theme.textTertiary }}>
-              TARGET
-            </ThemedText>
-            <View className="flex-row items-baseline" style={{ gap: 6 }}>
-              <ThemedText style={{ fontSize: 22, fontWeight: '900', color: theme.text, letterSpacing: -0.7, ...MONO }}>
-                $300
+    <View
+      className="flex-1 justify-center"
+      style={{ opacity: active ? 1 : 0.98, gap: 10 }}>
+      <Panel title="THE FORMULA" chip="NO OPINIONS" chipColor={theme.textTertiary}>
+        <View
+          style={{
+            gap: 7,
+            paddingHorizontal: 10,
+            paddingVertical: 10,
+            borderRadius: Radius.md,
+            backgroundColor: theme.backgroundElement,
+            borderWidth: 1,
+            borderColor: theme.border,
+          }}>
+          <ThemedText style={{ fontSize: 12.5, fontWeight: '900', color: theme.text, ...MONO }}>Score =</ThemedText>
+          {SCORE_FACTORS.map((factor) => (
+            <View key={factor.label} className="flex-row items-center justify-between">
+              <ThemedText style={{ fontSize: 12, color: theme.textSecondary }} numberOfLines={1}>
+                {factor.emoji} {factor.label}
               </ThemedText>
-              <ThemedText style={{ fontSize: 14, color: theme.textTertiary }}>→</ThemedText>
-              <ThemedText style={{ fontSize: 22, fontWeight: '900', color: Semantic.positive, letterSpacing: -0.7, ...MONO }}>
-                $330
+              <ThemedText style={{ fontSize: 12, fontWeight: '800', color: Brand[500], ...MONO }}>
+                ×{(factor.weight / 100).toFixed(2)}
               </ThemedText>
             </View>
-          </View>
-          <View
-            style={{
-              paddingHorizontal: 10,
-              paddingVertical: 5,
-              borderRadius: Radius.pill,
-              backgroundColor: theme.backgroundSelected,
-            }}>
-            <ThemedText style={{ fontSize: 10.5, fontWeight: '800', color: theme.textSecondary }}>by Dec 31</ThemedText>
-          </View>
+          ))}
         </View>
 
-        <View style={{ height: 1, backgroundColor: theme.border, marginHorizontal: 2 }} />
-
-        <View
-          className="flex-row items-center"
-          style={{
-            gap: 10,
-            paddingHorizontal: 10,
-            paddingVertical: 8,
-            borderRadius: Radius.md,
-            backgroundColor: Brand[500] + '12',
-            borderWidth: 1,
-            borderColor: Brand[500] + '3D',
-          }}>
-          <ThemedText style={{ fontSize: 16 }}>📈</ThemedText>
-          <View className="flex-1">
-            <ThemedText style={{ fontSize: 10, fontWeight: '800', letterSpacing: 0.5, color: Brand[500] }}>
-              EXAMPLE OPTION
-            </ThemedText>
-            <ThemedText style={{ fontSize: 12, fontWeight: '700', color: theme.text }} numberOfLines={1}>
-              VOO · S&P 500 ETF
-            </ThemedText>
-          </View>
-          <ThemedText style={{ fontSize: 12, fontWeight: '900', color: Brand[500] }}>View →</ThemedText>
+        <View style={{ gap: 6, marginTop: 2 }}>
+          {MATH_DISCLAIMER.map((line) => (
+            <View key={line} className="flex-row items-start" style={{ gap: 8, paddingHorizontal: 2 }}>
+              <ThemedText style={{ fontSize: 12, color: theme.textTertiary }}>—</ThemedText>
+              <ThemedText style={{ fontSize: 12, color: theme.textSecondary, lineHeight: 17, flex: 1 }}>
+                {line}
+              </ThemedText>
+            </View>
+          ))}
         </View>
       </Panel>
-
-      <View style={{ gap: 6 }}>
-        {CLOSING_PROOF.map((proof) => (
-          <View
-            key={proof.label}
-            className="flex-row items-center"
-            style={{
-              gap: 10,
-              paddingHorizontal: 12,
-              paddingVertical: compact ? 8 : 10,
-              borderRadius: Radius.lg,
-              backgroundColor: theme.backgroundElevated,
-              borderWidth: 1,
-              borderColor: theme.border,
-            }}>
-            <ThemedText style={{ fontSize: 14 }}>{proof.emoji}</ThemedText>
-            <ThemedText style={{ fontSize: 12.5, fontWeight: '600', color: theme.text, flex: 1 }}>{proof.label}</ThemedText>
-            <ThemedText style={{ fontSize: 12, fontWeight: '900', color: Semantic.positive }}>✓</ThemedText>
-          </View>
-        ))}
-      </View>
     </View>
   );
 }
@@ -651,19 +1140,26 @@ function ClosePreview(): React.ReactElement {
  * The `key` swap is deliberate: flipping active remounts the preview, which restarts its
  * reveal from a clean state without any reset-in-effect gymnastics.
  */
-export function renderOnboardingPreview(kind: OnboardingSlide['kind'], active: boolean): React.ReactElement {
-  const key = active ? 'active' : 'idle';
+export function renderOnboardingPreview(
+  kind: OnboardingSlide["kind"],
+  active: boolean,
+): React.ReactElement {
+  const key = active ? "active" : "idle";
   switch (kind) {
-    case 'scan':
+    case "quiz":
+      return <QuizPreview key={key} active={active} />;
+    case "score":
+      return <ScorePreview key={key} active={active} />;
+    case "scan":
       return <SweepPreview key={key} active={active} />;
-    case 'rank':
+    case "rank":
       return <RankPreview key={key} active={active} />;
-    case 'breakdown':
+    case "breakdown":
       return <BreakdownPreview key={key} active={active} />;
-    case 'coach':
+    case "coach":
       return <CoachPreview key={key} active={active} />;
-    case 'close':
-      return <ClosePreview />;
+    case "math":
+      return <MathPreview key={key} active={active} />;
     // The hero, consent, and name slides draw themselves end to end.
     default:
       return <View className="flex-1" />;
