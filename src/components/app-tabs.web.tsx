@@ -9,10 +9,11 @@ import {
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { Pressable, useColorScheme, useWindowDimensions, View, StyleSheet } from 'react-native';
 
+import { BrandMark } from './ui/BrandMark';
 import { ThemedText } from './themed-text';
 import { ThemedView } from './themed-view';
 
-import { Colors, MaxContentWidth, Spacing } from '@/constants/theme';
+import { Brand, Colors, MaxContentWidth, Spacing } from '@/constants/theme';
 
 export default function AppTabs() {
   return (
@@ -23,6 +24,9 @@ export default function AppTabs() {
           <TabTrigger name="home" href="/(tabs)" asChild>
             <TabButton icon="house">Home</TabButton>
           </TabTrigger>
+          <TabTrigger name="goals" href="/(tabs)/goals" asChild>
+            <TabButton icon="target">Goals</TabButton>
+          </TabTrigger>
           <TabTrigger name="routes" href="/(tabs)/routes" asChild>
             <TabButton icon="list.bullet.rectangle">Routes</TabButton>
           </TabTrigger>
@@ -30,7 +34,7 @@ export default function AppTabs() {
             <TabButton icon="briefcase">Portfolio</TabButton>
           </TabTrigger>
           <TabTrigger name="profile" href="/(tabs)/profile" asChild>
-            <TabButton icon="person">Profile</TabButton>
+            <TabButton icon="gearshape">Settings</TabButton>
           </TabTrigger>
         </CustomTabList>
       </TabList>
@@ -43,7 +47,7 @@ export function TabButton({ children, icon, isFocused, ...props }: TabTriggerSlo
   const { width } = useWindowDimensions();
   const compact = width < 640;
   const colors = Colors[scheme === 'unspecified' ? 'light' : scheme];
-  const tintColor = isFocused ? colors.text : colors.textSecondary;
+  const tintColor = isFocused ? Brand[500] : colors.textSecondary;
 
   return (
     <Pressable {...props} style={({ pressed }) => [compact && styles.compactTab, pressed && styles.pressed]}>
@@ -67,9 +71,10 @@ export function CustomTabList(props: TabListProps) {
     <View {...props} style={[styles.tabListContainer, compact && styles.compactTabListContainer]}>
       <ThemedView type="backgroundElement" style={[styles.innerContainer, compact && styles.compactInnerContainer]}>
         {!compact ? (
-          <ThemedText type="smallBold" style={styles.brandText}>
-            PolyProfit
-          </ThemedText>
+          <View style={styles.brand}>
+            <BrandMark size={20} />
+            <ThemedText type="smallBold">Pathey</ThemedText>
+          </View>
         ) : null}
 
         {props.children}
@@ -114,7 +119,10 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 7 },
   },
-  brandText: {
+  brand: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
     marginRight: 'auto',
   },
   pressed: {

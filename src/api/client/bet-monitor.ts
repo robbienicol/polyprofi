@@ -1,6 +1,17 @@
 import { PolymarketEntry, SportsGame } from '@/api/client/market-data';
-import { extractMonitorTokens, isPredictionMarketBet, parseEntryPrice } from '@/lib/parse-bet-line';
-import { isRecord, parseJson, responseJson } from '@/lib/runtime-validation';
+import { fetchPolymarketMarketsByQuestion, fetchPolymarketMarketsBySlug } from '@/api/client/polymarket-market-data';
+import {
+  betOutcomeSide,
+  effectiveEntryPrice,
+  findMarketForBet,
+  matchSportsGame,
+  monitoredProfitGoal,
+  quotedQuestion,
+  resolveOutcomePrice,
+  sportsScoreMargin,
+} from '@/lib/bet-monitor-match';
+import { isPredictionMarketBet } from '@/lib/parse-bet-line';
+import { isRecord, responseJson } from '@/lib/runtime-validation';
 import { BetLiveStatus, TrackedBet } from '@/types/bets';
 
 const ESPN_SPORTS = [
@@ -12,64 +23,36 @@ const ESPN_SPORTS = [
   { key: 'soccer/eng.1', label: 'EPL' },
 ] as const;
 
-function tokensMatch(text: string, queryTokens: string[]): boolean {
-  if (queryTokens.length === 0) return false;
-  const hay = text.toLowerCase();
-  return queryTokens.some((t) => hay.includes(t));
-}
+/**
+ * The markets the tracked positions are actually on: looked up by stored slug,
+ * or by the question quoted in the description for positions tracked before the
+ * slug was persisted. Both are targeted lookups — scanning a page of top-volume
+ * markets misses anything outside it, and a $9M election market is easily
+ * outside Gamma's first 100. No fuzzy matching: see @/lib/bet-monitor-match.
+ */
+async function fetchMarketsForBets(bets: TrackedBet[]): Promise<PolymarketEntry[]> {
+  const predictionBets = bets.filter(isPredictionMarketBet);
+  if (predictionBets.length === 0) return [];
+  const slugs = predictionBets.flatMap((bet) => (bet.sourceSlug ? [bet.sourceSlug] : []));
+  const questions = predictionBets.flatMap((bet) => {
+    if (bet.sourceSlug) return [];
+    const question = quotedQuestion(bet.description);
+    return question ? [question] : [];
+  });
+  const [bySlug, byQuestion] = await Promise.all([
+    fetchPolymarketMarketsBySlug(slugs),
+    fetchPolymarketMarketsByQuestion(questions),
+  ]);
+  const found = [...bySlug, ...byQuestion];
 
-function scoreMargin(home: number, away: number, favoredTokens: string[], homeName: string, awayName: string): number | null {
-  const favorsHome = favoredTokens.some((t) => homeName.toLowerCase().includes(t));
-  const favorsAway = favoredTokens.some((t) => awayName.toLowerCase().includes(t));
-  if (favorsHome && !favorsAway) return home - away;
-  if (favorsAway && !favorsHome) return away - home;
-  return null;
-}
-
-async function fetchPolymarketMarkets(): Promise<PolymarketEntry[]> {
-  try {
-    const res = await fetch(
-      'https://gamma-api.polymarket.com/markets?active=true&closed=false&limit=200',
-      { headers: { Accept: 'application/json' } }
-    );
-    if (!res.ok) return [];
-
-    interface RawMarket {
-      question: string;
-      outcomes: string | string[];
-      outcomePrices: string | string[];
-    }
-
-    const asArray = (raw: string | string[] | undefined): string[] => {
-      if (!raw) return [];
-      if (Array.isArray(raw)) return raw.map(String);
-      const parsed = parseJson(raw);
-      return Array.isArray(parsed) ? parsed.map(String) : [];
-    };
-
-    const payload = await responseJson(res);
-    const raw = Array.isArray(payload)
-      ? payload.filter((market): market is RawMarket => isRecord(market)
-          && typeof market.question === 'string'
-          && (typeof market.outcomes === 'string' || Array.isArray(market.outcomes))
-          && (typeof market.outcomePrices === 'string' || Array.isArray(market.outcomePrices)))
-      : [];
-    return raw
-      .map((m) => {
-        const prices = asArray(m.outcomePrices).map(Number);
-        const outcomes = asArray(m.outcomes);
-        return { m, prices, outcomes };
-      })
-      .filter(({ prices }) => prices.length > 0)
-      .map(({ m, prices, outcomes }) => ({
-        question: m.question,
-        outcomes: outcomes.length > 0 ? outcomes : ['Yes', 'No'],
-        prices,
-        volumeM: 0,
-      }));
-  } catch {
-    return [];
-  }
+  // A stored slug can go stale (Polymarket renames a market, which changes its
+  // slug). Retry those by question text rather than dropping the price.
+  const stale = predictionBets.flatMap((bet) => {
+    if (findMarketForBet(bet, found)) return [];
+    const question = quotedQuestion(bet.description);
+    return question ? [question] : [];
+  });
+  return stale.length > 0 ? [...found, ...await fetchPolymarketMarketsByQuestion(stale)] : found;
 }
 
 async function fetchLiveSports(): Promise<SportsGame[]> {
@@ -120,51 +103,16 @@ function isEspnCompetitor(value: unknown): value is { homeAway: string; team: { 
     && (value.score === undefined || typeof value.score === 'string');
 }
 
-function findPolymarketPrice(markets: PolymarketEntry[], queryTokens: string[]): { price: number; question: string } | null {
-  let best: { price: number; question: string; score: number } | null = null;
-
-  for (const m of markets) {
-    const hits = queryTokens.filter((t) => m.question.toLowerCase().includes(t)).length;
-    if (hits === 0) continue;
-    const yes = m.prices[0];
-    if (typeof yes !== 'number' || yes <= 0 || yes >= 1) continue;
-    const score = hits / queryTokens.length;
-    if (!best || score > best.score) best = { price: yes, question: m.question, score };
-  }
-
-  return best ? { price: best.price, question: best.question } : null;
-}
-
-function findLiveGame(games: SportsGame[], queryTokens: string[]): SportsGame | null {
-  for (const g of games) {
-    const blob = `${g.home} ${g.away} ${g.sport}`;
-    if (tokensMatch(blob, queryTokens)) return g;
-  }
-  return null;
-}
-
 function calcPolymarketPnl(amountWagered: number, entryPrice: number, currentPrice: number): number {
   if (entryPrice <= 0) return 0;
   const shares = amountWagered / entryPrice;
   return shares * currentPrice - amountWagered;
 }
 
-function effectiveProfitGoal(bet: TrackedBet): number {
-  return bet.profitGoal != null && bet.profitGoal > 0 ? bet.profitGoal : bet.expectedReturn;
-}
-
-function effectiveEntryPrice(bet: TrackedBet): number | null {
-  if (bet.entryPrice && bet.entryPrice > 0 && bet.entryPrice < 1) return bet.entryPrice;
-  const parsed = parseEntryPrice(bet.line);
-  if (parsed && parsed > 0 && parsed < 1) return parsed;
-  if (bet.probability > 0) return bet.probability / 100;
-  return null;
-}
-
 async function fetchBetLiveStatus(bet: TrackedBet, markets?: PolymarketEntry[], games?: SportsGame[]): Promise<BetLiveStatus> {
-  const profitGoal = effectiveProfitGoal(bet);
   const entryPrice = effectiveEntryPrice(bet);
-  const queryTokens = extractMonitorTokens(bet.description, bet.line, bet.monitorQuery);
+  const profitGoal = monitoredProfitGoal(bet, entryPrice);
+  const side = betOutcomeSide(bet);
   const isPoly = isPredictionMarketBet(bet);
 
   const base: BetLiveStatus = {
@@ -184,11 +132,11 @@ async function fetchBetLiveStatus(bet: TrackedBet, markets?: PolymarketEntry[], 
   }
 
   const [polyMarkets, liveGames] = await Promise.all([
-    isPoly ? (markets ?? fetchPolymarketMarkets()) : Promise.resolve([]),
+    isPoly ? (markets ?? fetchMarketsForBets([bet])) : Promise.resolve([]),
     games ?? fetchLiveSports(),
   ]);
 
-  const game = findLiveGame(liveGames, queryTokens);
+  const game = matchSportsGame(bet, liveGames);
   let liveContext: string | undefined;
   let gameStatus: string | undefined;
   let isLive = false;
@@ -202,10 +150,7 @@ async function fetchBetLiveStatus(bet: TrackedBet, markets?: PolymarketEntry[], 
         : `${game.away} @ ${game.home}`;
     liveContext = `${score} · ${game.status}`;
 
-    const margin = game.homeScore !== undefined && game.awayScore !== undefined
-      ? scoreMargin(game.homeScore, game.awayScore, queryTokens, game.home, game.away)
-      : null;
-
+    const margin = sportsScoreMargin(game, side);
     if (margin !== null && margin >= 15 && isPoly && entryPrice) {
       // Strong in-game lead → contract likely repriced well above entry; nudge check even before price fetch.
       base.reason = `Your pick is up ${margin} — contract may have hit your $${profitGoal} target`;
@@ -213,8 +158,8 @@ async function fetchBetLiveStatus(bet: TrackedBet, markets?: PolymarketEntry[], 
   }
 
   if (isPoly && entryPrice) {
-    const match = findPolymarketPrice(polyMarkets, queryTokens);
-    const currentPrice = match?.price;
+    const market = findMarketForBet(bet, polyMarkets);
+    const currentPrice = market ? resolveOutcomePrice(market, side) : null;
     if (currentPrice != null) {
       const unrealizedPnl = calcPolymarketPnl(bet.amountWagered, entryPrice, currentPrice);
       const profitGoalHit = unrealizedPnl >= profitGoal;
@@ -226,7 +171,7 @@ async function fetchBetLiveStatus(bet: TrackedBet, markets?: PolymarketEntry[], 
       } else if (liveContext) {
         reason = `${liveContext}. Contract at ${(currentPrice * 100).toFixed(0)}¢ (entry ${(entryPrice * 100).toFixed(0)}¢). Need +$${Math.max(0, profitGoal - unrealizedPnl).toFixed(0)} more.`;
       } else {
-        reason = `Contract at ${(currentPrice * 100).toFixed(0)}¢ · up $${Math.max(0, unrealizedPnl).toFixed(0)} of $${profitGoal} goal`;
+        reason = `Contract at ${(currentPrice * 100).toFixed(0)}¢ (entry ${(entryPrice * 100).toFixed(0)}¢) · ${unrealizedPnl >= 0 ? 'up' : 'down'} $${Math.abs(unrealizedPnl).toFixed(0)} of $${profitGoal} goal`;
       }
 
       return {
@@ -259,9 +204,14 @@ async function fetchBetLiveStatus(bet: TrackedBet, markets?: PolymarketEntry[], 
 
   return {
     ...base,
-    reason: isPoly
-      ? 'Waiting for live contract price — pull to refresh'
-      : 'No live event found yet — pull to refresh',
+    // Say which half is missing rather than implying a refresh will fix a
+    // position we can't identify at all — the old copy hid a wrong price behind
+    // "pull to refresh"; now an unidentifiable market reports no price instead.
+    reason: !isPoly
+      ? 'No live event found yet — pull to refresh'
+      : !entryPrice || !side
+        ? 'No entry price recorded for this position — live P&L unavailable'
+        : 'No live price for this market yet — pull to refresh',
   };
 }
 
@@ -269,9 +219,8 @@ export async function fetchAllBetStatuses(bets: TrackedBet[]): Promise<BetLiveSt
   const active = bets.filter((b) => b.status === 'active');
   if (active.length === 0) return [];
 
-  const needsPoly = active.some(isPredictionMarketBet);
   const [markets, games] = await Promise.all([
-    needsPoly ? fetchPolymarketMarkets() : Promise.resolve([]),
+    fetchMarketsForBets(active),
     fetchLiveSports(),
   ]);
 

@@ -1,101 +1,176 @@
-import { useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
+import React, { useCallback, useMemo } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useGoalsProgress } from '@/api/hooks/useGoalProgress';
+import { usePortfolioProgress } from '@/api/hooks/usePortfolioProgress';
+import { usePreferences } from '@/api/hooks/usePreferences';
 import { useSavedRoutes } from '@/api/hooks/useSavedRoutes';
+import { useSavingsGoal } from '@/api/hooks/useSavingsGoal';
 import { useTrackedBets } from '@/api/hooks/useTrackedBets';
-import { AllocationDonut, buildAllocationRows, buildEquitySeries, compactAssetClass, PerformanceChart } from '@/components/portfolio/PortfolioVisuals';
+import {
+  CapitalSplitCard,
+  CheapestPathCard,
+  GoalContributionCard,
+  MaturityTimelineCard,
+} from '@/components/portfolio/PortfolioInsights';
+import { PortfolioOverview } from '@/components/portfolio/PortfolioOverview';
 import { ThemedText } from '@/components/themed-text';
-import { Accent, Brand, Radius, Shadow } from '@/constants/theme';
+import { Brand, Radius } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { portfolioStats } from '@/lib/portfolio';
+import { goalRemaining, parseGoalIds } from '@/lib/savings-goal';
 
-const MONO = { fontVariant: ['tabular-nums' as const] };
-
+/**
+ * Every position across every goal. The per-goal breakdown lives in the Goals
+ * tab; this is the rollup.
+ */
 export default function PortfolioScreen(): React.ReactElement {
   const theme = useTheme();
   const router = useRouter();
-  const { bets } = useTrackedBets();
+  const { bets: allBets, resolveBet } = useTrackedBets();
   const { history } = useSavedRoutes();
-  const [conservative, setConservative] = useState(false);
+  const { goals: allGoals } = useSavingsGoal();
+  const { preferences } = usePreferences();
+
+  // Goals ticked on the Goals tab. Absent means the whole portfolio, which is what
+  // this screen is for; a selection narrows every number on it to those goals.
+  const { goalIds } = useLocalSearchParams<{ goalIds?: string }>();
+  const selectedGoalIds = useMemo(() => new Set(parseGoalIds(goalIds)), [goalIds]);
+  // Back to the list to change the selection, carrying it so the boxes are already
+  // ticked. Choosing goals belongs where the goals are; this screen only reports on
+  // whichever ones were picked.
+  // Always carries the parameter, empty included: arriving from the whole-portfolio
+  // view means "nothing is selected", and the list has to be told that rather than
+  // left showing whatever was ticked the last time it was open.
+  const chooseGoals = (): void => {
+    router.push(`/(tabs)/goals?selected=${[...selectedGoalIds].join(',')}` as Href);
+  };
+  const scoped = selectedGoalIds.size > 0;
+  const goals = useMemo(
+    () => (scoped ? allGoals.filter((goal) => selectedGoalIds.has(goal.id)) : allGoals),
+    [allGoals, scoped, selectedGoalIds],
+  );
+  const bets = useMemo(
+    () => (scoped ? allBets.filter((bet) => bet.goalId != null && selectedGoalIds.has(bet.goalId)) : allBets),
+    [allBets, scoped, selectedGoalIds],
+  );
+  const goalsProgress = useGoalsProgress(goals);
+
   const latestSearch = history[0] ?? null;
   const fallbackCash = latestSearch?.quizSnapshot.balance ?? 0;
+  // The same measurement Home shows, so the two screens can't disagree about what
+  // the portfolio is worth. A scoped view values only the selected goals' positions
+  // and never writes to the stored history, which is the whole portfolio's series.
+  const scopeToBets = useCallback(
+    (candidates: typeof allBets) => candidates.filter(
+      (bet) => bet.goalId != null && selectedGoalIds.has(bet.goalId),
+    ),
+    [selectedGoalIds],
+  );
+  const progress = usePortfolioProgress(
+    fallbackCash,
+    scoped ? { scopeToBets, recordHistory: false } : {},
+  );
   const activeBets = useMemo(() => bets.filter((bet) => bet.status === 'active'), [bets]);
-  const stats = useMemo(() => portfolioStats(bets, conservative), [bets, conservative]);
-  const rows = useMemo(() => buildAllocationRows(bets, fallbackCash, conservative), [bets, conservative, fallbackCash]);
-  const equity = useMemo(() => buildEquitySeries(bets, fallbackCash, conservative), [bets, conservative, fallbackCash]);
-  const totalValue = activeBets.length > 0 ? activeBets.reduce((sum, bet) => sum + bet.amountWagered, 0) : fallbackCash;
-  const chartValue = equity.at(-1)?.value ?? totalValue;
-  const startingValue = equity[0]?.value ?? chartValue;
-  const chartChange = chartValue - startingValue;
-  const chartChangePct = startingValue > 0 ? (chartChange / startingValue) * 100 : 0;
-  const targetValue = latestSearch ? latestSearch.quizSnapshot.balance + latestSearch.quizSnapshot.target : totalValue;
+  const staked = activeBets.reduce((sum, bet) => sum + bet.amountWagered, 0);
+
+  // What this portfolio is worth if every goal lands: what's staked plus what the
+  // goals still need. Goals own the targets now, so there is no second target to
+  // reconcile against. Open-ended goals add nothing — they have no finish line.
+  const outstanding = goals.reduce(
+    (sum, goal) => sum + goalRemaining(goalsProgress.progressFor(goal.id).netGain, goal),
+    0,
+  );
+  const targetValue = outstanding > 0 ? staked + outstanding : null;
 
   return (
     <View className="flex-1" style={{ backgroundColor: theme.background }}>
       <SafeAreaView className="flex-1">
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerClassName="px-4 pt-6 pb-16 gap-4">
-          <View>
-            <ThemedText style={{ fontSize: 26, fontWeight: '800', color: Brand[500], letterSpacing: -0.5 }}>Portfolio Overview</ThemedText>
-            <ThemedText style={{ fontSize: 14, color: theme.textSecondary, marginTop: 4 }}>Weighted avg return & allocation</ThemedText>
-          </View>
-
-          <View style={{ borderRadius: Radius.xl, backgroundColor: theme.backgroundElevated, borderWidth: 1, borderColor: theme.border, padding: 18, gap: 16, ...Shadow.card }}>
-            <View className="flex-row justify-between items-start gap-3">
-              <View className="flex-1"><ThemedText style={{ fontSize: 24, fontWeight: '800', color: theme.text, letterSpacing: -0.4 }}>My Portfolio</ThemedText><ThemedText style={{ fontSize: 14, color: theme.textSecondary, marginTop: 3 }}>Overview</ThemedText></View>
-              <View className="items-end"><ThemedText style={{ fontSize: 11, color: theme.textTertiary, fontWeight: '700' }}>Total Value</ThemedText><ThemedText style={{ fontSize: 22, fontWeight: '800', color: theme.text, marginTop: 5, ...MONO }}>${totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</ThemedText></View>
-            </View>
-
-            <View style={{ borderRadius: Radius.lg, backgroundColor: theme.background, borderWidth: 1, borderColor: theme.border, padding: 14, gap: 12 }}>
-              <View className="flex-row items-end justify-between gap-3">
-                <View><ThemedText style={{ fontSize: 12, fontWeight: '800', color: theme.textTertiary }}>POSITION CURVE</ThemedText><ThemedText style={{ fontSize: 32, fontWeight: '900', color: theme.text, marginTop: 5, ...MONO }}>${chartValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</ThemedText></View>
-                <View className="items-end"><ChangeText value={chartChange} suffix={`$${Math.abs(chartChange).toFixed(0)}`} /><ChangeText value={chartChangePct} suffix={`${Math.abs(chartChangePct).toFixed(1)}%`} small /></View>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerClassName="px-4 pt-4 pb-16 gap-4">
+          <View style={{ paddingHorizontal: 2 }}>
+            <ThemedText style={{ fontSize: 11, fontWeight: '900', color: Brand[500], letterSpacing: 1.1 }}>
+              PORTFOLIO
+            </ThemedText>
+            <ThemedText style={{ fontSize: 26, fontWeight: '800', color: theme.text, letterSpacing: -0.5, marginTop: 3 }}>
+              {activeBets.length > 0
+                ? `${activeBets.length} position${activeBets.length === 1 ? '' : 's'} working`
+                : 'Nothing working yet'}
+            </ThemedText>
+            {scoped ? (
+              <View className="flex-row items-center" style={{ gap: 8, marginTop: 5 }}>
+                <ThemedText style={{ fontSize: 12, color: theme.textSecondary }}>
+                  {goals.length} selected goal{goals.length === 1 ? '' : 's'}
+                </ThemedText>
+                <ScopeChip label="Change" onPress={chooseGoals} />
+                <ScopeChip label="Show all" onPress={() => router.setParams({ goalIds: '' })} />
               </View>
-              <PerformanceChart points={equity} />
-            </View>
-
-            <View className="flex-row gap-3">
-              <MetricCard label="Weighted Avg Return" value={`${stats.weightedReturnPct < 0 ? '-' : ''}${Math.abs(activeBets.length ? stats.weightedReturnPct : 0).toFixed(1)}%`} valueColor={stats.weightedReturnPct >= 0 ? Brand[500] : Accent.red}>
-                <Pressable onPress={() => setConservative((current) => !current)} className="active:opacity-70"><ThemedText style={{ fontSize: 12, color: conservative ? Accent.gold : theme.textSecondary, fontWeight: conservative ? '700' : '400', marginTop: 4 }}>{conservative ? '🛡 Stocks/crypto → 0%' : 'Projected · tap for conservative'}</ThemedText></Pressable>
-              </MetricCard>
-              <MetricCard label="Probability of Goal" value={`${activeBets.length ? stats.goalProbability.toFixed(0) : '0'}%`} valueColor={Brand[500]}><ThemedText style={{ fontSize: 12, color: theme.textSecondary, marginTop: 4 }}>To reach ${targetValue.toLocaleString()}</ThemedText></MetricCard>
-            </View>
-          </View>
-
-          <View style={{ borderRadius: Radius.xl, backgroundColor: theme.backgroundElevated, borderWidth: 1, borderColor: theme.border, padding: 18, gap: 18, ...Shadow.card }}>
-            <ThemedText style={{ fontSize: 15, fontWeight: '800', color: theme.text }}>Allocation by Asset Class</ThemedText>
-            <View className="flex-row items-center" style={{ gap: 18 }}>
-              <AllocationDonut rows={rows} />
-              <View className="flex-1" style={{ gap: 10 }}>
-                {rows.map((row) => <View key={row.category} className="flex-row items-center gap-2"><View style={{ width: 9, height: 9, borderRadius: 999, backgroundColor: row.color }} /><ThemedText style={{ flex: 1, fontSize: 13, fontWeight: '700', color: theme.text }}>{row.category}</ThemedText><ThemedText style={{ width: 42, textAlign: 'right', fontSize: 13, color: theme.text, ...MONO }}>{row.pct.toFixed(0)}%</ThemedText><ThemedText style={{ width: 58, textAlign: 'right', fontSize: 13, color: theme.textSecondary, ...MONO }}>${row.staked.toFixed(0)}</ThemedText></View>)}
+            ) : allGoals.length > 1 ? (
+              <View className="flex-row items-center" style={{ gap: 8, marginTop: 5 }}>
+                <ThemedText style={{ fontSize: 12, color: theme.textSecondary }}>
+                  Across all {allGoals.length} goals
+                </ThemedText>
+                <ScopeChip label="Pick goals" onPress={chooseGoals} />
               </View>
-            </View>
-            <View className="gap-3">
-              <ThemedText style={{ fontSize: 15, fontWeight: '800', color: theme.text }}>Expected Return Contribution</ThemedText>
-              {rows.map((row) => <View key={`${row.category}-ev`} className="flex-row items-center gap-2"><View style={{ width: 8, height: 8, borderRadius: 999, backgroundColor: row.color }} /><ThemedText style={{ flex: 1, fontSize: 13, fontWeight: '600', color: theme.text }}>{row.category}</ThemedText><ThemedText style={{ fontSize: 13, fontWeight: '700', color: theme.text, ...MONO }}>{row.evPct.toFixed(1)}%</ThemedText></View>)}
-            </View>
+            ) : null}
           </View>
 
-          {activeBets.length === 0 ? (
-            <Pressable onPress={() => router.push('/(tabs)/routes')} className="py-3 items-center active:opacity-80" style={{ borderRadius: Radius.lg, backgroundColor: Brand[500], ...Shadow.card }}><ThemedText style={{ fontSize: 14, fontWeight: '800', color: '#06140C' }}>Track a route to build portfolio</ThemedText></Pressable>
-          ) : (
-            <View className="gap-3">
-              <View className="flex-row justify-between items-center" style={{ paddingHorizontal: 4 }}><ThemedText style={{ fontSize: 15, fontWeight: '800', color: theme.text }}>Active Positions</ThemedText><Pressable onPress={() => router.push('/positions')} className="active:opacity-60"><ThemedText style={{ fontSize: 13, fontWeight: '700', color: Brand[500] }}>Manage →</ThemedText></Pressable></View>
-              {activeBets.slice(0, 5).map((bet) => <View key={bet.id} style={{ borderRadius: Radius.lg, backgroundColor: theme.backgroundElement, borderWidth: 1, borderColor: theme.border, padding: 14, gap: 4 }}><View className="flex-row justify-between gap-3"><ThemedText style={{ flex: 1, fontSize: 13, fontWeight: '800', color: theme.text }} numberOfLines={1}>{compactAssetClass(bet.category)} · {bet.description}</ThemedText><ThemedText style={{ fontSize: 13, fontWeight: '700', color: Brand[500], ...MONO }}>${bet.amountWagered.toFixed(0)}</ThemedText></View><ThemedText style={{ fontSize: 12, color: theme.textSecondary }} numberOfLines={1}>{bet.platform} · {bet.probability}% chance · +${bet.expectedReturn}</ThemedText></View>)}
-            </View>
-          )}
+          <PortfolioOverview
+            bets={bets}
+            fallbackCash={fallbackCash}
+            targetValue={targetValue}
+            valueNow={{
+              value: progress.value,
+              netPnl: progress.goalProgress,
+              livePositions: progress.livePositions,
+              projectedPositions: progress.projectedPositions,
+            }}
+            historyPoints={progress.points}
+            positionById={progress.positionById}
+            onFindRoutes={() => router.push('/(tabs)/routes')}
+            onOpenPositions={() => router.push('/positions')}
+            onOpenPosition={(betId) => router.push(`/positions?betId=${betId}` as Href)}
+            onResolve={resolveBet}
+          />
+
+          {/* The shape of the portfolio, under the size of it. Each answers a question
+              the headline cannot: what can actually be lost, what has produced the
+              progress, when the money comes free, and what a dollar of progress costs. */}
+          <CapitalSplitCard bets={bets} />
+          <GoalContributionCard bets={bets} positionById={progress.positionById} />
+          <MaturityTimelineCard bets={bets} goals={goals} />
+          <CheapestPathCard
+            bets={bets}
+            conservative={preferences.conservativeProjections}
+            remainingToGoal={outstanding > 0 ? outstanding : null}
+          />
+
+          <ThemedText style={{ fontSize: 11, color: theme.textTertiary, textAlign: 'center', opacity: 0.6 }}>
+            AI-generated · Not financial advice · Informational only
+          </ThemedText>
         </ScrollView>
       </SafeAreaView>
     </View>
   );
 }
 
-function ChangeText({ value, suffix, small = false }: { value: number; suffix: string; small?: boolean }): React.ReactElement {
-  return <ThemedText style={{ fontSize: small ? 12 : 15, fontWeight: '900', color: value >= 0 ? Brand[500] : Accent.red, ...MONO }}>{value >= 0 ? '+' : '-'}{suffix}</ThemedText>;
-}
-
-function MetricCard({ label, value, valueColor, children }: React.PropsWithChildren<{ label: string; value: string; valueColor: string }>): React.ReactElement {
+/** Small pill beside the scope line: the controls for what this screen is reporting on. */
+function ScopeChip({ label, onPress }: { label: string; onPress: () => void }): React.ReactElement {
   const theme = useTheme();
-  return <View className="flex-1" style={{ borderRadius: Radius.lg, backgroundColor: theme.backgroundElement, borderWidth: 1, borderColor: theme.border, padding: 14 }}><ThemedText style={{ fontSize: 12, fontWeight: '700', color: theme.textTertiary }}>{label}</ThemedText><ThemedText style={{ fontSize: 34, fontWeight: '800', color: valueColor, marginTop: 8, ...MONO }}>{value}</ThemedText>{children}</View>;
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      hitSlop={8}
+      className="active:opacity-60"
+      style={{
+        borderRadius: Radius.pill,
+        borderWidth: 1,
+        borderColor: theme.border,
+        paddingHorizontal: 10,
+        paddingVertical: 3,
+      }}>
+      <ThemedText style={{ fontSize: 11, fontWeight: '800', color: Brand[500] }}>{label}</ThemedText>
+    </Pressable>
+  );
 }
