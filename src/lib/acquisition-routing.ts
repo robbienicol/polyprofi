@@ -1,3 +1,4 @@
+import { cancellationTargetFor } from '@/lib/cancel-links';
 import { inferAssetSymbol } from '@/lib/tracked-assets';
 import type { AcquisitionPlatform } from '@/types/bets';
 import type { Route } from '@/types/routes';
@@ -8,7 +9,7 @@ import type { Route } from '@/types/routes';
  * instrument is bought somewhere no preference can name. Those extra venues are forced
  * by the instrument, never chosen, so they never appear as a Settings toggle.
  */
-export type TradeDestination = AcquisitionPlatform | 'treasurydirect' | 'bank';
+export type TradeDestination = AcquisitionPlatform | 'treasurydirect' | 'bank' | 'cancel' | 'apply' | 'self';
 
 export interface TradeDestinationOptions {
   kalshiEventTicker?: string;
@@ -39,6 +40,12 @@ export function tradeDestinationLabel(destination: TradeDestination): string {
     kalshi: 'Kalshi',
     treasurydirect: 'TreasuryDirect',
     bank: 'a savings account',
+    // Overridden at the call site with the merchant's name; this is the generic form,
+    // for the rare place that renders a destination without a route to hand.
+    cancel: 'the cancellation page',
+    apply: 'the application',
+    // A spending habit has no venue at all. Nothing opens; the commitment is the act.
+    self: 'nothing to open',
   })[destination];
 }
 
@@ -50,6 +57,13 @@ export function tradeDestinationLabel(destination: TradeDestination): string {
  * returns null and lets the user's preference decide.
  */
 function nativeVenue(route: Route): TradeDestination | null {
+  // A cut is forced to its venue like a T-bill is, and for the same reason: no broker
+  // in the preference list can act on it. Without this a "Cancel Spotify" route fell
+  // through to the tiebreak below and offered to open Robinhood.
+  if (route.spendingCut) return route.spendingCut.kind === 'subscription' ? 'cancel' : 'self';
+  // Same reasoning for cards: a new one is applied for at the issuer, and re-routing
+  // the ones you hold happens at the register, with nothing to open.
+  if (route.cardRewards) return route.cardRewards.kind === 'new-card' && route.cardRewards.applyUrl ? 'apply' : 'self';
   if (route.sourceSlug) return 'polymarket';
   const venue = `${route.platform} ${route.category}`;
   if (/kalshi/i.test(venue)) return 'kalshi';
@@ -198,6 +212,16 @@ export function tradeUrlsFor(
       `https://polymarket.com/predictions?query=${query}`,
     ];
   }
+
+  if (destination === 'cancel') {
+    return route.spendingCut ? cancellationTargetFor(route.spendingCut.merchant).urls : [];
+  }
+
+  // Cutting back on a category is a promise to yourself. There is no page for that, and
+  // inventing one — a budgeting article, a search — would be filler.
+  if (destination === 'self') return [];
+
+  if (destination === 'apply') return route.cardRewards?.applyUrl ? [route.cardRewards.applyUrl] : [];
 
   if (destination === 'treasurydirect') {
     return ['https://www.treasurydirect.gov/marketable-securities/treasury-bills/'];

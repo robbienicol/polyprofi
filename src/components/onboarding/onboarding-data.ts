@@ -177,24 +177,36 @@ export interface RankedPreviewRow {
   riskLevel: number;
   score: number;
   note: string;
+  /** Nothing at risk and nothing staked — a spending cut, not a market bet. */
+  guaranteed?: boolean;
+  /**
+   * Chance of hitting the goal, 0-100 — the same meter the real route card
+   * shows (see the probability bar in RouteCard.tsx). A spending cut is
+   * certain once you do it; a contract's is the market-implied price.
+   */
+  probability: number;
 }
 
 export const RANKED_PREVIEW: RankedPreviewRow[] = [
   {
-    emoji: "☕",
-    name: "Starbucks — twice a week",
-    platform: "You",
+    emoji: "💳",
+    name: "Switch cards for gas",
+    platform: "Chase",
     riskLevel: 1,
     score: 91,
-    note: "$0 needed, guaranteed",
+    note: "Not your Sapphire Reserve · $0 needed",
+    guaranteed: true,
+    probability: 100,
   },
   {
     emoji: "🎬",
-    name: "Cancel Netflix this month",
+    name: "Cancel Netflix",
     platform: "You",
     riskLevel: 1,
     score: 88,
-    note: "$0 needed, guaranteed",
+    note: "$0 needed · nothing at risk",
+    guaranteed: true,
+    probability: 100,
   },
   {
     emoji: "📈",
@@ -203,6 +215,7 @@ export const RANKED_PREVIEW: RankedPreviewRow[] = [
     riskLevel: 3,
     score: 82,
     note: "Follows the market",
+    probability: 72,
   },
   {
     emoji: "🏦",
@@ -211,6 +224,7 @@ export const RANKED_PREVIEW: RankedPreviewRow[] = [
     riskLevel: 1,
     score: 75,
     note: "Fixed by contract",
+    probability: 99,
   },
   {
     emoji: "🎯",
@@ -219,6 +233,7 @@ export const RANKED_PREVIEW: RankedPreviewRow[] = [
     riskLevel: 3,
     score: 64,
     note: "58% market-implied",
+    probability: 58,
   },
 ];
 
@@ -236,18 +251,28 @@ export const SCORE_FACTORS: {
 }[] = [
   {
     emoji: "🎯",
-    label: "Likelihood",
-    note: "How likely it is to work",
+    label: "Chance it works",
+    note: "How likely the route is to actually reach your number",
     weight: 35,
   },
-  { emoji: "📉", label: "Downside", note: "What you could lose", weight: 25 },
+  {
+    emoji: "📉",
+    label: "What you could lose",
+    note: "How much of your money is at risk if it goes wrong",
+    weight: 25,
+  },
   {
     emoji: "💵",
-    label: "Cash required",
-    note: "How much it needs upfront",
+    label: "Money you need",
+    note: "How much you have to put in up front — less is better",
     weight: 30,
   },
-  { emoji: "⏳", label: "Time", note: "How long it takes", weight: 10 },
+  {
+    emoji: "⏳",
+    label: "How long it takes",
+    note: "How soon it pays out, and whether that's before your deadline",
+    weight: 10,
+  },
 ];
 
 /** Final slide — the disclaimer, plain rather than legalese. */
@@ -259,15 +284,16 @@ export const MATH_DISCLAIMER: string[] = [
 
 /** Slide 3 — the route facts users can inspect directly. */
 export interface BreakdownFactor {
+  emoji: string;
   label: string;
   value: string;
 }
 
 export const BREAKDOWN_FACTORS: BreakdownFactor[] = [
-  { label: "Chance of hitting goal", value: "70%" },
-  { label: "What could go wrong", value: "Market can drop" },
-  { label: "Cash you need", value: "$286" },
-  { label: "Time to resolve", value: "12 months" },
+  { emoji: "🎯", label: "Chance it works", value: "70%" },
+  { emoji: "⚠️", label: "What could go wrong", value: "Market dips" },
+  { emoji: "💵", label: "Money you need", value: "$286" },
+  { emoji: "⏳", label: "How long it takes", value: "12 months" },
 ];
 
 /** Slide 4 — scripted coach exchange. Mirrors what RouteCoach answers about. */

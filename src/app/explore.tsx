@@ -2,6 +2,7 @@ import React from 'react';
 import { ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { Icon } from '@/components/ui/Icon';
 import { ThemedText } from '@/components/themed-text';
 import { CategoryScale } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -49,7 +50,7 @@ export default function LearnScreen(): React.ReactElement {
               <View
                 className="w-11 h-11 rounded-2xl items-center justify-center mt-0.5"
                 style={{ backgroundColor: cat.color + '22' }}>
-                <ThemedText style={{ fontSize: 20 }}>{cat.emoji}</ThemedText>
+                <Icon glyph={cat.emoji} size={19} color={cat.color} />
               </View>
               <View className="flex-1 gap-0.5">
                 <ThemedText type="smallBold">{cat.name}</ThemedText>

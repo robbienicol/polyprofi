@@ -7,6 +7,7 @@ import { usePortfolioProgress } from '@/api/hooks/usePortfolioProgress';
 import { useMoney } from '@/api/hooks/usePreferences';
 import { useSavedRoutes } from '@/api/hooks/useSavedRoutes';
 import { useTrackedBets } from '@/api/hooks/useTrackedBets';
+import { Icon } from '@/components/ui/Icon';
 import { ThemedText } from '@/components/themed-text';
 import { MetricInfo } from '@/components/ui/MetricInfo';
 import { riskColor, riskLabel } from '@/components/molecules/RouteCard';
@@ -80,7 +81,7 @@ export default function PositionsScreen(): React.ReactElement {
       notifiedRef.current.add(alert.betId);
       const bet = bets.find((b) => b.id === alert.betId);
       notifySellRecommendation(
-        'Goal hit — sell now 💰',
+        'Goal hit — sell now',
         bet
           ? `Your ${bet.category} position is up $${alert.unrealizedPnl.toFixed(0)}. Lock in your $${alert.profitGoal} target on ${bet.platform}.`
           : `You're up $${alert.unrealizedPnl.toFixed(0)} — sell to lock in your profit.`
@@ -104,6 +105,11 @@ export default function PositionsScreen(): React.ReactElement {
 
   const pnlPositive = stats.pnl >= 0;
   const showSpinner = refreshing || progress.isRefreshing;
+  // Foreground-only polling (useBetMonitoring) means prices simply stop moving
+  // while the app is closed — reopening after a day away can otherwise show a
+  // stale "Live data · 9:41 AM" with no hint that it's yesterday's 9:41 AM.
+  const dataAgeMs = progress.updatedAt ? Date.now() - progress.updatedAt.getTime() : null;
+  const isStale = dataAgeMs != null && dataAgeMs > 24 * 60 * 60 * 1000;
 
   return (
     <View className="flex-1" style={{ backgroundColor: theme.background }}>
@@ -125,6 +131,33 @@ export default function PositionsScreen(): React.ReactElement {
 
           {bets.length > 0 ? (
             <>
+              {isStale && stats.active > 0 && (
+                <Pressable
+                  onPress={onRefresh}
+                  accessibilityRole="button"
+                  accessibilityLabel="Refresh live prices"
+                  className="flex-row items-center active:opacity-75"
+                  style={{
+                    borderRadius: Radius.lg,
+                    borderWidth: 1.5,
+                    borderColor: Semantic.caution + '66',
+                    backgroundColor: Semantic.caution + '18',
+                    padding: 12,
+                    gap: 10,
+                  }}>
+                  <Icon glyph="⏳" size={18} color={Semantic.caution} />
+                  <View className="flex-1">
+                    <ThemedText style={{ fontSize: 13, fontWeight: '700', color: theme.text }}>
+                      Prices haven&apos;t updated in over a day
+                    </ThemedText>
+                    <ThemedText style={{ fontSize: 11, color: theme.textSecondary, marginTop: 1 }}>
+                      Tap to refresh and check for anything that resolved while you were away
+                    </ThemedText>
+                  </View>
+                  <ThemedText style={{ fontSize: 13, fontWeight: '800', color: Semantic.caution }}>Refresh</ThemedText>
+                </Pressable>
+              )}
+
               {/* P&L hero */}
               <View
                 style={{
@@ -186,7 +219,7 @@ export default function PositionsScreen(): React.ReactElement {
           ) : (
             <View className="items-center gap-3 py-24">
               <View style={{ width: 64, height: 64, borderRadius: Radius.xl, backgroundColor: theme.backgroundElement, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: theme.border }}>
-                <ThemedText style={{ fontSize: 30 }}>📋</ThemedText>
+                <Icon glyph="📋" size={28} color={theme.textSecondary} strokeWidth={1.6} />
               </View>
               <ThemedText style={{ fontSize: 16, fontWeight: '700', color: theme.text }}>No acquired positions yet</ThemedText>
               <ThemedText className="text-center" style={{ fontSize: 13, color: theme.textSecondary, maxWidth: 240 }}>
@@ -226,6 +259,12 @@ function BetCardInner({ bet, liveStatus, valuation, highlighted, onResolve, onDi
     : bet.description;
   // The live-quote block already states symbol and entry price — don't repeat it above.
   const showDescription = !(showStockQuote && isSyntheticDescription);
+  // Once a stock position has a live quote, the card swaps its description for the
+  // synthetic "SYM tracked at $X" line above — which is exactly why "what did I even
+  // buy this for" happens: the actual pick and the AI's reasoning are still on the
+  // bet, just no longer shown anywhere. Tapping the card reveals them again.
+  const [expanded, setExpanded] = useState(false);
+  const openedAt = bet.positionOpenedAt ?? bet.createdAt;
 
   return (
     <View className="gap-2">
@@ -241,7 +280,7 @@ function BetCardInner({ bet, liveStatus, valuation, highlighted, onResolve, onDi
             ...Shadow.float,
           }}>
           <View className="flex-row items-center gap-2">
-            <ThemedText style={{ fontSize: 20 }}>💰</ThemedText>
+            <Icon glyph="💰" size={19} color={Semantic.caution} />
             <View className="flex-1">
               <ThemedText style={{ fontSize: 11, fontWeight: '800', color: Semantic.caution, letterSpacing: 0.6 }}>
                 SELL NOW — GOAL HIT
@@ -260,7 +299,10 @@ function BetCardInner({ bet, liveStatus, valuation, highlighted, onResolve, onDi
               onPress={() => onResolve({ id: bet.id, status: 'won' })}
               className="flex-1 py-3 items-center active:opacity-85"
               style={{ borderRadius: Radius.md, backgroundColor: Brand[500], ...Shadow.card }}>
-              <ThemedText style={{ fontSize: 14, fontWeight: '800', color: OnBrand }}>Sold ✓</ThemedText>
+              <View className="flex-row items-center" style={{ gap: 5 }}>
+                <ThemedText style={{ fontSize: 14, fontWeight: '800', color: OnBrand }}>Sold</ThemedText>
+                <Icon glyph="✓" size={14} color={OnBrand} strokeWidth={3} />
+              </View>
             </Pressable>
             <Pressable
               onPress={onDismissSell}
@@ -286,18 +328,47 @@ function BetCardInner({ bet, liveStatus, valuation, highlighted, onResolve, onDi
         <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, backgroundColor: rc }} />
         <View style={{ paddingLeft: 18, paddingRight: 14, paddingVertical: 14, gap: 12 }}>
 
-          <View className="flex-row items-center gap-2">
+          <Pressable
+            onPress={() => setExpanded((open) => !open)}
+            accessibilityRole="button"
+            accessibilityLabel={expanded ? 'Hide position details' : 'Show position details'}
+            className="flex-row items-center gap-2 active:opacity-70">
             <View className="flex-1 flex-row items-center gap-2.5">
-              <ThemedText style={{ fontSize: 20 }}>{bet.emoji}</ThemedText>
+              <Icon glyph={bet.emoji} size={19} color={theme.textSecondary} />
               <View className="flex-1">
                 <ThemedText style={{ fontSize: 14, fontWeight: '700', color: theme.text }} numberOfLines={1}>{bet.category}</ThemedText>
                 <ThemedText style={{ fontSize: 11, color: theme.textTertiary }} numberOfLines={1}>{bet.platform} · {riskLabel(bet.riskLevel)}</ThemedText>
               </View>
             </View>
             <StatusBadge status={bet.status} isLive={valuation?.pricing === 'live' || liveStatus?.isLive} />
-          </View>
+            <ThemedText style={{ fontSize: 11, color: theme.textTertiary }}>{expanded ? '▲' : '▼'}</ThemedText>
+          </Pressable>
 
-          {showDescription && (
+          {expanded ? (
+            <View
+              style={{
+                borderRadius: Radius.md,
+                padding: 12,
+                gap: 8,
+                backgroundColor: theme.backgroundSelected,
+                borderWidth: 1,
+                borderColor: theme.border,
+              }}>
+              <View>
+                <ThemedText style={{ fontSize: 11, fontWeight: '700', color: theme.textTertiary, letterSpacing: 0.4 }}>WHAT THIS IS</ThemedText>
+                <ThemedText style={{ fontSize: 13, color: theme.text, lineHeight: 19, marginTop: 2 }}>{bet.description}</ThemedText>
+              </View>
+              {bet.strategy ? (
+                <View>
+                  <ThemedText style={{ fontSize: 11, fontWeight: '700', color: theme.textTertiary, letterSpacing: 0.4 }}>WHY</ThemedText>
+                  <ThemedText style={{ fontSize: 13, color: theme.textSecondary, lineHeight: 19, marginTop: 2 }}>{bet.strategy}</ThemedText>
+                </View>
+              ) : null}
+              <ThemedText style={{ fontSize: 11, color: theme.textTertiary }}>
+                Tracked {new Date(openedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+              </ThemedText>
+            </View>
+          ) : showDescription && (
             <ThemedText style={{ fontSize: 13, color: theme.textSecondary, lineHeight: 19 }} numberOfLines={2}>{displayedDescription}</ThemedText>
           )}
 
@@ -405,13 +476,19 @@ function BetCardInner({ bet, liveStatus, valuation, highlighted, onResolve, onDi
                   onPress={() => onResolve({ id: bet.id, status: 'won' })}
                   className="flex-1 items-center active:opacity-75"
                   style={{ borderRadius: Radius.md, paddingVertical: 10, backgroundColor: Semantic.positive + '20' }}>
-                  <ThemedText style={{ fontSize: 13, fontWeight: '700', color: Semantic.positive }}>Won ✓</ThemedText>
+                  <View className="flex-row items-center" style={{ gap: 4 }}>
+                    <ThemedText style={{ fontSize: 13, fontWeight: '700', color: Semantic.positive }}>Won</ThemedText>
+                    <Icon glyph="✓" size={13} color={Semantic.positive} strokeWidth={3} />
+                  </View>
                 </Pressable>
                 <Pressable
                   onPress={() => onResolve({ id: bet.id, status: 'lost' })}
                   className="flex-1 items-center active:opacity-70 border"
                   style={{ borderRadius: Radius.md, paddingVertical: 10, borderColor: theme.border }}>
-                  <ThemedText style={{ fontSize: 13, fontWeight: '700', color: theme.textSecondary }}>Lost ✗</ThemedText>
+                  <View className="flex-row items-center" style={{ gap: 4 }}>
+                    <ThemedText style={{ fontSize: 13, fontWeight: '700', color: theme.textSecondary }}>Lost</ThemedText>
+                    <Icon glyph="✗" size={13} color={theme.textSecondary} strokeWidth={3} />
+                  </View>
                 </Pressable>
               </View>
               {/* Won/Lost both assume money went in. Tracking a route you decided
@@ -455,8 +532,8 @@ function StatusBadge({
 }): React.ReactElement {
   const map = {
     active: { color: isLive ? Semantic.positive : Semantic.caution, label: isLive ? 'Live' : 'Active' },
-    won: { color: Semantic.positive, label: 'Won ✓' },
-    lost: { color: Semantic.negative, label: 'Lost ✗' },
+    won: { color: Semantic.positive, label: 'Won' },
+    lost: { color: Semantic.negative, label: 'Lost' },
     watching: { color: Semantic.info, label: 'Watching' },
   };
   const { color, label } = map[status];

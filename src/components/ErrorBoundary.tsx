@@ -2,6 +2,7 @@ import React, { Component, type ReactNode } from 'react';
 import { Pressable, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { Icon } from '@/components/ui/Icon';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, OnBrand, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -29,7 +30,7 @@ function ErrorFallback({ error, onRetry }: { error: Error; onRetry: () => void }
   return (
     <View className="flex-1" style={{ backgroundColor: theme.background }}>
       <SafeAreaView className="flex-1 items-center justify-center px-8 gap-4">
-        <ThemedText style={{ fontSize: 40 }}>{clerkDown ? '📡' : '⚠️'}</ThemedText>
+        <Icon glyph={clerkDown ? '📡' : '⚠️'} size={38} color={Brand[500]} strokeWidth={1.5} />
         <ThemedText style={{ fontSize: 18, fontWeight: '800', color: theme.text, textAlign: 'center' }}>
           {clerkDown ? 'Can’t reach sign-in' : 'Something went wrong'}
         </ThemedText>

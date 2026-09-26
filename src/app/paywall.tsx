@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuizAnswers } from '@/api/hooks/useQuizAnswers';
 import { useSubscription } from '@/api/hooks/useSubscription';
 import { BrandMark } from '@/components/ui/BrandMark';
+import { Icon } from '@/components/ui/Icon';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, CategoryScale, OnBrand, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -74,7 +75,7 @@ export default function PaywallScreen(): React.ReactElement {
                 <View
                   className="items-center justify-center"
                   style={{ width: 40, height: 40, borderRadius: Radius.md, backgroundColor: f.color + '22' }}>
-                  <ThemedText style={{ fontSize: 18 }}>{f.emoji}</ThemedText>
+                  <Icon glyph={f.emoji} size={17} color={f.color} />
                 </View>
                 <ThemedText style={{ fontSize: 13.5, color: theme.text, flex: 1, lineHeight: 19 }}>{f.text}</ThemedText>
               </View>

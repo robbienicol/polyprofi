@@ -24,8 +24,7 @@
  */
 
 import type { PageCopy } from '@/components/onboarding/quiz-kit';
-import { deviceCountry } from '@/lib/device-region';
-import type { SurveyAnswers } from '@/lib/onboarding-profile';
+import { DEFAULT_MARKETS, type SurveyAnswers } from '@/lib/onboarding-profile';
 
 export const PAGE_IDS = [
   'outcome',
@@ -33,11 +32,10 @@ export const PAGE_IDS = [
   // hit the number" is the app's whole pitch, so what they're open to hearing
   // about has to be asked before anything else is assumed about them.
   'markets',
-  'experience',
-  // The first of two working pauses. Three answers in is where a run starts to
-  // feel like a form, so this is where the app does something with them and says
-  // so — every bar it fills is named after something they actually said.
-  'profiling',
+  // No investing-experience question: it only set how much the app explains, and
+  // being asked to grade yourself before seeing anything read as a test. Every
+  // pick explains itself the same way instead.
+  // No "setting you up" pause here either: it filled bars while nothing happened.
   'capital',
   'horizon',
   // What routes to, and — folded in rather than a separate gated page — the
@@ -64,13 +62,6 @@ export const SKIP = 'Prefer not to say';
 export const SOMETHING_ELSE = 'Something else';
 
 export const AGE_RANGES = ['18-24', '25-34', '35-44', '45-54', '55-64', '65+', SKIP] as const;
-
-export const EXPERIENCE_LEVELS = [
-  { label: 'None yet', note: 'Starting from scratch' },
-  { label: 'A little', note: 'A few positions' },
-  { label: 'Comfortable', note: 'I invest regularly' },
-  { label: 'Professional', note: 'Skip the explaining' },
-] as const;
 
 export const OUTCOMES = [
   { label: 'Long-term growth', emoji: '🌱' },
@@ -118,8 +109,6 @@ export const SCAN_TASK_COUNT = 3;
  */
 export const CAN_CONTINUE: Record<PageId, (answers: SurveyAnswers) => boolean> = {
   outcome: (a) => Boolean(a.outcome),
-  experience: (a) => Boolean(a.experience),
-  profiling: () => true,
   capital: (a) => Boolean(a.amount),
   horizon: (a) => Boolean(a.horizon),
   // No market is a real answer: it means "show me everything".
@@ -138,18 +127,6 @@ function phraseList(items: string[]): string {
   if (items.length <= 1) return items[0] ?? '';
   return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
 }
-
-/**
- * Each experience level implies a different promise about how the app will
- * talk, so it gets its own line rather than a generic "got it".
- */
-// Keyed on the option labels exactly as EXPERIENCE_LEVELS writes them.
-const EXPERIENCE_ACKS: Record<string, string> = {
-  'None yet': 'Then you are starting in exactly the right place. Every pick comes with an explanation.',
-  'A little': 'That is further along than most people get. We will skip the basics and get to the numbers.',
-  Comfortable: 'Then you want the numbers rather than the commentary. That is what you will get.',
-  Professional: 'Understood. Raw pricing and sourcing, and we will stay out of your way.',
-};
 
 const HORIZON_ACKS: Record<string, string> = {
   weeks: "A few weeks is tight, so we'll be straight with you about what that costs.",
@@ -189,20 +166,10 @@ export function buildPageCopy(
       title: 'What ways do you\nwant to make it happen?',
       helper: 'Toggle on everything you want us to check — investing, saving, cutting spending, or all of it. Leave it blank and we check everything.',
     },
-    experience: {
+    capital: {
       ack: markets
         ? `${markets}. Now every pick has something to aim at.`
         : outcome ? `${outcome}. Now every pick has something to aim at.` : null,
-      title: "What's your experience\nwith investing?",
-      helper: 'There is no wrong answer here. It only sets how much we explain along the way.',
-    },
-    profiling: {
-      // Named for what it is doing with their answers, not for the wait.
-      title: name ? `Nice work, ${name}. Setting you up…` : 'Nice work. Setting you up…',
-      helper: null,
-    },
-    capital: {
-      ack: EXPERIENCE_ACKS[answers.experience ?? ''] ?? null,
       title: 'Roughly how much are\nyou looking to invest?',
       helper: 'A ballpark is fine, and no amount is too small. Think of it as a ceiling — we will never suggest more than this.',
     },
@@ -214,7 +181,7 @@ export function buildPageCopy(
     platforms: {
       ack: HORIZON_ACKS[answers.horizon ?? ''] ?? null,
       title: 'Where do you want\nus to look?',
-      helper: 'Every pick has to be bought somewhere. Drop any of these and we stop routing you there — and while you\'re here, connecting a bank weighs real spending alongside every pick.',
+      helper: 'Link your bank and credit cards and your real spending counts alongside every pick. Below that are the apps a pick gets bought on — drop any and we stop routing you there.',
     },
     scan: {
       // "what X and Y looks like" would need the verb to agree with a list whose
@@ -246,18 +213,6 @@ const HORIZON_WORDS: Record<string, string> = {
   years: 'a few years',
 };
 
-/** The three bars the first loader fills, each named after an answer just given. */
-export function profilingTasks(answers: SurveyAnswers): string[] {
-  const outcome = answers.outcome === SOMETHING_ELSE ? answers.outcomeOther.trim() : answers.outcome;
-  return [
-    outcome ? `Saving your goal: ${outcome}` : 'Saving your goal',
-    answers.experience
-      ? `Setting how much we explain (${answers.experience.toLocaleLowerCase()})`
-      : 'Setting how much we explain',
-    deviceCountry() ? `Unlocking what you can buy in ${deviceCountry()}` : 'Checking what you can buy',
-  ];
-}
-
 export function scanTasks(answers: SurveyAnswers): string[] {
   const markets = answers.markets.length > 0 ? answers.markets.length : MARKETS.length;
   return [
@@ -282,4 +237,13 @@ export function buildTasks(answers: SurveyAnswers): string[] {
       : 'Matching your timeframe',
     'Putting the safest first',
   ];
+}
+
+// ── self-check ──────────────────────────────────────────────────────────────
+export function __selfCheck(): void {
+  const labels = MARKETS.map((market) => market.label);
+  console.assert(
+    labels.length === DEFAULT_MARKETS.length && labels.every((label) => DEFAULT_MARKETS.includes(label)),
+    'DEFAULT_MARKETS must name every market the quiz offers — a label only in one list silently stops being pre-selected',
+  );
 }

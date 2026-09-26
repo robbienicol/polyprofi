@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 
 import { fetchStocks, fetchTreasuryBillYields } from '@/api/client/market-quotes';
-import { fetchPolymarketPickBundle } from '@/api/client/polymarket-picks';
+import { fetchPolymarketPickBundle } from '@/api/client/polymarket-picks-client';
 import { fetchPolymarketSnapshot } from '@/api/client/polymarket-market-data';
 
 /**

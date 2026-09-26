@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
-import { Pressable, ScrollView, View } from "react-native";
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { timeframeCalendarDays } from "@/api/client/playbook";
@@ -20,7 +20,7 @@ import { TrackRouteForm } from "@/components/routes/TrackRouteForm";
 import { ThemedText } from "@/components/themed-text";
 import { BrandLoader } from "@/components/ui/loaders";
 import { KEYBOARD_AWARE_SCROLL_PROPS } from "@/constants/keyboard";
-import { Brand, Radius, Semantic } from "@/constants/theme";
+import { Brand, OnBrand, Radius, Semantic, Shadow } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 import { betOutcomeSide } from "@/lib/bet-monitor-match";
 import { parseEntryPrice } from "@/lib/parse-bet-line";
@@ -181,8 +181,9 @@ export default function RouteDetailScreen(): React.ReactElement {
 
   function confirmAcquire(): void {
     if (added || isTracking) return;
-    const amount = Number(acquireAmount);
-    if (!Number.isFinite(amount) || amount <= 0) return;
+    // A card-rewards plan stakes nothing; its value is the rewards themselves.
+    const amount = route.cardRewards ? 0 : Number(acquireAmount);
+    if (!route.cardRewards && (!Number.isFinite(amount) || amount <= 0)) return;
     const predictionMarket = /polymarket|prediction/i.test(
       `${route.category} ${route.platform}`,
     );
@@ -239,7 +240,7 @@ export default function RouteDetailScreen(): React.ReactElement {
       <SafeAreaView className="flex-1">
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerClassName="px-4 pt-3 pb-16 gap-4"
+          contentContainerClassName="px-4 pt-3 pb-8 gap-4"
           {...KEYBOARD_AWARE_SCROLL_PROPS}
         >
           <View
@@ -283,21 +284,8 @@ export default function RouteDetailScreen(): React.ReactElement {
             route={route}
             stake={stake}
             neededToHitGoal={neededToHitGoal}
-            added={added}
-            adding={isTracking}
-            onAdd={beginAcquire}
             deadlineDays={goalDeadlineDays}
           />
-
-          {showAcquireForm ? (
-            <TrackRouteForm
-              amount={acquireAmount}
-              destinationLabel={tradeDestinationLabel(destination)}
-              onAmountChange={setAcquireAmount}
-              onConfirm={confirmAcquire}
-              onCancel={() => setShowAcquireForm(false)}
-            />
-          ) : null}
 
           {comparison ? <MarketComparisonCard comparison={comparison} /> : null}
 
@@ -414,6 +402,54 @@ export default function RouteDetailScreen(): React.ReactElement {
             AI-generated · Not financial advice · Informational only
           </ThemedText>
         </ScrollView>
+
+        {/* Pinned, not in the card: the card runs past the fold on most phones, so
+            the one action on this screen was only reachable by scrolling. The acquire
+            form takes the button's place here so it opens where the tap happened. */}
+        <KeyboardAvoidingView
+          behavior={Platform.select({ ios: "padding", android: undefined })}
+        >
+          <View
+            className="px-4 pt-3 pb-2"
+            style={{
+              backgroundColor: theme.background,
+              borderTopWidth: 1,
+              borderTopColor: theme.border,
+            }}
+          >
+            {showAcquireForm ? (
+              <TrackRouteForm
+                amount={acquireAmount}
+                destinationLabel={tradeDestinationLabel(destination)}
+                onAmountChange={setAcquireAmount}
+                onConfirm={confirmAcquire}
+                onCancel={() => setShowAcquireForm(false)}
+                cardRewards={route.cardRewards}
+              />
+            ) : (
+              <Pressable
+                onPress={beginAcquire}
+                disabled={added || isTracking}
+                accessibilityRole="button"
+                className="py-4 items-center active:opacity-85"
+                style={{
+                  borderRadius: Radius.lg,
+                  backgroundColor: Brand[500],
+                  opacity: added || isTracking ? 0.65 : 1,
+                  ...Shadow.card,
+                }}
+              >
+                <ThemedText style={{ fontSize: 16, fontWeight: "900", color: OnBrand }}>
+                  {added
+                    ? "Saved to your plan"
+                    : isTracking
+                      ? "Saving..."
+                      : "Add to plan →"}
+                </ThemedText>
+              </Pressable>
+            )}
+          </View>
+        </KeyboardAvoidingView>
       </SafeAreaView>
     </View>
   );

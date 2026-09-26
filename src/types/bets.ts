@@ -154,4 +154,10 @@ export interface BetLiveStatus {
   awayScore?: number;
   isLive: boolean;
   fetchedAt: string;
+  /**
+   * Set once the underlying market/game has actually settled (not just moved in
+   * the user's favor) — the signal that lets a position resolve itself instead
+   * of waiting for a Won/Lost tap. See resolvedPolymarketOutcome/resolvedSportsOutcome.
+   */
+  resolvedStatus?: 'won' | 'lost';
 }

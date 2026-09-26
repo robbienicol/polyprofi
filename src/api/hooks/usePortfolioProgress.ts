@@ -11,6 +11,7 @@ import { deviceQuery } from '@/api/query-client';
 import { useBetMonitoring } from '@/api/hooks/useBetMonitoring';
 import { useTrackedBets } from '@/api/hooks/useTrackedBets';
 import { calculatePortfolioProgress, stockIdentity } from '@/lib/portfolio-progress';
+import { notifyPositionResolved } from '@/lib/notifications';
 import { isStockOrEtfCategory } from '@/lib/tracked-assets';
 import type { TrackedBet } from '@/types/bets';
 
@@ -22,10 +23,28 @@ const PROGRESS_QUERY_KEY = ['PORTFOLIO_PROGRESS'] as const;
  * or the whole portfolio costs exactly one set of fetches.
  */
 export function usePortfolioMarketInputs() {
-  const { bets, isLoading: betsLoading } = useTrackedBets();
+  const { bets, isLoading: betsLoading, resolveBet } = useTrackedBets();
   const allActive = useMemo(() => bets.filter((bet) => bet.status === 'active'), [bets]);
   const monitoring = useBetMonitoring(allActive.length > 0);
   const [now, setNow] = useState(() => Date.now());
+
+  // A market that has actually settled or a game that has actually ended
+  // resolves itself — the user tapping Won/Lost was never telling us anything
+  // the market didn't already know. Keyed off `allActive` so a bet drops out
+  // (and stops re-firing) the instant its own resolveBet call lands and flips
+  // its status — no separate "already resolved" bookkeeping needed.
+  useEffect(() => {
+    for (const bet of allActive) {
+      const status = monitoring.statusById[bet.id];
+      if (!status?.resolvedStatus) continue;
+      resolveBet({ id: bet.id, status: status.resolvedStatus });
+      const verb = status.resolvedStatus === 'won' ? 'won' : "didn't hit";
+      void notifyPositionResolved(
+        `${bet.emoji} Position resolved`,
+        `${bet.description.length > 80 ? `${bet.description.slice(0, 80)}…` : bet.description} — you ${verb}.`,
+      );
+    }
+  }, [allActive, monitoring.statusById, resolveBet]);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 60_000);
@@ -44,8 +63,9 @@ export function usePortfolioMarketInputs() {
     queryKey: ['TRACKED_ASSET_QUOTES', ...symbols],
     queryFn: () => fetchTrackedAssetQuotes(symbols),
     enabled: symbols.length > 0,
-    staleTime: 30_000,
-    refetchInterval: symbols.length > 0 ? 60_000 : false,
+    // Often enough that the tip of the chart visibly moves while the market is open.
+    staleTime: 10_000,
+    refetchInterval: symbols.length > 0 ? 15_000 : false,
   });
 
   const refresh = useCallback(async () => {

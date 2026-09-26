@@ -13,6 +13,7 @@ import { useSavingsGoal } from '@/api/hooks/useSavingsGoal';
 import { useTrackedBets } from '@/api/hooks/useTrackedBets';
 import { useUserProfile } from '@/api/hooks/useUserProfile';
 import { PortfolioOverview } from '@/components/portfolio/PortfolioOverview';
+import { Icon } from '@/components/ui/Icon';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, OnBrand, Radius, Semantic, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -161,11 +162,11 @@ export default function GoalDetailScreen(): React.ReactElement {
                   justifyContent: 'center',
                   backgroundColor: goal.achievedAt ? Semantic.positive + '22' : theme.backgroundSelected,
                 }}>
-                <ThemedText style={{ fontSize: 28 }}>{goal.emoji}</ThemedText>
+                <Icon glyph={goal.emoji} size={26} color={theme.textSecondary} />
               </View>
               <View className="flex-1" style={{ gap: 3 }}>
                 <ThemedText style={{ fontSize: 11, fontWeight: '800', color: theme.textTertiary, letterSpacing: 0.6 }}>
-                  {goal.achievedAt ? 'GOAL REACHED 🎉' : openEnded ? 'OPEN-ENDED GOAL' : 'PROFIT GOAL'}
+                  {goal.achievedAt ? 'GOAL REACHED' : openEnded ? 'OPEN-ENDED GOAL' : 'PROFIT GOAL'}
                 </ThemedText>
                 <ThemedText style={{ fontSize: 21, fontWeight: '800', color: theme.text, letterSpacing: -0.4 }} numberOfLines={2}>
                   {goal.label}

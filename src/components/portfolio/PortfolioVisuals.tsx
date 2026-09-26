@@ -1,9 +1,8 @@
-import { useState } from 'react';
-import { LayoutChangeEvent, View } from 'react-native';
-import Svg, { Circle, Defs, LinearGradient, Path, Stop } from 'react-native-svg';
+import { View } from 'react-native';
+import Svg, { Circle } from 'react-native-svg';
 
 import { ThemedText } from '@/components/themed-text';
-import { Brand, CategoryScale, Radius, Semantic } from '@/constants/theme';
+import { Brand, CategoryScale, Radius } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { betEv } from '@/lib/portfolio';
 import type { TrackedBet } from '@/types/bets';
@@ -20,8 +19,6 @@ const CLASS_COLORS = {
 
 type PortfolioClass = keyof typeof CLASS_COLORS;
 export type AllocationRow = ReturnType<typeof buildAllocationRows>[number];
-/** One recorded observation of portfolio value. */
-export type EquityPoint = { time: number; value: number };
 
 export function compactAssetClass(category: string): string {
   return category === 'Stocks & ETFs' ? 'Stocks' : assetClassFor(category);
@@ -122,92 +119,6 @@ export function AllocationDonut({
             </ThemedText>
           ) : null}
         </View>
-      ) : null}
-    </View>
-  );
-}
-
-/**
- * Equity curve. Measures its own width so the line fills the card instead of
- * sitting in a fixed 280px box, and fades an area fill under it.
- */
-export function PerformanceChart({
-  points,
-  height = 132,
-}: {
-  points: EquityPoint[];
-  height?: number;
-}): React.ReactElement {
-  const theme = useTheme();
-  const [width, setWidth] = useState(0);
-  const onLayout = (event: LayoutChangeEvent) => setWidth(event.nativeEvent.layout.width);
-
-  const padY = 12;
-  // Keep the end-of-series dot fully inside the box instead of half-clipped.
-  const padX = 5;
-  const plotWidth = Math.max(width - padX * 2, 1);
-  const values = points.map((point) => point.value);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const span = Math.max(max - min, Math.max(1, max * 0.01));
-  const rising = points.length > 1 && values[values.length - 1] >= values[0];
-  const color = rising ? Semantic.positive : Semantic.negative;
-
-  const coords = points.map((point, index) => ({
-    x: padX + (index / Math.max(1, points.length - 1)) * plotWidth,
-    y: height - padY - ((point.value - min) / span) * (height - padY * 2),
-  }));
-
-  const line = coords.map((point, index) => `${index === 0 ? 'M' : 'L'}${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(' ');
-  const last = coords[coords.length - 1];
-  const area = `${line} L${last.x.toFixed(2)} ${height} L${padX} ${height} Z`;
-
-  return (
-    <View onLayout={onLayout} style={{ width: '100%', height }}>
-      {width > 0 ? (
-        <Svg width={width} height={height}>
-          <Defs>
-            <LinearGradient id="equityFill" x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0" stopColor={color} stopOpacity={0.28} />
-              <Stop offset="1" stopColor={color} stopOpacity={0} />
-            </LinearGradient>
-          </Defs>
-          {[0, 0.5, 1].map((position) => (
-            <Path
-              key={position}
-              d={`M0 ${(height - 1) * position + 0.5} H${width}`}
-              stroke={theme.border}
-              strokeWidth={1}
-            />
-          ))}
-          {points.length > 1 ? (
-            <>
-              <Path d={area} fill="url(#equityFill)" />
-              <Path d={line} stroke={color} strokeWidth={2.5} fill="none" strokeLinejoin="round" strokeLinecap="round" />
-              <Circle cx={last.x} cy={last.y} r={7} fill={color} fillOpacity={0.18} />
-              <Circle cx={last.x} cy={last.y} r={3.5} fill={color} />
-            </>
-          ) : (
-            <Path
-              d={`M0 ${height / 2} H${width}`}
-              stroke={theme.borderStrong}
-              strokeWidth={2}
-              strokeDasharray="5 6"
-            />
-          )}
-        </Svg>
-      ) : null}
-      {points.length <= 1 ? (
-        <ThemedText
-          style={{
-            position: 'absolute',
-            alignSelf: 'center',
-            top: height / 2 + 10,
-            fontSize: 11,
-            color: theme.textTertiary,
-          }}>
-          Acquire a position to start the curve
-        </ThemedText>
       ) : null}
     </View>
   );

@@ -146,6 +146,25 @@ export async function notifySellRecommendation(title: string, body: string): Pro
 }
 
 /**
+ * Fire once a position has been auto-resolved — the market closed or the game
+ * ended, so status flipped to won/lost without the user tapping anything.
+ */
+export async function notifyPositionResolved(title: string, body: string): Promise<void> {
+  try {
+    if (Platform.OS === 'web') return;
+    if (!(await getPreferences()).positionAlerts) return;
+    if (!(await ensurePermission())) return;
+
+    await Notifications.scheduleNotificationAsync({
+      content: { title, body },
+      trigger: null,
+    });
+  } catch {
+    // skip silently
+  }
+}
+
+/**
  * The one piece of good news for today: a position that has climbed into a new
  * band, or a goal that has passed a milestone.
  *

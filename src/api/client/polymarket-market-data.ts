@@ -11,6 +11,8 @@ interface RawMarket {
   question: string;
   outcomes: string | string[];
   outcomePrices: string | string[];
+  /** CLOB token per outcome, same order as `outcomes`. Keys the price-history API. */
+  clobTokenIds?: string | string[] | null;
   volumeNum: number | null;
   liquidityNum?: number | null;
   spread?: number | null;
@@ -23,6 +25,7 @@ interface RawMarket {
   endDate?: string | null;
   /** Present only because we request include_tag=true; see fetchPolymarketRaw. */
   tags?: { slug?: string }[] | null;
+  closed?: boolean;
 }
 
 export interface PolymarketSnapshot {
@@ -381,6 +384,8 @@ function toPolymarketEntry(market: RawMarket): PolymarketEntry {
     slug: market.slug,
     endDate: typeof market.endDate === 'string' ? market.endDate : undefined,
     tagSlugs: tagSlugsOf(market),
+    closed: market.closed === true,
+    clobTokenIds: market.clobTokenIds ? parseStringArray(market.clobTokenIds) : undefined,
   };
 }
 

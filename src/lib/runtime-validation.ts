@@ -1,4 +1,5 @@
 import type { PortfolioProgressPoint } from '@/api/client/storage';
+import type { GenericMatch } from '@/lib/kalshi-market-match';
 import type { SportsMatch } from '@/lib/sports-market-match';
 import type {
   AcquisitionPlatform,
@@ -8,6 +9,7 @@ import type {
   SavingsGoalState,
   TrackedBet,
 } from '@/types/bets';
+import type { SpendingCut } from '@/lib/spending-cut-routes';
 import type { MarketQualityFacts, Route, SavedRoutesBatch } from '@/types/routes';
 
 type JsonRecord = Record<string, unknown>;
@@ -107,7 +109,25 @@ export function isRoute(value: unknown): value is Route {
     && isOptional(value.marketQuality, isMarketQualityFacts)
     && isOptional(value.sourceSlug, isString)
     && isOptional(value.sourceEndDate, isString)
-    && isOptional(value.predictionTopic, isString);
+    && isOptional(value.predictionTopic, isString)
+    && isOptional(value.spendingCut, isSpendingCutFacts)
+    && isOptional(value.cardRewards, isCardRewardsFacts);
+}
+
+function isCardRewardsFacts(value: unknown): value is NonNullable<Route['cardRewards']> {
+  if (!isRecord(value)) return false;
+  return isOneOf(value.kind, ['reroute', 'new-card'])
+    && isFiniteNumber(value.annualGainUsd)
+    && isOptional(value.cardId, isString)
+    && isOptional(value.cardName, isString)
+    && isOptional(value.applyUrl, isString);
+}
+
+function isSpendingCutFacts(value: unknown): value is NonNullable<Route['spendingCut']> {
+  if (!isRecord(value)) return false;
+  return typeof value.merchant === 'string'
+    && isOneOf(value.kind, ['subscription', 'discretionary'])
+    && isFiniteNumber(value.monthlyAmount);
 }
 
 function isMarketQualityFacts(value: unknown): value is MarketQualityFacts {
@@ -124,6 +144,16 @@ function isMarketQualityFacts(value: unknown): value is MarketQualityFacts {
     && isOptional(value.oneDayMovePts, isFiniteNumber)
     && isOptional(value.oneWeekMovePts, isFiniteNumber)
     && isOptional(value.oneMonthMovePts, isFiniteNumber);
+}
+
+export function isSpendingCut(value: unknown): value is SpendingCut {
+  if (!isRecord(value)) return false;
+  return typeof value.id === 'string'
+    && typeof value.merchant === 'string'
+    && isOneOf(value.kind, ['subscription', 'discretionary'])
+    && isFiniteNumber(value.monthlyAmount)
+    && isFiniteNumber(value.monthsObserved)
+    && isOptional(value.amountVariancePct, isFiniteNumber);
 }
 
 export function isTrackedBet(value: unknown): value is TrackedBet {
@@ -168,6 +198,11 @@ export function isSportsMatch(value: unknown): value is SportsMatch {
     && isOneOf(value.league, ['NBA', 'WNBA', 'NFL', 'MLB', 'NHL'])
     && typeof value.kalshiYesTicker === 'string'
     && typeof value.kalshiNoTicker === 'string';
+}
+
+export function isGenericMatch(value: unknown): value is GenericMatch {
+  if (!isRecord(value)) return false;
+  return typeof value.polymarketSlug === 'string' && typeof value.kalshiTicker === 'string';
 }
 
 export function isArrayOf<T>(validator: Validator<T>): Validator<T[]> {

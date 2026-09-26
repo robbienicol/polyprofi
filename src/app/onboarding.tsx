@@ -15,7 +15,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useOnboarding } from "@/api/hooks/useOnboarding";
 import { useOnboardingProfile } from "@/api/hooks/useOnboardingProfile";
-import { BrandMark } from "@/components/ui/BrandMark";
 import {
   OnboardingGlow,
   renderOnboardingPreview,
@@ -23,6 +22,7 @@ import {
 import { ONBOARDING_SLIDES } from "@/components/onboarding/onboarding-data";
 import { useSpokenLine } from "@/components/onboarding/quiz-kit";
 import { ThemedText } from "@/components/themed-text";
+import { BrandMark } from "@/components/ui/BrandMark";
 import { Brand, OnBrand, Radius, Shadow } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 
@@ -105,11 +105,18 @@ export default function OnboardingScreen(): React.ReactElement {
   const theme = useTheme();
   const { profile, isLoading } = useOnboardingProfile();
 
-  if (isLoading) return <View className="flex-1" style={{ backgroundColor: theme.background }} />;
+  if (isLoading)
+    return (
+      <View className="flex-1" style={{ backgroundColor: theme.background }} />
+    );
   return <OnboardingCarousel initialName={profile.name} />;
 }
 
-function OnboardingCarousel({ initialName }: { initialName: string }): React.ReactElement {
+function OnboardingCarousel({
+  initialName,
+}: {
+  initialName: string;
+}): React.ReactElement {
   const theme = useTheme();
   const router = useRouter();
   const { completeOnboarding, isCompleting } = useOnboarding();
@@ -321,37 +328,6 @@ function OnboardingCarousel({ initialName }: { initialName: string }): React.Rea
                             transform: [{ translateX: copyShift }],
                           }}
                         >
-                          <View
-                            className="flex-row items-center self-start"
-                            style={{
-                              gap: 6,
-                              paddingHorizontal: 9,
-                              paddingVertical: 4,
-                              borderRadius: Radius.pill,
-                              backgroundColor: Brand[500] + "14",
-                              borderWidth: 1,
-                              borderColor: Brand[500] + "3D",
-                            }}
-                          >
-                            <View
-                              style={{
-                                width: 5,
-                                height: 5,
-                                borderRadius: 999,
-                                backgroundColor: Brand[500],
-                              }}
-                            />
-                            <ThemedText
-                              style={{
-                                fontSize: 9.5,
-                                fontWeight: "900",
-                                color: Brand[500],
-                                letterSpacing: 0.8,
-                              }}
-                            >
-                              {entry.eyebrow}
-                            </ThemedText>
-                          </View>
                           <ThemedText
                             style={{
                               fontSize: short ? 27 : 31,

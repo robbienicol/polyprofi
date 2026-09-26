@@ -1,21 +1,25 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import type { GenericMatch } from '@/lib/kalshi-market-match';
 import type { SportsMatch } from '@/lib/sports-market-match';
 import { EMPTY_LEDGER, type AlertLedger } from '@/lib/gain-alerts';
 import { parsePortfolioHistory, serializePortfolioHistory } from '@/lib/portfolio-history';
 import { sanitizeOnboardingProfile, type OnboardingProfile } from '@/lib/onboarding-profile';
+import type { SpendingCut } from '@/lib/spending-cut-routes';
 import { sanitizePreferences, type Preferences } from '@/lib/preferences';
 import { migrateSavingsGoalState } from '@/lib/savings-goal';
 import { QuizAnswers, SavingsGoalState, TrackedBet } from '@/types/bets';
 import { Route, SavedRoutesBatch } from '@/types/routes';
 import {
   isArrayOf,
+  isGenericMatch,
   isPortfolioProgressPoint,
   isQuizAnswers,
   isRecord,
   isRecordOf,
   isRoute,
   isSavedRoutesBatch,
+  isSpendingCut,
   isSavingsGoalState,
   isSportsMatch,
   isTrackedBet,
@@ -37,6 +41,7 @@ const KEYS = {
   SAVINGS_GOAL: 'polyprofit:savingsGoal',
   SAVINGS_GOAL_OWNER: 'polyprofit:savingsGoalOwner',
   SPORTS_MATCHES: 'polyprofit:sportsMatches',
+  GENERIC_MATCHES: 'polyprofit:genericMatches',
   BIOMETRIC_LOCK: 'polyprofit:biometricLockEnabled',
   PREFERENCES: 'polyprofit:preferences',
   ONBOARDING_PROFILE: 'polyprofit:onboardingProfile',
@@ -44,6 +49,7 @@ const KEYS = {
   PROFILE_COMPLETE: 'polyprofit:profileComplete',
   PROFILE_COMPLETE_OWNER: 'polyprofit:profileCompleteOwner',
   ALERT_LEDGER: 'polyprofit:alertLedger',
+  SPENDING_CUTS: 'polyprofit:spendingCuts',
 } as const;
 
 /** How many generated batches the device keeps. Exported so the optimistic
@@ -99,6 +105,18 @@ export async function getSportsMatches(): Promise<SportsMatch[] | null> {
 
 export async function setSportsMatches(matches: SportsMatch[]): Promise<void> {
   await AsyncStorage.setItem(KEYS.SPORTS_MATCHES, JSON.stringify({ [todayKey()]: matches }));
+}
+
+// ── Daily Kalshi↔Polymarket generic (non-sports) match cache ────────────────
+export async function getGenericMatches(): Promise<GenericMatch[] | null> {
+  const raw = await AsyncStorage.getItem(KEYS.GENERIC_MATCHES);
+  if (!raw) return null;
+  const cached = parseJsonAs(raw, isRecordOf(isArrayOf(isGenericMatch)));
+  return cached?.[todayKey()] ?? null;
+}
+
+export async function setGenericMatches(matches: GenericMatch[]): Promise<void> {
+  await AsyncStorage.setItem(KEYS.GENERIC_MATCHES, JSON.stringify({ [todayKey()]: matches }));
 }
 
 export async function getSubscribed(): Promise<boolean> {
@@ -346,4 +364,40 @@ export async function updatePreferences(patch: Partial<Preferences>): Promise<Pr
   const next = sanitizePreferences({ ...(await getPreferences()), ...patch });
   await AsyncStorage.setItem(KEYS.PREFERENCES, JSON.stringify(next));
   return next;
+}
+
+/**
+ * What the last statement import found. The cuts are kept, the statement is not:
+ * detection already consumed the rows, and there is no second question worth
+ * holding thousands of individual charges on the device to answer. Device-local
+ * for the same reason — nothing here is ever sent to a server.
+ */
+export interface ImportedSpendingCuts {
+  cuts: SpendingCut[];
+  /** When the import ran, epoch ms — shown as "imported 3 Mar". */
+  importedAt: number;
+  /** Distinct calendar months the statement covered, for the "one month" warning. */
+  monthsCovered: number;
+  /** Spending rows read. A count only, never the rows. */
+  transactionCount: number;
+}
+
+export async function getSpendingCuts(): Promise<ImportedSpendingCuts | null> {
+  const raw = await AsyncStorage.getItem(KEYS.SPENDING_CUTS);
+  const parsed = raw ? parseJson(raw) : null;
+  if (!isRecord(parsed) || !isArrayOf(isSpendingCut)(parsed.cuts)) return null;
+  return {
+    cuts: parsed.cuts,
+    importedAt: typeof parsed.importedAt === 'number' ? parsed.importedAt : 0,
+    monthsCovered: typeof parsed.monthsCovered === 'number' ? parsed.monthsCovered : 0,
+    transactionCount: typeof parsed.transactionCount === 'number' ? parsed.transactionCount : 0,
+  };
+}
+
+export async function saveSpendingCuts(imported: ImportedSpendingCuts): Promise<void> {
+  await AsyncStorage.setItem(KEYS.SPENDING_CUTS, JSON.stringify(imported));
+}
+
+export async function clearSpendingCuts(): Promise<void> {
+  await AsyncStorage.removeItem(KEYS.SPENDING_CUTS);
 }

@@ -7,12 +7,12 @@ import {
 } from '@/api/client/market-data';
 import { fetchPolymarketSnapshot } from '@/api/client/polymarket-market-data';
 import {
-  fetchPolymarketPickBundle,
   formatMetaculusEdges,
   formatPolymarketTaggedEvents,
   formatWhaleTrades,
   whaleTradesToPicks,
 } from '@/api/client/polymarket-picks';
+import { fetchPolymarketPickBundle } from '@/api/client/polymarket-picks-client';
 import { playbookRoutes, targetBucket, timeframeCalendarDays } from '@/api/client/playbook';
 import { buildRouteGenerationPrompt } from '@/api/client/route-generation-prompt';
 import { getDailyPool, setDailyPool } from '@/api/client/storage';

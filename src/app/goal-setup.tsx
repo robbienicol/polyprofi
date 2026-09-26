@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useSavingsGoal } from '@/api/hooks/useSavingsGoal';
 import { OnboardingGlow } from '@/components/onboarding/OnboardingPreviews';
+import { Icon } from '@/components/ui/Icon';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, OnBrand, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -23,14 +24,14 @@ const GOAL_PRESETS: GoalPreset[] = [
   { emoji: '✈️', label: 'A dream trip', targetAmount: 4_000, note: 'Somewhere new' },
   { emoji: '🛟', label: 'Emergency fund', targetAmount: 6_000, note: 'Peace of mind' },
   { emoji: '🚗', label: 'A car', targetAmount: 12_000, note: 'Keys in hand' },
-  { emoji: '🏠', label: 'House deposit', targetAmount: 30_000, note: 'The big one' },
+  { emoji: '🏠', label: 'Rent/mortgage', targetAmount: 30_000, note: 'The big one' },
 ];
 
 const CUSTOM_ID = 'custom';
 const OPEN_ENDED_ID = 'open-ended';
 
 /** For people who don't want a finish line — no target, so it never completes. */
-const OPEN_ENDED_GOAL = { emoji: '💸', label: 'Just make me money' };
+const OPEN_ENDED_GOAL = { emoji: '💸', label: 'Custom goal' };
 
 interface ChosenGoal {
   emoji: string;
@@ -101,10 +102,7 @@ export default function GoalSetupScreen(): React.ReactElement {
                 <ThemedText style={{ fontSize: 14, fontWeight: '700', color: theme.textSecondary }}>← Cancel</ThemedText>
               </Pressable>
             )}
-            <ThemedText style={{ fontSize: 12, fontWeight: '800', color: Brand[500], letterSpacing: 1 }}>
-              {isFirstGoal ? "LET'S MAKE IT REAL" : 'ANOTHER ONE'}
-            </ThemedText>
-            <ThemedText style={{ fontSize: 34, lineHeight: 40, fontWeight: '800', color: theme.text, letterSpacing: -0.8, marginTop: 8 }}>
+            <ThemedText style={{ fontSize: 34, lineHeight: 40, fontWeight: '800', color: theme.text, letterSpacing: -0.8 }}>
               {isFirstGoal ? <>What are you{'\n'}saving for?</> : <>What&apos;s the{'\n'}next goal?</>}
             </ThemedText>
             <ThemedText style={{ fontSize: 15, lineHeight: 22, color: theme.textSecondary, marginTop: 10, maxWidth: 320 }}>
@@ -134,11 +132,11 @@ export default function GoalSetupScreen(): React.ReactElement {
                     }}>
                     <View className="flex-row items-start justify-between">
                       <View style={{ width: 46, height: 46, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center', backgroundColor: selected ? Brand[500] + '22' : theme.backgroundSelected }}>
-                        <ThemedText style={{ fontSize: 24 }}>{goal.emoji}</ThemedText>
+                        <Icon glyph={goal.emoji} size={23} color={selected ? Brand[500] : theme.textSecondary} />
                       </View>
                       {selected ? (
                         <View style={{ width: 22, height: 22, borderRadius: 999, backgroundColor: Brand[500], alignItems: 'center', justifyContent: 'center' }}>
-                          <ThemedText style={{ fontSize: 12, fontWeight: '900', color: OnBrand }}>✓</ThemedText>
+                          <Icon glyph="✓" size={13} color={OnBrand} strokeWidth={3} />
                         </View>
                       ) : null}
                     </View>
@@ -169,10 +167,10 @@ export default function GoalSetupScreen(): React.ReactElement {
                 }}>
                 <View className="flex-row items-center" style={{ gap: 12 }}>
                   <View style={{ width: 46, height: 46, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center', backgroundColor: isOpenEnded ? Brand[500] + '22' : theme.backgroundSelected }}>
-                    <ThemedText style={{ fontSize: 24 }}>{OPEN_ENDED_GOAL.emoji}</ThemedText>
+                    <Icon glyph={OPEN_ENDED_GOAL.emoji} size={23} color={theme.textSecondary} />
                   </View>
                   <View className="flex-1">
-                    <ThemedText style={{ fontSize: 15, fontWeight: '800', color: theme.text }}>
+                    <ThemedText style={{ fontSize: 15, fontWeight: '800', color: theme.textSecondary }}>
                       {OPEN_ENDED_GOAL.label}
                     </ThemedText>
                     <ThemedText style={{ fontSize: 11, lineHeight: 15, color: theme.textTertiary, marginTop: 2 }}>
@@ -181,7 +179,7 @@ export default function GoalSetupScreen(): React.ReactElement {
                   </View>
                   {isOpenEnded ? (
                     <View style={{ width: 22, height: 22, borderRadius: 999, backgroundColor: Brand[500], alignItems: 'center', justifyContent: 'center' }}>
-                      <ThemedText style={{ fontSize: 12, fontWeight: '900', color: OnBrand }}>✓</ThemedText>
+                      <Icon glyph="✓" size={13} color={OnBrand} strokeWidth={3} />
                     </View>
                   ) : null}
                 </View>
@@ -204,7 +202,7 @@ export default function GoalSetupScreen(): React.ReactElement {
                 }}>
                 <View className="flex-row items-center" style={{ gap: 12 }}>
                   <View style={{ width: 46, height: 46, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center', backgroundColor: isCustom ? Brand[500] + '22' : theme.backgroundSelected }}>
-                    <ThemedText style={{ fontSize: 24 }}>🎯</ThemedText>
+                    <Icon glyph="🎯" size={23} color={theme.textSecondary} />
                   </View>
                   <View className="flex-1">
                     <ThemedText style={{ fontSize: 15, fontWeight: '800', color: theme.text }}>Something else</ThemedText>
@@ -212,7 +210,7 @@ export default function GoalSetupScreen(): React.ReactElement {
                   </View>
                   {isCustom ? (
                     <View style={{ width: 22, height: 22, borderRadius: 999, backgroundColor: Brand[500], alignItems: 'center', justifyContent: 'center' }}>
-                      <ThemedText style={{ fontSize: 12, fontWeight: '900', color: OnBrand }}>✓</ThemedText>
+                      <Icon glyph="✓" size={13} color={OnBrand} strokeWidth={3} />
                     </View>
                   ) : null}
                 </View>
@@ -254,7 +252,7 @@ export default function GoalSetupScreen(): React.ReactElement {
             {chosen ? (
               <View className="flex-row items-center justify-between" style={{ marginBottom: 10, paddingHorizontal: 2 }}>
                 <ThemedText style={{ fontSize: 13, color: theme.textSecondary }}>
-                  Saving for {chosen.emoji} {chosen.label}
+                  Saving for {chosen.label}
                 </ThemedText>
                 <ThemedText style={{ fontSize: 15, fontWeight: '900', color: Brand[500], fontVariant: ['tabular-nums'] }}>
                   {chosen.targetAmount != null ? `$${chosen.targetAmount.toLocaleString()}` : 'No target'}

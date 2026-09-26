@@ -53,6 +53,12 @@ export async function POST(request: Request): Promise<Response> {
         institution_name = EXCLUDED.institution_name
     `;
 
+    // Mirror the connection onto the profile row so every surface that reads
+    // `/api/profile` (settings chief among them) shows it as connected, even
+    // when the quiz save that would otherwise carry the flag never happens.
+    // No-op when the row doesn't exist yet; the quiz's own save sets it then.
+    await sql`UPDATE users SET bank_connected = TRUE WHERE clerk_id = ${userId}`;
+
     return Response.json({ connected: true });
   } catch (error) {
     console.warn(`[api:plaid/exchange-token] ${error instanceof Error ? error.message : String(error)}`);

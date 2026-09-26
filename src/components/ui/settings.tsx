@@ -1,6 +1,7 @@
 import React from 'react';
 import { Platform, Pressable, Switch, View, type SwitchProps } from 'react-native';
 
+import { Icon } from '@/components/ui/Icon';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, Colors, Radius, Semantic, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -126,7 +127,7 @@ export function SettingsRow({
             justifyContent: 'center',
             backgroundColor: tone === 'default' ? theme.backgroundSelected : tint + '1F',
           }}>
-          <ThemedText style={{ fontSize: 15 }}>{icon}</ThemedText>
+          <Icon glyph={icon} size={16} color={tone === 'default' ? theme.textSecondary : tint} />
         </View>
       ) : null}
 

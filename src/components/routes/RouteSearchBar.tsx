@@ -1,5 +1,6 @@
 import { Pressable, TextInput, View } from 'react-native';
 
+import { Icon } from '@/components/ui/Icon';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, Radius } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -52,7 +53,7 @@ export function RouteSearchBar({
           borderColor: active ? Brand[500] : theme.borderStrong,
           backgroundColor: theme.backgroundElement,
         }}>
-        <ThemedText style={{ fontSize: 14, color: theme.textTertiary }}>🔎</ThemedText>
+        <Icon glyph="🔎" size={15} color={theme.textTertiary} />
         <TextInput
           value={value}
           onChangeText={onChange}
@@ -71,7 +72,7 @@ export function RouteSearchBar({
             accessibilityLabel="Clear search"
             hitSlop={8}
             className="active:opacity-60">
-            <ThemedText style={{ fontSize: 15, color: theme.textTertiary }}>✕</ThemedText>
+            <Icon glyph="✕" size={15} color={theme.textTertiary} />
           </Pressable>
         ) : null}
       </View>

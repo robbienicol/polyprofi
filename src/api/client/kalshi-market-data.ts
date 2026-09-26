@@ -8,6 +8,23 @@ import { isRecord, responseJson } from '@/lib/runtime-validation';
 const SPORTS_SERIES = ['KXNBAGAME', 'KXWNBAGAME', 'KXNFLGAME', 'KXMLBGAME', 'KXNHLGAME'] as const;
 const MAX_PAGES_PER_SERIES = 10;
 
+// Kalshi's own category taxonomy (confirmed live via /trade-api/v2/series),
+// narrowed to the ones with a real counterpart in the app's own topic list
+// (see PREDICTION_TOPICS in @/lib/prediction-topics) — Sports is fetched
+// separately above, and categories like Mentions/Exotics/Commodities/Social
+// have no Polymarket-side equivalent worth the extra fetch volume.
+const GENERIC_CATEGORIES = [
+  'Politics', 'Elections', 'Economics', 'Financials',
+  'Crypto', 'Entertainment', 'World', 'Climate and Weather',
+] as const;
+const MAX_PAGES_PER_CATEGORY = 5;
+
+interface RawKalshiEvent {
+  event_ticker: string;
+  series_ticker: string;
+  markets?: unknown[];
+}
+
 interface RawKalshiMarket {
   ticker: string;
   event_ticker: string;
@@ -33,9 +50,29 @@ interface RawKalshiMarket {
 
 let rawSnapshotRequest: Promise<KalshiEntry[]> | null = null;
 let rawSnapshotCache: { day: string; markets: KalshiEntry[] } | null = null;
+let genericSnapshotRequest: Promise<KalshiEntry[]> | null = null;
+let genericSnapshotCache: { day: string; markets: KalshiEntry[] } | null = null;
 
 export async function fetchKalshiSportsMarkets(): Promise<KalshiEntry[]> {
   return fetchSharedKalshiRaw();
+}
+
+/** Non-sports markets across the categories in GENERIC_CATEGORIES — see
+ * matchPolymarketToKalshiGeneric in @/lib/kalshi-market-match for how these
+ * get compared against Polymarket's own universe. */
+export async function fetchKalshiGenericMarkets(): Promise<KalshiEntry[]> {
+  const day = new Date().toISOString().slice(0, 10);
+  if (genericSnapshotCache?.day === day) return genericSnapshotCache.markets;
+  if (genericSnapshotRequest) return genericSnapshotRequest;
+  genericSnapshotRequest = fetchGenericRaw()
+    .then((markets) => {
+      genericSnapshotCache = { day, markets };
+      return markets;
+    })
+    .finally(() => {
+      genericSnapshotRequest = null;
+    });
+  return genericSnapshotRequest;
 }
 
 // Cheap single-ticker lookup for a live price refresh — used at route-detail
@@ -110,6 +147,50 @@ async function fetchSeriesMarkets(seriesTicker: string): Promise<KalshiEntry[]> 
     if (!cursor) break;
   }
   return results;
+}
+
+async function fetchGenericRaw(): Promise<KalshiEntry[]> {
+  const perCategory = await Promise.all(GENERIC_CATEGORIES.map((category) => fetchCategoryEvents(category)));
+  const entries = perCategory.flat();
+  console.log(`[market-data:kalshi] ${entries.length} generic markets across ${GENERIC_CATEGORIES.length} categories`);
+  return entries;
+}
+
+async function fetchCategoryEvents(category: string): Promise<KalshiEntry[]> {
+  const results: KalshiEntry[] = [];
+  let cursor = '';
+  for (let page = 0; page < MAX_PAGES_PER_CATEGORY; page++) {
+    const query = new URLSearchParams({ status: 'open', category, with_nested_markets: 'true', limit: '200' });
+    if (cursor) query.set('cursor', cursor);
+    let response: Response;
+    try {
+      response = await fetch(`https://api.elections.kalshi.com/trade-api/v2/events?${query}`, {
+        headers: { Accept: 'application/json' },
+      });
+    } catch (error) {
+      console.warn(`[market-data:kalshi] ${category}: request failed`, error);
+      return results;
+    }
+    if (!response.ok) {
+      console.warn(`[market-data:kalshi] ${category}: ${response.status}`);
+      return results;
+    }
+    const payload = await responseJson(response);
+    if (!isRecord(payload) || !Array.isArray(payload.events)) return results;
+    for (const event of payload.events) {
+      if (!isRawKalshiEvent(event)) continue;
+      for (const market of event.markets ?? []) {
+        if (isRawKalshiMarket(market)) results.push(toKalshiEntry(market, event.series_ticker));
+      }
+    }
+    cursor = typeof payload.cursor === 'string' ? payload.cursor : '';
+    if (!cursor) break;
+  }
+  return results;
+}
+
+function isRawKalshiEvent(value: unknown): value is RawKalshiEvent {
+  return isRecord(value) && typeof value.event_ticker === 'string' && typeof value.series_ticker === 'string';
 }
 
 function toKalshiEntry(market: RawKalshiMarket, seriesTicker: string): KalshiEntry {

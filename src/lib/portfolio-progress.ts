@@ -18,6 +18,13 @@ export interface PortfolioProgressSnapshot {
   value: number;
   basisValue: number;
   activeStake: number;
+  /**
+   * What the last search said the user has available to invest. Reported, never added
+   * to `value`: it is a statement of intent, not a holding, and folding it in made a
+   * portfolio with one $50 position read as $100,000 of tracked value. Drawn on the
+   * chart as its own reference line so the headroom is visible without being counted.
+   */
+  availableToInvest: number;
   livePnl: number;
   projectedPnl: number;
   /** Net gains only. Used for P&L and position profit targets. */
@@ -69,6 +76,34 @@ export function hasReachedProfitGoal(netGain: number, targetAmount: number): boo
   return targetAmount > 0 && netGain >= targetAmount;
 }
 
+/**
+ * Whether a cash instrument has simply run its course, and what it paid.
+ *
+ * A T-bill held to maturity returns face value: there is no outcome to report and
+ * nothing for the holder to know that the calendar does not. Asking "did you win or
+ * lose?" about one is not merely a chore, it is the wrong question — the same reason
+ * a settled Polymarket market resolves itself off the market rather than off a tap.
+ *
+ * Deterministic on purpose. No quote, no feed, no API: the maturity date and the
+ * accrual already computed below are the whole answer, so this keeps working offline
+ * and cannot disagree with the value shown on the position all the way up to maturity.
+ *
+ * Returns null while the instrument is still running, or when it carries no maturity
+ * to run to — an open-ended savings account never matures and is closed by the user.
+ */
+export function maturedCashOutcome(bet: TrackedBet, now: number): { realizedPnl: number } | null {
+  if (bet.status !== 'active' || !isSavingsOrTreasuryCategory(bet.category)) return null;
+  const maturityDays = bet.maturesInDays ?? inferMaturityDays(bet.description, bet.strategy);
+  if (!maturityDays || maturityDays <= 0) return null;
+
+  const maturesAt = new Date(bet.createdAt).getTime() + maturityDays * 24 * 60 * 60 * 1_000;
+  if (now < maturesAt) return null;
+
+  // The accrual is already capped at maturity, so asking for it at any later moment
+  // gives the full, final interest — the number the position has been showing.
+  return { realizedPnl: projectedAccrual(bet, maturesAt) };
+}
+
 export function projectedAccrual(bet: TrackedBet, now: number): number {
   const elapsedMs = Math.max(0, now - new Date(bet.createdAt).getTime());
   const maturityDays = bet.maturesInDays ?? inferMaturityDays(bet.description, bet.strategy);
@@ -111,8 +146,19 @@ export function calculatePortfolioProgress({
 }: PortfolioProgressInput): PortfolioProgressSnapshot {
   const quoteBySymbol = new Map(quotes.map((quote) => [quote.symbol, quote]));
   const activeStake = active.reduce((sum, bet) => sum + (bet.costBasis ?? bet.amountWagered), 0);
-  const basisValue = Math.max(fallbackBalance, activeStake);
-  const cash = Math.max(0, basisValue - activeStake);
+  /*
+   * `fallbackBalance` is the amount typed into the last search — what someone says
+   * they have to work with. It is NOT money this app holds, and it is no longer part
+   * of the value: counting it made "tracked value" read $100,000 for a portfolio
+   * holding one $50 position, and a graph of that curve was really a graph of a number
+   * the user typed into a quiz.
+   *
+   * Tracked value is now exactly what is tracked — the positions, at what they are
+   * worth today. The available amount is reported alongside as `availableToInvest`
+   * for the chart's reference line, so the headroom is still visible.
+   */
+  const basisValue = activeStake;
+  const cash = 0;
   let investedValue = 0;
   let livePnl = 0;
   let projectedPnl = 0;
@@ -199,6 +245,7 @@ export function calculatePortfolioProgress({
     value: cash + investedValue,
     basisValue,
     activeStake,
+    availableToInvest: Math.max(0, fallbackBalance),
     livePnl,
     projectedPnl,
     goalProgress: livePnl + projectedPnl,
@@ -251,6 +298,16 @@ export function __selfCheck(): void {
   invariant(principalOnly.value === 3_000, 'portfolio value keeps the $3,000 principal');
   invariant(principalOnly.goalProgress === 0, 'deposited principal does not count toward a profit goal');
   invariant(!hasReachedProfitGoal(principalOnly.goalProgress, 250), '$3,000 principal does not complete a $250 profit goal');
+
+  const empty = calculatePortfolioProgress({
+    active: [],
+    fallbackBalance: 3_000,
+    statusesById: {},
+    quotes: [],
+    now: Date.parse('2026-01-02T00:00:00.000Z'),
+  });
+  invariant(empty.value === 0, 'a portfolio with no positions is worth nothing, whatever the last search said');
+  invariant(empty.basisValue === 0, 'an empty portfolio has no basis to chart against');
 
   const stockGain = calculatePortfolioProgress({
     active: [trackedBet({

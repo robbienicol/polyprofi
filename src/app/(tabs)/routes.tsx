@@ -11,24 +11,33 @@ import { useAssetSearch } from '@/api/hooks/useAssetSearch';
 import { useRoutePreview } from '@/api/hooks/useRoutePreview';
 import { useSavedRoutes } from '@/api/hooks/useSavedRoutes';
 import { useSavingsGoal } from '@/api/hooks/useSavingsGoal';
+import { useCardRewards } from '@/api/hooks/useCardRewards';
+import { useSpendingCuts } from '@/api/hooks/useSpendingCuts';
 import { useTrackedBets } from '@/api/hooks/useTrackedBets';
+import { MoreWaysToSave } from '@/components/routes/MoreWaysToSave';
 import { RouteFilters } from '@/components/routes/RouteFilters';
 import { RouteSearchBar } from '@/components/routes/RouteSearchBar';
 import { RoutesHeader } from '@/components/routes/RoutesHeader';
 import { TrackRouteForm } from '@/components/routes/TrackRouteForm';
 import { RouteCard } from '@/components/molecules/RouteCard';
+import { Icon } from '@/components/ui/Icon';
 import { ThemedText } from '@/components/themed-text';
 import { AnalyzingLoader, BrandLoader } from '@/components/ui/loaders';
 import { KEYBOARD_AWARE_SCROLL_PROPS } from '@/constants/keyboard';
 import { Brand, OnBrand, Radius, Semantic, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { requestAppRating } from '@/lib/app-rating';
 import { betOutcomeSide } from '@/lib/bet-monitor-match';
 import { scheduleWeeklyReminder } from '@/lib/notifications';
 import { parseEntryPrice } from '@/lib/parse-bet-line';
+import { timeframeCalendarDays } from '@/api/client/playbook';
 import { investmentSliderMaximum } from '@/lib/quiz-profile';
+import { cancellationActionLabel, cancellationTargetFor } from '@/lib/cancel-links';
 import { openTradeDestination, preferredTradeDestination, tradeDestinationLabel } from '@/lib/route-actions';
 import { activeKeyword, buildRouteResults, groupRoutesByChance, predictionFacetsActive, resolveInvestmentAmount, routeMatchesKeyword, searchOutcome, shouldOfferCapitalSafe } from '@/lib/route-results';
 import type { RouteFilters as Filters } from '@/lib/route-results';
+import { buildCardRewardRoutes } from '@/lib/card-reward-routes';
+import { buildSpendingCutRoutes } from '@/lib/spending-cut-routes';
 import { rescoreForStake } from '@/lib/stake-rescore';
 import { trackedPositionFields } from '@/lib/tracked-assets';
 import type { Route, RouteParams, SavedRoutesBatch } from '@/types/routes';
@@ -43,6 +52,8 @@ const DEFAULT_FILTERS: Filters = {
   groupByChance: false,
   keyword: '',
 };
+
+const NO_ROUTES: Route[] = [];
 
 export default function RoutesScreen(): React.ReactElement {
   const theme = useTheme();
@@ -68,7 +79,9 @@ export default function RoutesScreen(): React.ReactElement {
   // the shown batch was saved for. Every position taken here inherits it. A goal
   // that has since been swept away is dropped rather than left dangling on a
   // position, so a stale batch can't attach money to something that isn't there.
-  const batchGoalId = goalId ?? viewedBatch?.goalId ?? latestBatch?.goalId;
+  // A fresh search carries its goal in the URL or has none; it must not borrow the
+  // previous search's goal while its own batch is still being saved.
+  const batchGoalId = goalId ?? (isGenerating ? undefined : viewedBatch?.goalId ?? latestBatch?.goalId);
   const sessionGoalId = batchGoalId && allGoals.some((goal) => goal.id === batchGoalId)
     ? batchGoalId
     : undefined;
@@ -79,13 +92,38 @@ export default function RoutesScreen(): React.ReactElement {
   const { routes: fetchedRoutes, isLoading, isFetching, error, refresh } = useRoutes(sessionParams, { enabled: shouldFetch });
   // Memoised because the keyword-search pool below derives from it: a fresh array
   // every render would rebuild that pool every render.
-  const routes = useMemo(
+  const generatedRoutes = useMemo(
     () => (shouldFetch ? fetchedRoutes : viewedBatch?.routes ?? recentRoutes ?? latestBatch?.routes ?? []),
     [shouldFetch, fetchedRoutes, viewedBatch?.routes, recentRoutes, latestBatch?.routes],
   );
+  // Spending cuts are built here rather than fetched with the rest: they come from a
+  // statement held on this device, so they never went to the server that generated the
+  // pool, and they are re-derived against whichever goal is on screen instead of being
+  // frozen into a saved batch. Everything downstream — scoring, filters, the card —
+  // treats them as ordinary routes, which is the point of them being Routes at all.
+  const { imported: importedCuts } = useSpendingCuts();
+  // Card rewards come the same way, from the accounts linked through Plaid: which
+  // card each dollar went on, against which card would have paid more for it.
+  const { profile: cardProfile } = useCardRewards();
+  const routes = useMemo(() => {
+    if (!sessionParams) return generatedRoutes;
+    const deadlineDays = timeframeCalendarDays(sessionParams.timeframe);
+    const cutRoutes = importedCuts && importedCuts.cuts.length > 0
+      ? buildSpendingCutRoutes({ cuts: importedCuts.cuts, target: sessionParams.target, deadlineDays })
+      : [];
+    const cardRoutes = cardProfile
+      ? buildCardRewardRoutes({ profile: cardProfile, target: sessionParams.target, deadlineDays })
+      : [];
+    if (cutRoutes.length === 0 && cardRoutes.length === 0) return generatedRoutes;
+    const known = new Set(generatedRoutes.map((route) => route.id));
+    return [...generatedRoutes, ...[...cutRoutes, ...cardRoutes].filter((route) => !known.has(route.id))];
+  }, [cardProfile, generatedRoutes, importedCuts, sessionParams]);
 
   const [trackingId, setTrackingId] = useState<string | null>(null);
   const [trackingAmount, setTrackingAmount] = useState('');
+  // How much of a category the user says they will actually give up. Defaults to the
+  // same share the card was priced at, so confirming without touching it is a no-op.
+  const [cutPercent, setCutPercent] = useState(25);
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [investment, setInvestment] = useState<number | null>(null);
   const [visibleCount, setVisibleCount] = useState(30);
@@ -94,6 +132,22 @@ export default function RoutesScreen(): React.ReactElement {
   useEffect(() => {
     scheduleWeeklyReminder();
   }, []);
+
+  // Asked while there's a natural pause to fill — the analyzing screen below —
+  // rather than the instant the quiz's submit button is tapped, before anything
+  // has actually happened yet. Guarded so it fires once per generation rather
+  // than on every render this screen stays in the loading state.
+  const ratedThisGeneration = useRef(false);
+  useEffect(() => {
+    if (shouldFetch && isLoading) {
+      if (!ratedThisGeneration.current) {
+        ratedThisGeneration.current = true;
+        void requestAppRating();
+      }
+    } else {
+      ratedThisGeneration.current = false;
+    }
+  }, [shouldFetch, isLoading]);
 
   useEffect(() => {
     if (!isGenerating || isLoading || isFetching || !quizAnswers || fetchedRoutes.length === 0) return;
@@ -177,6 +231,7 @@ export default function RoutesScreen(): React.ReactElement {
   );
   const ranked = results?.ranked ?? [];
   const filtered = results?.filtered ?? [];
+  const moreCuts = results?.moreCuts ?? NO_ROUTES;
   const isSearching = predictionSearch.isSearching || assetSearch.isSearching;
   // Matches before the filter chips narrow them: the gap between this and `filtered`
   // is what separates "we don't cover it" from "your filters are hiding it".
@@ -210,7 +265,88 @@ export default function RoutesScreen(): React.ReactElement {
     }
   }
 
+  /**
+   * Taking a cut, which is not an acquisition: nothing is staked, so `amountWagered`
+   * is 0 and the position's value is the saving itself. A subscription is cancelled
+   * once and worth its whole charge; a category is worth whatever share of it the
+   * user just committed to, which is why the stored return is rescaled here rather
+   * than copied off the card.
+   */
+  function confirmCut(route: Route, cut: NonNullable<Route['spendingCut']>): void {
+    const subscription = cut.kind === 'subscription';
+    const monthly = subscription ? cut.monthlyAmount : (cut.monthlyAmount * cutPercent) / 100;
+    const months = Math.max(1, timeframeCalendarDays(sessionParams?.timeframe ?? 'month') / 30);
+    const saved = Math.round(monthly * months);
+    const openedAt = new Date().toISOString();
+
+    trackBet({
+      id: `${route.id}-${Date.now()}`,
+      goalId: sessionGoalId,
+      category: route.category,
+      emoji: route.emoji,
+      description: subscription
+        ? `Cancelled ${cut.merchant} — $${cut.monthlyAmount.toFixed(2)}/mo`
+        : `Spending ${cutPercent}% less on ${cut.merchant} — $${monthly.toFixed(0)}/mo`,
+      platform: route.platform,
+      strategy: route.strategy,
+      riskLevel: route.riskLevel,
+      probability: route.probability,
+      expectedReturn: saved,
+      amountWagered: 0,
+      status: 'active',
+      createdAt: openedAt,
+      profitGoal: sessionParams?.target || saved,
+    }, {
+      onSuccess: () => {
+        setTrackingId(null);
+        setCutPercent(25);
+        if (sessionGoalId) confirmGoal(sessionGoalId);
+        // Only a subscription has somewhere to go. Cutting back on a category is a
+        // promise to yourself, and opening a page for it would be theatre.
+        if (subscription) void openTradeDestination(route, 'cancel');
+      },
+    });
+  }
+
+  /**
+   * Taking a card-rewards route. Nothing is staked; the position is worth the rewards
+   * the plan is expected to earn before the deadline, the same way a cut is worth
+   * its saving. A new card opens its application once it is in the plan.
+   */
+  function confirmCardRewards(route: Route, plan: NonNullable<Route['cardRewards']>): void {
+    trackBet({
+      id: `${route.id}-${Date.now()}`,
+      goalId: sessionGoalId,
+      category: route.category,
+      emoji: route.emoji,
+      description: route.description,
+      platform: route.platform,
+      strategy: route.strategy,
+      riskLevel: route.riskLevel,
+      probability: route.probability,
+      expectedReturn: route.expectedReturn,
+      amountWagered: 0,
+      status: 'active',
+      createdAt: new Date().toISOString(),
+      profitGoal: sessionParams?.target || route.expectedReturn,
+    }, {
+      onSuccess: () => {
+        setTrackingId(null);
+        if (sessionGoalId) confirmGoal(sessionGoalId);
+        if (plan.kind === 'new-card') void openTradeDestination(route, 'apply');
+      },
+    });
+  }
+
   function confirmAcquire(route: Route): void {
+    if (route.spendingCut) {
+      confirmCut(route, route.spendingCut);
+      return;
+    }
+    if (route.cardRewards) {
+      confirmCardRewards(route, route.cardRewards);
+      return;
+    }
     const amount = Number(trackingAmount);
     if (!Number.isFinite(amount) || amount <= 0) return;
     const predictionMarket = /polymarket|prediction/i.test(`${route.category} ${route.platform}`);
@@ -281,6 +417,19 @@ export default function RoutesScreen(): React.ReactElement {
     emoji: activeGoal?.emoji ?? null,
   } : null;
   const visibleRoutes = filtered.slice(0, visibleCount);
+  // The folded cuts sit right under the last cut still in the list, where someone
+  // reading cuts would look for more of them — or at the end when none made it.
+  const lastVisibleCutId = [...visibleRoutes].reverse().find((route) => route.spendingCut)?.id ?? null;
+
+  /**
+   * The confirm button's words for a subscription cut. Never promises a cancellation
+   * the link cannot deliver — an unknown merchant says it is opening a search.
+   */
+  const cutActionLabel = (route: Route): string | null => {
+    const cut = route.spendingCut;
+    if (!cut || cut.kind !== 'subscription') return null;
+    return cancellationActionLabel(cancellationTargetFor(cut.merchant), cut.merchant);
+  };
 
   const renderRoute = (route: Route): React.ReactElement | null => {
     const destination = preferredTradeDestination(route, sessionParams?.preferredPlatforms);
@@ -293,6 +442,7 @@ export default function RoutesScreen(): React.ReactElement {
           score={results?.scoreById.get(route.id)?.score ?? null}
           onTrack={trackingId === null ? () => {
             setTrackingId(route.id);
+            setCutPercent(25);
             setTrackingAmount(String(results?.selectedStake(route) ?? referenceStake));
           } : undefined}
           onPress={() => {
@@ -313,10 +463,14 @@ export default function RoutesScreen(): React.ReactElement {
         {trackingId === route.id && (
           <TrackRouteForm
             amount={trackingAmount}
-            destinationLabel={tradeDestinationLabel(destination)}
+            destinationLabel={cutActionLabel(route) ?? tradeDestinationLabel(destination)}
             onAmountChange={setTrackingAmount}
             onConfirm={() => confirmAcquire(route)}
             onCancel={() => setTrackingId(null)}
+            cut={route.spendingCut}
+            cardRewards={route.cardRewards}
+            cutPercent={cutPercent}
+            onCutPercentChange={setCutPercent}
           />
         )}
       </View>
@@ -325,24 +479,26 @@ export default function RoutesScreen(): React.ReactElement {
 
   return (
     <Screen>
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerClassName="px-4 pt-6 pb-16 gap-3"
-        {...KEYBOARD_AWARE_SCROLL_PROPS}
-        refreshControl={<RefreshControl refreshing={(isFetching && !isLoading) || manualRefresh} onRefresh={handleRefresh} tintColor={Brand[500]} />}>
-        {goal && (
+      {/* Pinned above the scroll rather than a stickyHeaderIndices entry — this card
+          is conditional on `goal`, and an index-based pin would silently point at
+          the wrong child the moment another conditional block above it changes. */}
+      {goal && (
+        <View className="px-4 pt-6 pb-3">
           <RoutesHeader
             goal={goal}
             historical={isHistorical}
             batchLabel={isHistorical && viewedBatch ? formatBatchLabel(viewedBatch) : null}
-            amount={displayedInvestment}
-            investmentMaximum={investmentMaximum}
             routeCount={filtered.length}
-            onAmountChange={setInvestmentAndReset}
             onNewSearch={() => router.push('/quiz')}
             onBackToLatest={() => router.replace('/(tabs)/routes')}
           />
-        )}
+        </View>
+      )}
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerClassName={`px-4 pb-16 gap-3 ${goal ? 'pt-1' : 'pt-6'}`}
+        {...KEYBOARD_AWARE_SCROLL_PROPS}
+        refreshControl={<RefreshControl refreshing={(isFetching && !isLoading) || manualRefresh} onRefresh={handleRefresh} tintColor={Brand[500]} />}>
         <RouteSearchBar
           value={filters.keyword}
           onChange={(nextKeyword) => setFiltersAndReset({ ...filters, keyword: nextKeyword })}
@@ -370,7 +526,7 @@ export default function RoutesScreen(): React.ReactElement {
                 </ThemedText>
                 <ThemedText style={{ fontSize: 11, color: theme.textSecondary, marginTop: 2 }}>
                   {activeFilterCount === 0
-                    ? 'Asset class, chance, sort and more'
+                    ? 'How much to invest, asset class, chance and more'
                     : `${activeFilterCount} filter${activeFilterCount === 1 ? '' : 's'} active`}
                 </ThemedText>
               </View>
@@ -383,6 +539,9 @@ export default function RoutesScreen(): React.ReactElement {
                 filters={filters}
                 categories={ranked.map((route) => route.category)}
                 onChange={setFiltersAndReset}
+                amount={displayedInvestment}
+                investmentMaximum={investmentMaximum}
+                onAmountChange={setInvestmentAndReset}
               />
             ) : null}
           </>
@@ -402,7 +561,19 @@ export default function RoutesScreen(): React.ReactElement {
               {group.routes.map(renderRoute)}
             </View>
           ))
-          : visibleRoutes.map(renderRoute)}
+          : visibleRoutes.map((route) => (
+            route.id === lastVisibleCutId && moreCuts.length > 0
+              ? (
+                <View key={route.id} className="gap-3">
+                  {renderRoute(route)}
+                  <MoreWaysToSave cuts={moreCuts} renderRoute={renderRoute} />
+                </View>
+              )
+              : renderRoute(route)
+          ))}
+        {moreCuts.length > 0 && (lastVisibleCutId == null || (filters.groupByChance && predictionFacetsActive(filters))) ? (
+          <MoreWaysToSave cuts={moreCuts} renderRoute={renderRoute} />
+        ) : null}
         {visibleCount < filtered.length && (
           <Pressable onPress={() => setVisibleCount((count) => count + 30)} className="items-center active:opacity-70" style={{ borderRadius: Radius.md, paddingVertical: 12, borderWidth: 1, borderColor: theme.border, backgroundColor: theme.backgroundElement }}>
             <ThemedText style={{ fontSize: 13, fontWeight: '800', color: Brand[500] }}>Show 30 more · {filtered.length - visibleCount} remaining</ThemedText>
@@ -513,12 +684,12 @@ function Screen({ children }: React.PropsWithChildren): React.ReactElement {
 
 function EmptyRoutes({ hasSavedQuiz, onStart }: { hasSavedQuiz: boolean; onStart: () => void }): React.ReactElement {
   const theme = useTheme();
-  return <Screen><View className="flex-1 justify-center px-6"><View className="items-center gap-4 py-10 px-6" style={{ borderRadius: Radius.xl, backgroundColor: theme.backgroundElevated, borderWidth: 1, borderColor: theme.border, ...Shadow.card }}><ThemedText style={{ fontSize: 40 }}>🎯</ThemedText><ThemedText style={{ fontSize: 22, fontWeight: '800', color: theme.text, textAlign: 'center' }}>Find prediction routes</ThemedText><ThemedText className="text-center" style={{ fontSize: 14, color: theme.textSecondary, lineHeight: 21, maxWidth: 300 }}>{hasSavedQuiz ? 'Use your saved goal and preferences to generate fresh routes.' : 'Set your goal and timeframe — we\'ll scan prediction markets and generate routes in one step.'}</ThemedText><Pressable onPress={onStart} className="self-stretch py-4 items-center active:opacity-85 mt-2" style={{ borderRadius: Radius.lg, backgroundColor: Brand[500], ...Shadow.card }}><ThemedText style={{ fontSize: 16, fontWeight: '800', color: OnBrand }}>{hasSavedQuiz ? 'Find routes from saved quiz →' : 'Set goal & search →'}</ThemedText></Pressable></View></View></Screen>;
+  return <Screen><View className="flex-1 justify-center px-6"><View className="items-center gap-4 py-10 px-6" style={{ borderRadius: Radius.xl, backgroundColor: theme.backgroundElevated, borderWidth: 1, borderColor: theme.border, ...Shadow.card }}><Icon glyph="🎯" size={38} color={Brand[500]} strokeWidth={1.5} /><ThemedText style={{ fontSize: 22, fontWeight: '800', color: theme.text, textAlign: 'center' }}>Find prediction routes</ThemedText><ThemedText className="text-center" style={{ fontSize: 14, color: theme.textSecondary, lineHeight: 21, maxWidth: 300 }}>{hasSavedQuiz ? 'Use your saved goal and preferences to generate fresh routes.' : 'Set your goal and timeframe — we\'ll scan prediction markets and generate routes in one step.'}</ThemedText><Pressable onPress={onStart} className="self-stretch py-4 items-center active:opacity-85 mt-2" style={{ borderRadius: Radius.lg, backgroundColor: Brand[500], ...Shadow.card }}><ThemedText style={{ fontSize: 16, fontWeight: '800', color: OnBrand }}>{hasSavedQuiz ? 'Find routes from saved quiz →' : 'Set goal & search →'}</ThemedText></Pressable></View></View></Screen>;
 }
 
 function RoutesError({ message, onRetry }: { message: string; onRetry: () => void }): React.ReactElement {
   const theme = useTheme();
-  return <View className="items-center gap-2 py-10 px-6" style={{ borderRadius: Radius.lg, backgroundColor: Semantic.negative + '12', borderWidth: 1, borderColor: Semantic.negative + '30' }}><ThemedText style={{ fontSize: 24 }}>⚠️</ThemedText><ThemedText style={{ fontSize: 14, fontWeight: '700', color: theme.text }}>Couldn&apos;t load routes</ThemedText><ThemedText className="text-center" style={{ fontSize: 13, color: theme.textSecondary }}>{message}</ThemedText><Pressable onPress={onRetry} className="active:opacity-70 mt-1" style={{ borderRadius: Radius.md, paddingHorizontal: 16, paddingVertical: 9, backgroundColor: Brand[500] }}><ThemedText style={{ fontSize: 13, fontWeight: '700', color: OnBrand }}>Try again</ThemedText></Pressable></View>;
+  return <View className="items-center gap-2 py-10 px-6" style={{ borderRadius: Radius.lg, backgroundColor: Semantic.negative + '12', borderWidth: 1, borderColor: Semantic.negative + '30' }}><Icon glyph="⚠️" size={23} color={Semantic.negative} /><ThemedText style={{ fontSize: 14, fontWeight: '700', color: theme.text }}>Couldn&apos;t load routes</ThemedText><ThemedText className="text-center" style={{ fontSize: 13, color: theme.textSecondary }}>{message}</ThemedText><Pressable onPress={onRetry} className="active:opacity-70 mt-1" style={{ borderRadius: Radius.md, paddingHorizontal: 16, paddingVertical: 9, backgroundColor: Brand[500] }}><ThemedText style={{ fontSize: 13, fontWeight: '700', color: OnBrand }}>Try again</ThemedText></Pressable></View>;
 }
 
 /**
@@ -535,7 +706,7 @@ function EmptyUncovered({ keyword, onClear }: { keyword: string; onClear: () => 
   const theme = useTheme();
   return (
     <View className="items-center gap-2 py-10 px-6">
-      <ThemedText style={{ fontSize: 26 }}>🔍</ThemedText>
+      <Icon glyph="🔍" size={25} color={theme.textSecondary} />
       <ThemedText type="smallBold" className="text-center">Nothing we can price for “{keyword}”</ThemedText>
       <ThemedText type="small" themeColor="textSecondary" className="text-center" style={{ lineHeight: 19, maxWidth: 320 }}>
         We searched every open Polymarket contract plus the funds, stocks and coins we

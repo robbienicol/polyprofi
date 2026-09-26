@@ -40,19 +40,39 @@ function stableId(market: PolymarketEntry, outcome: string): string {
   return `pm-live-${safe.slice(0, 90)}`;
 }
 
+/**
+ * Traded (bracketed) variants of a contract — buy, then sell at a take-profit or bail
+ * at a stop before it resolves. Off: on a market-priced contract a bracket is exactly
+ * zero-EV before costs and negative after (see @/lib/prediction-swing), and its hit
+ * rate is set by where the two exits sit, so a 96¢ favourite showed as a 50% coin flip
+ * and read as a safe way to make money. The hold route says what the price means.
+ */
+export const OFFER_BRACKETS = false;
+
+/** "Dec 31" for a resolution date, or null when the market carries none. */
+function resolvesOn(endDate: string | undefined): string | null {
+  if (!endDate) return null;
+  const time = Date.parse(endDate);
+  return Number.isFinite(time)
+    ? new Date(time).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    : null;
+}
+
 function toRoute(candidate: Candidate, params: RouteParams, quality: MarketQualityFacts): Route {
   const { market, outcome, price, probability, riskLevel } = candidate;
   const expectedReturn = Math.round(params.balance * (1 / price - 1));
   const cents = Math.round(price * 100);
-  const volume = market.volumeM >= 1
-    ? `$${market.volumeM.toFixed(1)}M`
-    : `$${Math.round(market.volumeM * 1000).toLocaleString()}K`;
+  const gainPct = (1 / price - 1) * 100;
+  const gain = gainPct >= 10 ? `${Math.round(gainPct)}%` : `${Number(gainPct.toFixed(1))}%`;
+  const until = resolvesOn(market.endDate);
 
   return {
     id: stableId(market, outcome),
     category: 'Polymarket',
     emoji: '🔮',
-    description: `Buy ${outcome} on “${market.question}” at ${cents}¢ — ${probability}% market-implied chance, ${volume} traded.`,
+    // The prefix "Buy <side> on “<question>” at <n>¢" is parsed back out by the
+    // monitor (betOutcomeSide, quotedQuestion) — keep it intact.
+    description: `Buy ${outcome} on “${market.question}” at ${cents}¢ and hold ${until ? `to ${until}` : 'until it resolves'}: ${probability}% chance you get +${gain}, ${100 - probability}% chance you lose what you put in.`,
     riskLevel,
     probability,
     expectedReturn,
@@ -141,9 +161,14 @@ function toSwingRoute(
 }
 
 /** The hold route, plus the traded variant of the same contract when one is honest to build. */
-function routesForCandidate(candidate: Candidate, params: RouteParams): Route[] {
+function routesForCandidate(
+  candidate: Candidate,
+  params: RouteParams,
+  { brackets = OFFER_BRACKETS }: { brackets?: boolean } = {},
+): Route[] {
   const quality = polymarketMarketQuality(candidate.market, candidate.outcomeIndex);
   const hold = toRoute(candidate, params, quality);
+  if (!brackets) return [hold];
   const plan = buildSwingPlan({
     quality,
     priceCents: candidate.price * 100,
@@ -285,7 +310,15 @@ export function __selfCheck(): void {
     oneWeekPriceChange: 0.08,
     oneMonthPriceChange: -0.1,
   };
-  const both = routesForCandidate({ ...candidate, market: tradable }, { ...params, timeframe: 'month' });
+  console.assert(
+    routesForCandidate({ ...candidate, market: tradable }, { ...params, timeframe: 'month' }).length === 1,
+    'by default a market is offered as a hold only — a bracket has no edge to sell',
+  );
+  console.assert(
+    route.description.includes('60% chance you get +67%') && route.description.includes('40% chance you lose what you put in'),
+    'the hold route says what the price means, in plain words',
+  );
+  const both = routesForCandidate({ ...candidate, market: tradable }, { ...params, timeframe: 'month' }, { brackets: true });
   console.assert(both.length === 2, 'a liquid, moving market offers both hold and swing routes');
   const [held, swung] = both;
   console.assert(held.lossProfile === 'binary' && swung.lossProfile === 'partial', 'only the bracketed route caps its loss');

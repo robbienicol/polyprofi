@@ -8,7 +8,9 @@ import {
   type GoalScoreContext,
   type ScoreWeights,
 } from '@/lib/score';
-import { expectedValue } from '@/lib/route-expected-value';
+import { applyCutShortlist, isSpendingCut, shortlistCuts } from '@/lib/cut-shortlist';
+import { downsideAtStake, expectedValue } from '@/lib/route-expected-value';
+import { isDebtRoute } from '@/lib/route-investment-metrics';
 import { rescoreForStake, stakeNeededForReturn } from '@/lib/stake-rescore';
 import type { Route, RouteParams } from '@/types/routes';
 
@@ -53,6 +55,12 @@ export interface RouteResults {
    * route exists in the pool at any amount, or one is already affordable.
    */
   unlockCapitalSafeInvestment: number | null;
+  /**
+   * Spending cuts folded out of `filtered`: beyond the few worth featuring for this
+   * goal. Most feasible first. Empty while cuts are what the user asked for — the
+   * "Cut spending" asset class, or a keyword search.
+   */
+  moreCuts: Route[];
 }
 
 /** A run of routes that share a probability band, in descending order of chance. */
@@ -172,6 +180,8 @@ export interface RouteRelevanceInput {
   projectedReturn: number; // profit at the user's INTENDED stake (not an auto-sized one)
   requiredInvestment: number | null; // stake needed to actually hit the goal
   intendedInvestment: number; // what the user wants to invest
+  /** Costs nothing to take, so it never competes for the stake. */
+  noCapitalRequired?: boolean;
 }
 
 export function isRelevantRoute({
@@ -179,9 +189,20 @@ export function isRelevantRoute({
   projectedReturn,
   requiredInvestment,
   intendedInvestment,
+  noCapitalRequired,
 }: RouteRelevanceInput): boolean {
   if (target <= 0) return true; // no goal set → nothing to be irrelevant against
   if (projectedReturn >= target) return true; // hits the goal at the intended amount → always show
+  /*
+   * A zero-capital route is exempt, and the premise above is why.
+   *
+   * This gate asks whether a route is worth a slot given it would consume the stake
+   * without reaching the goal. Of a route that consumes no stake, the question does
+   * not arise. Cuts also STACK in a way market routes do not — you pick one contract,
+   * but you cancel every subscription — so judging each one alone against 80% of the
+   * goal hid all ten of them, five of which were free money, behind a single T-bill.
+   */
+  if (noCapitalRequired) return true;
   const closeToGoal = projectedReturn >= target * NEAR_MISS_MIN_PROXIMITY;
   const withinPriceRange =
     requiredInvestment != null &&
@@ -215,6 +236,49 @@ export function shouldOfferCapitalSafe(
   return !filteredRoutes.some((route) => route.lossProfile === 'partial');
 }
 
+/**
+ * Slack on the losing-bet test, in probability: prices are rounded to a whole percent
+ * before they become a route's chance, so a fairly-priced contract can read up to half
+ * a point short. Anything worse than this is a genuinely losing bet, not rounding.
+ */
+const EV_PROBABILITY_SLACK = 0.006;
+
+/**
+ * Whether a route is worth putting in front of someone at all, on two tests the
+ * goal-based filters never asked:
+ *
+ * 1. It must not be a losing bet. For routes whose downside is concrete — an
+ *    all-or-nothing contract, or one with a stop — chance × gain has to cover
+ *    chance-of-losing × loss. A fairly-priced contract sits at zero and passes; a
+ *    bracket, which pays its spread twice, is negative by construction and does not.
+ * 2. Even if it works, it must beat cash. A route that puts money at risk and, at
+ *    best, returns less over the goal's timeframe than a T-bill would with none, is
+ *    strictly worse than the T-bill: a 1.5% four-day trade against a year-long goal
+ *    was being shown as "$20,000 to make $300" beside a 4% bill.
+ *
+ * Spending cuts, card moves and cash instruments themselves are never judged here.
+ */
+export function isWorthShowing(route: Route, stake: number, cashReturnRate: number | null): boolean {
+  if (route.noCapitalRequired || route.category === 'Savings & Treasuries' || isDebtRoute(route)) return true;
+  if ((route.lossProfile === 'binary' || route.exitPlan) && stake > 0) {
+    const swing = route.expectedReturn + downsideAtStake(route, stake);
+    if (expectedValue(route, stake) < -EV_PROBABILITY_SLACK * swing) return false;
+  }
+  if (cashReturnRate != null && cashReturnRate > 0 && stake > 0) {
+    if (route.expectedReturn / stake <= cashReturnRate) return false;
+  }
+  return true;
+}
+
+/** The best sourced cash yield in the pool, as a percent a year — the bar every risky route has to clear. */
+function cashYieldPct(routes: Route[]): number | null {
+  const yields = routes
+    .filter((route) => route.category === 'Savings & Treasuries')
+    .map((route) => route.investmentFacts?.yieldPct)
+    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0);
+  return yields.length > 0 ? Math.max(...yields) : null;
+}
+
 export function buildRouteResults(
   routes: Route[],
   params: RouteParams,
@@ -246,6 +310,7 @@ export function buildRouteResults(
         projectedReturn: rescoreForStake([route], referenceStake, intendedInvestment, target)[0].expectedReturn,
         requiredInvestment: requiredInvestmentById.get(route.id) ?? null,
         intendedInvestment,
+        noCapitalRequired: route.noCapitalRequired,
       })
     );
   // Spend only what a route needs to reach the target, never more than the user
@@ -254,9 +319,15 @@ export function buildRouteResults(
     const requiredInvestment = requiredInvestmentById.get(route.id);
     return Math.min(requiredInvestment ?? intendedInvestment, intendedInvestment);
   };
-  const rescored = relevantRoutes.map((route) => (
-    rescoreForStake([route], referenceStake, selectedStake(route), target)[0]
-  ));
+  // What the same money would earn in cash over the goal's own timeframe.
+  const cashYield = cashYieldPct(routes);
+  const cashReturnRate = cashYield != null
+    ? (cashYield / 100) * (timeframeCalendarDays(params.timeframe) / 365)
+    : null;
+  const rescored = relevantRoutes
+    .map((route) => rescoreForStake([route], referenceStake, selectedStake(route), target)[0])
+    // A named search shows what was asked for, worth it or not; the card still says so.
+    .filter((route) => keyword || isWorthShowing(route, selectedStake(route), cashReturnRate));
   const scoreContext = (route: Route): GoalScoreContext => ({
     target,
     requiredInvestment: requiredInvestmentById.get(route.id) ?? null,
@@ -287,6 +358,17 @@ export function buildRouteResults(
     }
   }
   if (filters.sort !== 'score') filtered = [...filtered].sort(sortComparator(filters.sort, selectedStake));
+
+  // A handful of cuts next to the investments, not ten of them in front. See
+  // @/lib/cut-shortlist. Asking for cuts outright — the category, or by name —
+  // shows every one of them.
+  let moreCuts: Route[] = [];
+  const cutsRequested = keyword || filters.category === 'Cut spending' || filters.category === 'Card rewards';
+  if (!cutsRequested && filtered.some(isSpendingCut)) {
+    const shortlist = shortlistCuts(filtered, target);
+    moreCuts = shortlist.more;
+    filtered = applyCutShortlist(filtered, shortlist, filters.sort === 'score');
+  }
 
   // A high chance of hitting the goal is the property of safe, low-yield routes, and those
   // need real capital: a T-bill clears a $300 goal only at a few thousand dollars. So they
@@ -326,11 +408,36 @@ export function buildRouteResults(
     selectedStake,
     unlockInvestmentFor,
     unlockCapitalSafeInvestment,
+    moreCuts,
   };
 }
 
 // ── self-check ──────────────────────────────────────────────────────────────
 export function __selfCheck(): void {
+  {
+    const base: Route = {
+      id: 'x', category: 'Polymarket', emoji: '', description: '', riskLevel: 3, probability: 50,
+      expectedReturn: 300, platform: '', strategy: '', lossProfile: 'partial', meetsTarget: true,
+    };
+    const yearOfCash = 0.04;
+    // The reported route: a 1.5% four-day bracket, $20,000 to make $300, 50/50, stop at −1.8%.
+    const bracket: Route = { ...base, exitPlan: { kind: 'bracket', effectiveLossFraction: 0.018 } as Route['exitPlan'] };
+    console.assert(!isWorthShowing(bracket, 20_000, yearOfCash), 'a bracket that loses on average and trails a T-bill is hidden');
+    console.assert(!isWorthShowing(bracket, 20_000, null), 'the bracket fails on expected value alone, cash aside');
+    const longshot: Route = { ...base, lossProfile: 'binary', probability: 3, expectedReturn: 32_333, riskLevel: 5 };
+    console.assert(isWorthShowing(longshot, 1_000, yearOfCash), 'a fairly-priced 3¢ long shot is not "losing" just because its price was rounded');
+    const fairHold: Route = { ...base, lossProfile: 'binary', probability: 60, expectedReturn: 667, riskLevel: 3 };
+    console.assert(isWorthShowing(fairHold, 1_000, yearOfCash), 'a fairly-priced contract that beats cash stays');
+    const losing: Route = { ...fairHold, probability: 30 };
+    console.assert(!isWorthShowing(losing, 1_000, yearOfCash), 'a contract that loses on average is hidden');
+    const tinyStock: Route = { ...base, category: 'Stocks & ETFs', lossProfile: 'partial', expectedReturn: 30 };
+    console.assert(!isWorthShowing(tinyStock, 1_000, yearOfCash), '3% at risk when cash pays 4% is hidden');
+    console.assert(isWorthShowing({ ...tinyStock, expectedReturn: 90 }, 1_000, yearOfCash), '9% at risk against 4% cash stays');
+    const bill: Route = { ...base, category: 'Savings & Treasuries', expectedReturn: 10 };
+    console.assert(isWorthShowing(bill, 1_000, yearOfCash), 'cash is never judged against itself');
+    console.assert(isWorthShowing(tinyStock, 1_000, null), 'with no cash rate to compare against, nothing is hidden for it');
+  }
+
   if (resolveInvestmentAmount(null, 1000) !== 1000) {
     throw new Error('an untouched investment amount uses the saved default');
   }
@@ -358,6 +465,17 @@ export function __selfCheck(): void {
   console.assert(
     !isRelevantRoute({ target: 300, projectedReturn: 235, requiredInvestment: 6200, intendedInvestment: 4901 }),
     'needs more than 1.25× the intended amount → hidden',
+  );
+
+  // …unless it costs nothing. A $30 cut against a $300 goal is 10% of it and would fail
+  // both bars, but it is free and it stacks with the next one.
+  console.assert(
+    isRelevantRoute({ target: 300, projectedReturn: 30, requiredInvestment: 0, intendedInvestment: 4901, noCapitalRequired: true }),
+    'a zero-capital route is never filtered out for falling short of the goal alone',
+  );
+  console.assert(
+    !isRelevantRoute({ target: 300, projectedReturn: 30, requiredInvestment: 0, intendedInvestment: 4901 }),
+    '…and a route that DOES consume the stake still is',
   );
 
   // Route that can never reach the goal at any stake (no required investment) → hidden.

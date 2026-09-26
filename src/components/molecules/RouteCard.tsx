@@ -1,17 +1,39 @@
+import { Bitcoin, ChartNoAxesColumn, CreditCard, Landmark, Scissors, TrendingUp, type LucideIcon } from 'lucide-react-native';
 import { memo } from 'react';
 import { Pressable, View } from 'react-native';
 
+import { Icon } from '@/components/ui/Icon';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, Colors, OnBrand, Radius, RiskScale, Semantic, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { predictionTopic } from '@/lib/prediction-topics';
-import { debtLiquidityLabel, debtYieldLabel, isDebtRoute } from '@/lib/route-investment-metrics';
 import { Route } from '@/types/routes';
 
 const RISK_LABELS = ['Very Safe', 'Safe', 'Moderate', 'Aggressive', 'Very Aggressive'] as const;
 
 export const riskLabel = (level: number) => RISK_LABELS[level - 1] ?? 'Unknown';
 export const riskColor = (level: number) => RiskScale[level - 1] ?? Colors.light.textSecondary;
+
+/**
+ * The risk band to *show*, which can never read safer than the odds. A route's own
+ * riskLevel comes from its instrument, so a 50/50 trade on a 96¢ contract carried the
+ * contract's "Safe". Here the chance of it working and whether it can go to zero both
+ * set a floor: all-or-nothing is at least Moderate, under 60% at least Aggressive.
+ */
+export function displayRiskLevel(route: Pick<Route, 'riskLevel' | 'probability' | 'lossProfile' | 'noCapitalRequired' | 'category'>): number {
+  if (route.noCapitalRequired || route.category === 'Savings & Treasuries') return route.riskLevel;
+  let level = route.riskLevel;
+  if (route.lossProfile === 'binary') level = Math.max(level, 3);
+  if (route.probability < 80) level = Math.max(level, 3);
+  if (route.probability < 60) level = Math.max(level, 4);
+  if (route.probability < 35) level = 5;
+  return Math.min(5, Math.max(1, level));
+}
+
+/** Probability as a whole percent — the score behind it is a float (e.g. a
+ * volatility model's raw output), and nobody reads "68.89310056155591%" as
+ * a number rather than a bug. */
+export const formatProbability = (value: number) => `${Math.round(value)}%`;
 
 const probColor = (p: number) => (p >= 75 ? Semantic.positive : p >= 50 ? Semantic.caution : Semantic.negative);
 const MONO = { fontVariant: ['tabular-nums' as const] };
@@ -48,25 +70,62 @@ function formatMoney(amount: number): string {
   return amount.toLocaleString(undefined, { maximumFractionDigits: 0 });
 }
 
+/**
+ * Every prediction-market route is sourced from Polymarket, but that's an
+ * implementation detail now that the detail page can show a cheaper Kalshi
+ * price for a matched market (sports and, since the generic matcher, a good
+ * slice of politics/economics/crypto/culture too) — see market-comparison.ts.
+ * The card leads with what it actually is; which venue to buy it on is a
+ * decision the detail page makes, not a label on the list.
+ */
+function displayLabel(value: string): string {
+  return value === 'Polymarket' ? 'Prediction market' : value;
+}
+
+/**
+ * The mark for a route, chosen by what the route is rather than by the emoji the
+ * model happened to emit — the same kind of route always wears the same icon.
+ */
+function routeIcon(route: Route): LucideIcon | undefined {
+  if (route.spendingCut) return Scissors;
+  if (route.cardRewards) return CreditCard;
+  if (/polymarket|prediction|kalshi/i.test(`${route.category} ${route.platform}`)) return ChartNoAxesColumn;
+  if (/crypto/i.test(route.category)) return Bitcoin;
+  if (/savings|treasur/i.test(route.category)) return Landmark;
+  if (/stock|etf/i.test(route.category)) return TrendingUp;
+  return undefined;
+}
+
+/**
+ * One route in the results list: what it is, why, its chance, and the two numbers
+ * that decide it — what it could make and what it takes. Risk bands, loss profile,
+ * yield, maturity and liquidity all live on the detail screen; on the list they were
+ * a wall of labels between the reader and those two numbers.
+ */
 function RouteCardInner({ route, requiredInvestment, currentInvestment, score, onTrack, onPress }: RouteCardProps) {
   const theme = useTheme();
-  const rc = riskColor(route.riskLevel);
   const pc = probColor(route.probability);
-  const binary = route.lossProfile === 'binary';
-  const debt = isDebtRoute(route);
-  const debtYield = debtYieldLabel(route, requiredInvestment);
-  const debtLiquidity = debtLiquidityLabel(route);
   const needsMoreToHitGoal = !!requiredInvestment && !!currentInvestment && requiredInvestment > currentInvestment;
-  // Prediction markets span sports, politics, crypto and more, and the question text
-  // alone rarely says which — "Will Alcaraz reach the final?" reads as sports only if
-  // you know the name. The topic comes from the market's own tags, so it is shown when
-  // present and simply omitted when the tags map to nothing; a guessed label would be
-  // worse than none.
+  // What this route will actually put in: only what it needs, capped by the amount
+  // the user is willing to invest. Shown always, so moving "willing to invest"
+  // visibly changes the card.
+  const stakeUsed = requiredInvestment != null && currentInvestment != null && !needsMoreToHitGoal
+    ? Math.min(requiredInvestment, currentInvestment)
+    : null;
+  // The topic comes from the market's own tags; shown when present, never guessed.
   const topic = predictionTopic(route.predictionTopic);
   const probabilityLabel = route.meetsTarget ? 'Chance of hitting goal' : 'Current amount hits goal';
-  const probabilityValue = route.meetsTarget ? `${route.probability}%` : 'No';
+  const probabilityValue = route.meetsTarget ? formatProbability(route.probability) : 'No';
   const probabilityWidth = route.meetsTarget ? Math.min(route.probability, 100) : 0;
   const probabilityColor = route.meetsTarget ? pc : Semantic.negative;
+
+  const stake = route.noCapitalRequired
+    ? { label: 'USES', value: 'No money', color: theme.text }
+    : needsMoreToHitGoal
+      ? { label: 'TO HIT GOAL', value: `$${formatMoney(requiredInvestment!)}`, color: Semantic.caution }
+      : stakeUsed != null
+        ? { label: 'USES', value: `$${formatMoney(stakeUsed)}`, color: theme.text }
+        : null;
 
   const Container = onPress ? Pressable : View;
 
@@ -76,195 +135,121 @@ function RouteCardInner({ route, requiredInvestment, currentInvestment, score, o
       className={onPress ? 'active:opacity-90' : undefined}
       style={{
         borderRadius: Radius.xl,
-        overflow: 'hidden',
         backgroundColor: theme.backgroundElement,
         borderWidth: 1,
         borderColor: theme.border,
+        padding: 16,
+        gap: 12,
         ...Shadow.card,
       }}>
-      {/* Left accent rail with a soft glow cap */}
-      <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, backgroundColor: rc }} />
-
-      <View style={{ paddingLeft: 20, paddingRight: 16, paddingTop: 16, paddingBottom: 16, gap: 14 }}>
-
-        {/* Header: identity + risk chip */}
-        <View className="flex-row justify-between items-center">
-          <View className="flex-row items-center gap-3 flex-1">
-            <View
-              style={{
-                width: 38, height: 38, borderRadius: Radius.md,
-                backgroundColor: rc + '1A',
-                alignItems: 'center', justifyContent: 'center',
-              }}>
-              <ThemedText style={{ fontSize: 20 }}>{route.emoji}</ThemedText>
-            </View>
-            <View className="flex-1">
-              <View className="flex-row items-center" style={{ gap: 6 }}>
-                <ThemedText style={{ fontSize: 14, fontWeight: '700', color: theme.text, letterSpacing: -0.2 }} numberOfLines={1}>
-                  {route.category}
-                </ThemedText>
-                {topic ? (
-                  <View style={{ paddingHorizontal: 7, paddingVertical: 2, borderRadius: Radius.pill, backgroundColor: theme.backgroundSelected }}>
-                    <ThemedText style={{ fontSize: 10, fontWeight: '800', color: theme.textSecondary }} numberOfLines={1}>
-                      {topic.emoji} {topic.label}
-                    </ThemedText>
-                  </View>
-                ) : null}
-              </View>
-              <ThemedText style={{ fontSize: 11, color: theme.textTertiary }} numberOfLines={1}>
-                {route.platform}
-              </ThemedText>
-            </View>
-          </View>
-          <View style={{ alignItems: 'flex-end', gap: 4 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-              <View style={{ width: 6, height: 6, borderRadius: 999, backgroundColor: rc }} />
-              <ThemedText style={{ fontSize: 10, color: rc, fontWeight: '700' }}>
-                {riskLabel(route.riskLevel)}
-              </ThemedText>
-            </View>
-            {score != null ? (
-              <View
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'baseline',
-                  gap: 3,
-                  paddingHorizontal: 8,
-                  paddingVertical: 3,
-                  borderRadius: Radius.pill,
-                  backgroundColor: scoreColor(score) + '1A',
-                  borderWidth: 1,
-                  borderColor: scoreColor(score) + '3D',
-                }}>
-                <ThemedText style={{ fontSize: 13, fontWeight: '900', color: scoreColor(score), ...MONO }}>
-                  {score}
-                </ThemedText>
-                <ThemedText style={{ fontSize: 9, fontWeight: '800', color: theme.textTertiary, letterSpacing: 0.3 }}>
-                  /100
-                </ThemedText>
-              </View>
-            ) : null}
-          </View>
+      {/* Header: what it is, where, and its score */}
+      <View className="flex-row items-center" style={{ gap: 12 }}>
+        <View
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: Radius.md,
+            backgroundColor: theme.backgroundSelected,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}>
+          <Icon icon={routeIcon(route)} glyph={route.emoji} size={18} color={theme.text} strokeWidth={1.75} />
         </View>
-
-        {/* The contract price a prediction-market route trades at */}
-        {route.line ? (
-          <View
-            className="flex-row items-center self-start gap-2"
-            style={{ backgroundColor: rc + '14', borderRadius: Radius.sm, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: rc + '33' }}>
-            <ThemedText style={{ fontSize: 11 }}>📊</ThemedText>
-            <ThemedText style={{ fontSize: 13, fontWeight: '800', color: theme.text, letterSpacing: 0.2, ...MONO }}>
-              {route.line}
+        <View className="flex-1">
+          <View className="flex-row items-center" style={{ gap: 6 }}>
+            <ThemedText style={{ fontSize: 14, fontWeight: '700', color: theme.text, letterSpacing: -0.2 }} numberOfLines={1}>
+              {displayLabel(route.category)}
             </ThemedText>
-          </View>
-        ) : null}
-
-        {/* Why we like it — one concise reason */}
-        <ThemedText style={{ fontSize: 13.5, color: theme.textSecondary, lineHeight: 20 }} numberOfLines={2}>
-          {route.description}
-        </ThemedText>
-
-        {/* Probability meter */}
-        <View className="gap-1.5">
-          <View className="flex-row justify-between">
-            <ThemedText style={{ fontSize: 11, color: theme.textSecondary, fontWeight: '500' }}>{probabilityLabel}</ThemedText>
-            <ThemedText style={{ fontSize: 11, color: probabilityColor, fontWeight: '800', ...MONO }}>{probabilityValue}</ThemedText>
-          </View>
-          <View style={{ height: 6, borderRadius: Radius.pill, backgroundColor: theme.backgroundSelected, overflow: 'hidden' }}>
-            <View style={{ height: '100%', width: `${probabilityWidth}%`, borderRadius: Radius.pill, backgroundColor: probabilityColor }} />
-          </View>
-        </View>
-
-        {needsMoreToHitGoal ? (
-          <View
-            className="flex-row items-center justify-between"
-            style={{
-              borderRadius: Radius.md,
-              paddingHorizontal: 12,
-              paddingVertical: 9,
-              backgroundColor: theme.backgroundSelected,
-            }}>
-            <ThemedText style={{ fontSize: 11, color: theme.textTertiary, fontWeight: '700' }}>
-              NEED TO HIT GOAL
-            </ThemedText>
-            <ThemedText style={{ fontSize: 16, color: theme.text, fontWeight: '900', ...MONO }}>
-              ${formatMoney(requiredInvestment)}
-            </ThemedText>
-          </View>
-        ) : null}
-
-        {debt ? (
-          <View
-            className="gap-2"
-            style={{
-              borderRadius: Radius.md,
-              padding: 12,
-              backgroundColor: theme.backgroundSelected,
-            }}>
-            <View className="flex-row justify-between gap-2">
-              <DebtFact label="YIELD" value={debtYield ?? 'Check quote'} />
-              <DebtFact label="MATURITY" value={route.maturesInDays ? formatMaturity(route.maturesInDays) : 'Flexible'} />
-            </View>
-            <View className="flex-row justify-between gap-2">
-              <DebtFact label="DOWNSIDE" value={route.lossProfile === 'partial' ? 'Capital preservation' : 'Capital at risk'} />
-              <DebtFact label="LIQUIDITY" value={debtLiquidity ?? 'Check terms'} />
-            </View>
-            {route.investmentFacts?.yieldSource ? (
-              <ThemedText style={{ fontSize: 10.5, color: theme.textTertiary, fontWeight: '700' }} numberOfLines={1}>
-                Source: {route.investmentFacts.yieldSource}{route.investmentFacts.yieldAsOf ? ` · ${route.investmentFacts.yieldAsOf}` : ''}
+            {topic ? (
+              <ThemedText style={{ fontSize: 11, fontWeight: '700', color: theme.textTertiary }} numberOfLines={1}>
+                · {topic.label}
               </ThemedText>
             ) : null}
           </View>
-        ) : null}
-
-        {/* Footer: return + loss profile + acquire */}
-        <View className="flex-row justify-between items-end">
-          <View>
-            <View className="flex-row items-center gap-1.5">
-              <ThemedText style={{ fontSize: 27, fontWeight: '800', color: Semantic.positive, letterSpacing: -0.6, ...MONO }}>
-                +${route.expectedReturn}
-              </ThemedText>
-              <View
-                style={{
-                  paddingHorizontal: 6, paddingVertical: 2, borderRadius: Radius.sm,
-                  backgroundColor: (binary ? Semantic.negative : Semantic.positive) + '15',
-                }}>
-                <ThemedText style={{ fontSize: 9.5, fontWeight: '700', color: binary ? Semantic.negative : Semantic.positive, letterSpacing: 0.2 }}>
-                  {binary ? 'ALL-OR-NOTHING' : 'CAPITAL PRESERVATION'}
-                </ThemedText>
-              </View>
-            </View>
-            <ThemedText style={{ fontSize: 11, color: theme.textTertiary }}>
-              {route.meetsTarget ? 'potential profit' : 'below current goal'}{route.maturesInDays ? ` · matures in ${formatMaturity(route.maturesInDays)}` : ''}
+          <ThemedText style={{ fontSize: 11, color: theme.textTertiary }} numberOfLines={1}>
+            {displayLabel(route.platform)}
+          </ThemedText>
+        </View>
+        {score != null ? (
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'baseline',
+              gap: 2,
+              paddingHorizontal: 8,
+              paddingVertical: 3,
+              borderRadius: Radius.pill,
+              backgroundColor: scoreColor(score) + '1A',
+            }}>
+            <ThemedText style={{ fontSize: 13, fontWeight: '900', color: scoreColor(score), ...MONO }}>
+              {score}
+            </ThemedText>
+            <ThemedText style={{ fontSize: 9, fontWeight: '800', color: theme.textTertiary, letterSpacing: 0.3 }}>
+              /100
             </ThemedText>
           </View>
-          {onTrack && (
-            <Pressable
-              onPress={onTrack}
-              style={{
-                borderRadius: Radius.md, paddingHorizontal: 16, paddingVertical: 10,
-                backgroundColor: Brand[500], ...Shadow.card,
-              }}
-              className="active:opacity-80">
-              <ThemedText style={{ fontSize: 13, fontWeight: '800', color: OnBrand }}>Add</ThemedText>
-            </Pressable>
-          )}
+        ) : null}
+      </View>
+
+      {/* The contract price a prediction-market route trades at */}
+      {route.line ? (
+        <View
+          className="self-start"
+          style={{ backgroundColor: theme.backgroundSelected, borderRadius: Radius.sm, paddingHorizontal: 9, paddingVertical: 5 }}>
+          <ThemedText style={{ fontSize: 12.5, fontWeight: '800', color: theme.text, letterSpacing: 0.2, ...MONO }}>
+            {route.line}
+          </ThemedText>
         </View>
+      ) : null}
+
+      <ThemedText style={{ fontSize: 13.5, color: theme.textSecondary, lineHeight: 20 }} numberOfLines={2}>
+        {route.description}
+      </ThemedText>
+
+      {/* Probability meter */}
+      <View className="gap-1.5">
+        <View className="flex-row justify-between">
+          <ThemedText style={{ fontSize: 11, color: theme.textSecondary, fontWeight: '500' }}>{probabilityLabel}</ThemedText>
+          <ThemedText style={{ fontSize: 11, color: probabilityColor, fontWeight: '800', ...MONO }}>{probabilityValue}</ThemedText>
+        </View>
+        <View style={{ height: 6, borderRadius: Radius.pill, backgroundColor: theme.backgroundSelected, overflow: 'hidden' }}>
+          <View style={{ height: '100%', width: `${probabilityWidth}%`, borderRadius: Radius.pill, backgroundColor: probabilityColor }} />
+        </View>
+      </View>
+
+      {/* The two numbers that decide it, side by side: what it could make, what it takes */}
+      <View
+        className="flex-row items-end"
+        style={{ gap: 16, borderTopWidth: 1, borderTopColor: theme.border, paddingTop: 12 }}>
+        <View className="flex-1">
+          <ThemedText style={{ fontSize: 10, fontWeight: '800', color: theme.textTertiary, letterSpacing: 0.4 }}>
+            {route.meetsTarget ? 'POTENTIAL PROFIT' : 'PROFIT · BELOW GOAL'}
+          </ThemedText>
+          <ThemedText style={{ fontSize: 26, fontWeight: '800', color: Semantic.positive, letterSpacing: -0.6, marginTop: 1, ...MONO }}>
+            +${formatMoney(route.expectedReturn)}
+          </ThemedText>
+        </View>
+        {stake ? (
+          <View style={{ paddingBottom: 3 }}>
+            <ThemedText style={{ fontSize: 10, fontWeight: '800', color: theme.textTertiary, letterSpacing: 0.4 }}>
+              {stake.label}
+            </ThemedText>
+            <ThemedText style={{ fontSize: 16, fontWeight: '800', color: stake.color, marginTop: 2, ...MONO }}>
+              {stake.value}
+            </ThemedText>
+          </View>
+        ) : null}
+        {onTrack && (
+          <Pressable
+            onPress={onTrack}
+            style={{ borderRadius: Radius.md, paddingHorizontal: 18, paddingVertical: 10, backgroundColor: Brand[500] }}
+            className="active:opacity-80">
+            <ThemedText style={{ fontSize: 13, fontWeight: '800', color: OnBrand }}>Add</ThemedText>
+          </Pressable>
+        )}
       </View>
     </Container>
   );
 }
 
 export const RouteCard = memo(RouteCardInner);
-
-function DebtFact({ label, value }: { label: string; value: string }) {
-  const theme = useTheme();
-  return (
-    <View className="flex-1">
-      <ThemedText style={{ fontSize: 9.5, color: theme.textTertiary, fontWeight: '800' }}>{label}</ThemedText>
-      <ThemedText style={{ fontSize: 12, color: theme.text, fontWeight: '800', marginTop: 2 }} numberOfLines={1}>
-        {value}
-      </ThemedText>
-    </View>
-  );
-}

@@ -12,10 +12,10 @@ import { useOnboardingProfile } from '@/api/hooks/useOnboardingProfile';
 import { useUserProfile } from '@/api/hooks/useUserProfile';
 import { useSavingsGoal, type SavingsGoalInput } from '@/api/hooks/useSavingsGoal';
 import { OnboardingGlow } from '@/components/onboarding/OnboardingPreviews';
+import { Icon } from '@/components/ui/Icon';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, OnBrand, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { requestAppRating } from '@/lib/app-rating';
 import { ACQUISITION_PLATFORMS } from '@/lib/preferences';
 import {
   excludedSearchCategoriesFor,
@@ -24,7 +24,7 @@ import {
   searchTimeframeFor,
 } from '@/lib/onboarding-profile';
 import { buildRouteParams, referenceStakeFor, surveyAmountCeiling } from '@/lib/quiz-profile';
-import { defaultQuizGoal, goalByLabel, goalRemaining, isOpenEnded } from '@/lib/savings-goal';
+import { goalByLabel, goalRemaining, isOpenEnded } from '@/lib/savings-goal';
 import type { AcquisitionPlatform, QuizAnswers, SavingsGoal } from '@/types/bets';
 
 /**
@@ -40,23 +40,8 @@ const TIMEFRAMES = [
   { value: '5years', word: 'within 5 years', label: '5 years', deadlineWord: 'in 5 years' },
 ] as const;
 
-/**
- * One tap to the goals people actually name, so the field is optional. Amounts
- * are deliberately not set from these: the amount is the sentence's own control,
- * and having a chip silently rewrite it would be a nasty surprise.
- */
-const GOAL_PRESETS = [
-  { emoji: '🎧', label: 'Headphones' },
-  { emoji: '✈️', label: 'A trip' },
-  { emoji: '🛟', label: 'Emergency fund' },
-  { emoji: '🚗', label: 'A car' },
-  { emoji: '🏠', label: 'House deposit' },
-] as const;
-
-/** Emoji for a goal the user named themselves. */
+/** Icon for a seeded goal that did not carry one of its own. */
 const CUSTOM_GOAL_EMOJI = '🎯';
-/** Emoji for an unnamed search — money for its own sake. */
-const UNNAMED_GOAL_EMOJI = '⚡';
 
 /** A goal chosen in goal setup, carried here in the URL and not yet saved anywhere. */
 interface GoalSeed {
@@ -100,8 +85,31 @@ const MARKETS = [
   { value: 'Polymarket', word: 'prediction markets', label: 'Prediction markets', emoji: '🔮' },
 ] as const;
 
-/** One tap to the amounts most people actually pick, so the keyboard is optional. */
+/** One tap to the amounts most people actually pick, when there is no goal to scale to. */
 const QUICK_AMOUNTS = [100, 500, 1_000, 5_000] as const;
+
+/** Rounds to something a person would say: 2,480 becomes 2,500, 17,300 becomes 17,000. */
+function roundAmount(value: number): number {
+  if (value <= 0) return 0;
+  const step = Math.max(10, 10 ** (Math.floor(Math.log10(value)) - 1));
+  return Math.round(value / step) * step;
+}
+
+/**
+ * The four one-tap amounts, scaled to what they are actually working towards: a
+ * $10,000 goal is not served by chips reading $100 to $5k, which is what everyone
+ * saw before this — they were fixed, so on any real goal all four were wrong.
+ * Quarter, half, the goal itself and double it, deduplicated in case rounding
+ * collapses two of them together.
+ */
+function quickAmountsFor(goalTarget: number): readonly number[] {
+  if (!(goalTarget > 0)) return QUICK_AMOUNTS;
+  const scaled = [0.25, 0.5, 1, 2]
+    .map((fraction) => roundAmount(goalTarget * fraction))
+    .filter((amount) => amount > 0);
+  const unique = [...new Set(scaled)];
+  return unique.length === 4 ? unique : QUICK_AMOUNTS;
+}
 
 /** Widest goal the hero number can show without running off a small phone. */
 const MAX_TARGET_DIGITS = 7;
@@ -124,13 +132,6 @@ function groupingCommas(digits: string): number {
 function joinWords(words: readonly string[]): string {
   if (words.length <= 1) return words[0] ?? '';
   return `${words.slice(0, -1).join(', ')} & ${words[words.length - 1]}`;
-}
-
-function marketsWord(selected: string[]): string {
-  const words = MARKETS.filter((market) => selected.includes(market.value)).map((market) => market.word);
-  if (words.length === 0) return 'anything';
-  // Past three the sentence stops being readable, so count instead of listing.
-  return words.length > 3 ? `${words.length} markets` : joinWords(words);
 }
 
 export default function QuizScreen(): React.ReactElement {
@@ -158,16 +159,18 @@ export default function QuizScreen(): React.ReactElement {
   const { profile: onboarding, isLoading: onboardingLoading } = useOnboardingProfile();
 
   const prefill = quizAnswers ?? history[0]?.quizSnapshot;
-  // The goal of the last search, so returning to the quiz resumes what you were
-  // working on rather than the oldest thing on the list.
-  const lastSearchGoalId = goalId ?? history[0]?.goalId;
+  // A search belongs to a goal only when it was started from one (the goal screen,
+  // goal setup). Otherwise it stands on its own: goals are something you can aim a
+  // search at, not something every search has to be filed under.
   // A goal picked in goal setup and handed over unsaved: it becomes real here, as a
   // draft, when the search is saved. A seed names a specific goal, so it wins over
   // the "resume what you were working on" default — otherwise adding a second goal
   // would open the quiz on the first one. No target means the open-ended goal.
   const seed = goalSeedFrom(goalLabel, goalEmojiParam, goalTarget);
   const seededExistingGoal = seed ? goalByLabel(allGoals, seed.label) : null;
-  const startingGoal = seed ? seededExistingGoal : defaultQuizGoal(allGoals, lastSearchGoalId);
+  const startingGoal = seed
+    ? seededExistingGoal
+    : goalId ? allGoals.find((goal) => goal.id === goalId) ?? null : null;
 
   // The survey answers seed the form's own state, and `formKey` does not name
   // them — so a form mounted before they arrive keeps the defaults for good.
@@ -246,9 +249,10 @@ function QuizForm({
     ? Math.max(1, Math.round(remainingFor(startingGoal)))
     : newGoalSeed?.target ?? prefill?.target ?? 100;
 
-  const [goalName, setGoalName] = useState(startingGoal?.label ?? newGoalSeed?.label ?? '');
-  const [goalEmoji, setGoalEmoji] = useState(startingGoal?.emoji ?? newGoalSeed?.emoji ?? CUSTOM_GOAL_EMOJI);
-  const [nameFocused, setNameFocused] = useState(false);
+  // The goal this search is aimed at, if it was started from one. Removable, so
+  // the same search can be run on its own.
+  const [goalAttached, setGoalAttached] = useState(startingGoal != null || newGoalSeed != null);
+  const goalLabelShown = startingGoal?.label ?? newGoalSeed?.label ?? null;
   // The amount is prefilled and set in the headline type, so it reads as a printed
   // figure rather than a field. The hint beside it says otherwise until it is used.
   const [amountTouched, setAmountTouched] = useState(false);
@@ -262,54 +266,44 @@ function QuizForm({
   const [investFocused, setInvestFocused] = useState(false);
 
   const targetValue = Number(target.replace(/[^0-9]/g, '')) || 0;
+  // Scaled to the goal the form opened on, not to whatever is currently typed —
+  // chips that moved as you tapped them would never let you tap the same one twice.
+  const quickAmounts = useMemo(() => quickAmountsFor(startingTarget), [startingTarget]);
   const investValue = Number(invest.replace(/[^0-9]/g, '')) || 0;
   const investCeiling = investValue || investmentCeiling;
-  const selectedTimeframe = TIMEFRAMES.find((tf) => tf.value === timeframe) ?? TIMEFRAMES[1];
-  const timeWord = selectedTimeframe.word;
-  const marketWord = marketsWord(categories);
   const appWord = joinWords(
     ACQUISITION_PLATFORMS.filter((platform) => preferredPlatforms.includes(platform.value)).map((p) => p.label),
   );
-  const trimmedName = goalName.trim();
-  // A name the user already has is the same goal, not a rival with the same name.
-  const existingGoal = useMemo(() => goalByLabel(goals, trimmedName), [goals, trimmedName]);
+  const attachedLabel = goalAttached ? goalLabelShown : null;
 
   const toggleMarket = useCallback((market: string) => {
     setCategories((prev) => (prev.includes(market) ? prev.filter((item) => item !== market) : [...prev, market]));
   }, []);
 
-  /** A preset names the goal; if it names one you already have, it retargets at its remainder. */
-  const choosePreset = useCallback((label: string, emoji: string) => {
-    Keyboard.dismiss();
-    setGoalName(label);
-    setGoalEmoji(emoji);
-    const existing = goalByLabel(goals, label);
-    if (existing && !isOpenEnded(existing)) setTarget(String(Math.max(1, Math.round(remainingFor(existing)))));
-  }, [goals, remainingFor]);
-
   const submit = useCallback(() => {
     if (targetValue <= 0 || isSaving) return;
     Keyboard.dismiss();
-    requestAppRating();
+    // Asked from the routes screen now, while the analyzing loader gives it a
+    // natural pause to land in — not here, before anything has even happened.
     setIsSaving(true);
 
     const run = async (): Promise<void> => {
-      // Every search gets a goal, but a search is not a commitment: a new one is
-      // created as a draft and only joins the Goals tab once the user acquires
-      // against it. An unnamed search is named after what was asked for.
-      // "Just make me money" has no finish line, and the amount typed here is what the
-      // search aims at rather than a target the goal is judged against. Only while the
-      // name is still the one that was chosen: renaming it makes it an ordinary goal.
-      const openEnded = newGoalSeed?.target == null && trimmedName === newGoalSeed?.label;
-      const searchGoalId = existingGoal
-        ? existingGoal.id
-        : (await addGoalAsync({
-          label: trimmedName || `$${targetValue.toLocaleString()} ${selectedTimeframe.deadlineWord}`,
-          emoji: trimmedName ? goalEmoji : UNNAMED_GOAL_EMOJI,
-          ...(openEnded ? null : { targetAmount: targetValue }),
-          draft: true,
-          deadline: new Date(Date.now() + timeframeCalendarDays(timeframe) * 86_400_000).toISOString(),
-        })).goal.id;
+      // Only a search started from a goal is filed under one. A goal handed over by
+      // goal setup becomes real here, as a draft that joins the Goals tab on the
+      // first acquire; its open-ended form has no finish line of its own.
+      const searchGoalId = !goalAttached
+        ? undefined
+        : startingGoal
+          ? startingGoal.id
+          : newGoalSeed
+            ? (await addGoalAsync({
+              label: newGoalSeed.label,
+              emoji: newGoalSeed.emoji || CUSTOM_GOAL_EMOJI,
+              ...(newGoalSeed.target == null ? null : { targetAmount: targetValue }),
+              draft: true,
+              deadline: new Date(Date.now() + timeframeCalendarDays(timeframe) * 86_400_000).toISOString(),
+            })).goal.id
+            : undefined;
 
       saveAnswers(
         buildRouteParams({
@@ -326,7 +320,9 @@ function QuizForm({
         {
           // The goal rides along as a parameter, so the routes screen can stamp it
           // onto the search it saves and onto every position taken from it.
-          onSuccess: () => router.replace(`/(tabs)/routes?generate=1&goalId=${searchGoalId}` as Href),
+          onSuccess: () => router.replace(
+            (searchGoalId ? `/(tabs)/routes?generate=1&goalId=${searchGoalId}` : '/(tabs)/routes?generate=1') as Href,
+          ),
           // Never latch on "Finding routes…" — if the save fails, hand the button back.
           onError: () => setIsSaving(false),
         }
@@ -334,7 +330,7 @@ function QuizForm({
     };
 
     void run().catch(() => setIsSaving(false));
-  }, [targetValue, isSaving, existingGoal, newGoalSeed, addGoalAsync, trimmedName, goalEmoji, selectedTimeframe.deadlineWord, timeframe, saveAnswers, prefill?.riskTolerance, defaultRiskTolerance, categories, excludedCategories, preferredPlatforms, investCeiling, router]);
+  }, [targetValue, isSaving, goalAttached, startingGoal, newGoalSeed, addGoalAsync, timeframe, saveAnswers, prefill?.riskTolerance, defaultRiskTolerance, categories, excludedCategories, preferredPlatforms, investCeiling, router]);
 
   return (
     <View className="flex-1" style={{ backgroundColor: theme.background }}>
@@ -356,7 +352,7 @@ function QuizForm({
                 by the two pickers below, so nothing on the page is hidden behind a mode. */}
             <View>
               <ThemedText style={{ fontSize: 24, lineHeight: 32, fontWeight: '600', color: theme.textSecondary }}>
-                {trimmedName ? 'I want to make' : 'I want to have'}
+                I want to make
               </ThemedText>
 
               <View className="flex-row items-end" style={{ gap: 10 }}>
@@ -402,7 +398,7 @@ function QuizForm({
                   hitSlop={8}
                   className="flex-row items-center active:opacity-60"
                   style={{ marginBottom: 18, gap: 4 }}>
-                  <ThemedText style={{ fontSize: 12 }}>✏️</ThemedText>
+                  <Icon glyph="✏️" size={13} color={theme.textTertiary} />
                   <ThemedText style={{ fontSize: 12, fontWeight: '700', color: theme.textTertiary }}>
                     tap to edit
                   </ThemedText>
@@ -410,19 +406,29 @@ function QuizForm({
               ) : null}
               </View>
 
-              {/* One flowing paragraph, so any combination of answers wraps like English.
-                  The goal is part of the sentence, so what a position will count
-                  toward is visible at the moment of asking. */}
-              <ThemedText style={{ fontSize: 24, lineHeight: 34, fontWeight: '600', color: theme.textSecondary }}>
-                {trimmedName ? 'toward ' : 'more in my account '}
-                {trimmedName ? <Answer>{trimmedName}</Answer> : null}
-                {trimmedName ? ' ' : ''}
-                <Answer>{timeWord}</Answer>, investing in <Answer>{marketWord}</Answer>.
-              </ThemedText>
             </View>
 
+            {attachedLabel ? (
+              <View
+                className="flex-row items-center self-start"
+                style={{ gap: 8, paddingLeft: 12, paddingRight: 6, paddingVertical: 6, borderRadius: Radius.pill, backgroundColor: theme.backgroundSelected, marginTop: -10 }}>
+                <ThemedText style={{ fontSize: 13, fontWeight: '700', color: theme.textSecondary }}>
+                  Toward {attachedLabel}
+                </ThemedText>
+                <Pressable
+                  onPress={() => setGoalAttached(false)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Search without ${attachedLabel}`}
+                  hitSlop={8}
+                  className="active:opacity-60"
+                  style={{ width: 22, height: 22, borderRadius: 999, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.background }}>
+                  <Icon glyph="✕" size={12} color={theme.textSecondary} strokeWidth={2.5} />
+                </Pressable>
+              </View>
+            ) : null}
+
             <View className="flex-row" style={{ gap: 8 }}>
-              {QUICK_AMOUNTS.map((amount) => {
+              {quickAmounts.map((amount) => {
                 const selected = targetValue === amount;
                 return (
                   <Pressable
@@ -443,7 +449,11 @@ function QuizForm({
                       backgroundColor: selected ? Brand[500] + '18' : theme.backgroundElement,
                     }}>
                     <ThemedText style={{ fontSize: 14, fontWeight: '800', color: selected ? Brand[500] : theme.textSecondary, fontVariant: ['tabular-nums'] }}>
-                      ${amount >= 1000 ? `${amount / 1000}k` : amount}
+                      ${amount >= 1_000_000
+                        ? `${Number((amount / 1_000_000).toFixed(1))}m`
+                        : amount >= 1_000
+                          ? `${Number((amount / 1_000).toFixed(1))}k`
+                          : amount}
                     </ThemedText>
                   </Pressable>
                 );
@@ -494,51 +504,6 @@ function QuizForm({
                       Keyboard.dismiss();
                       setInvest(String(amount));
                     }}
-                  />
-                ))}
-              </View>
-            </Group>
-
-            <Group label="What for" hint="Optional">
-              <View
-                className="flex-row items-center"
-                style={{
-                  gap: 10,
-                  paddingHorizontal: 14,
-                  borderWidth: 1.5,
-                  borderRadius: Radius.md,
-                  borderColor: nameFocused ? Brand[500] : theme.borderStrong,
-                  backgroundColor: theme.backgroundElement,
-                }}>
-                <ThemedText style={{ fontSize: 18 }}>{trimmedName ? goalEmoji : UNNAMED_GOAL_EMOJI}</ThemedText>
-                <TextInput
-                  value={goalName}
-                  onChangeText={(text) => {
-                    setGoalName(text);
-                    // A typed name is the user's own, so it loses a preset's emoji.
-                    if (!GOAL_PRESETS.some((preset) => preset.label === text)) setGoalEmoji(CUSTOM_GOAL_EMOJI);
-                  }}
-                  onFocus={() => setNameFocused(true)}
-                  onBlur={() => setNameFocused(false)}
-                  placeholder="Name this goal (or leave it blank)"
-                  placeholderTextColor={theme.textTertiary}
-                  maxLength={40}
-                  returnKeyType="done"
-                  style={{ flex: 1, color: theme.text, fontSize: 15, fontWeight: '600', paddingVertical: 13 }}
-                />
-                {existingGoal ? (
-                  <ThemedText style={{ fontSize: 10.5, fontWeight: '800', color: Brand[500] }}>EXISTING</ThemedText>
-                ) : null}
-              </View>
-              <View className="flex-row flex-wrap" style={{ gap: 8 }}>
-                {GOAL_PRESETS.map((preset) => (
-                  <Chip
-                    key={preset.label}
-                    label={preset.label}
-                    emoji={preset.emoji}
-                    selected={trimmedName === preset.label}
-                    role="radio"
-                    onPress={() => choosePreset(preset.label, preset.emoji)}
                   />
                 ))}
               </View>
@@ -599,11 +564,9 @@ function QuizForm({
             <ThemedText numberOfLines={1} style={{ fontSize: 12, color: theme.textTertiary, marginBottom: 10, paddingHorizontal: 2 }}>
               {targetValue <= 0
                 ? 'Enter an amount to continue'
-                : existingGoal
-                  ? `Continues ${existingGoal.label} · opens in ${appWord || 'your app'}`
-                  : trimmedName
-                    ? `Starts ${trimmedName} when you acquire · opens in ${appWord || 'your app'}`
-                    : `Ranked safest first · opens in ${appWord || 'your app'}`}
+                : attachedLabel
+                  ? `Toward ${attachedLabel} · opens in ${appWord || 'your app'}`
+                  : `Ranked safest first · opens in ${appWord || 'your app'}`}
             </ThemedText>
             <Pressable
               onPress={submit}
@@ -621,11 +584,6 @@ function QuizForm({
       </SafeAreaView>
     </View>
   );
-}
-
-/** A value the pickers wrote into the sentence. */
-function Answer({ children }: React.PropsWithChildren): React.ReactElement {
-  return <ThemedText style={{ fontSize: 24, lineHeight: 34, fontWeight: '800', color: Brand[500] }}>{children}</ThemedText>;
 }
 
 /**
@@ -692,7 +650,7 @@ function Chip({
         borderColor: selected ? Brand[500] : theme.border,
         backgroundColor: selected ? Brand[500] + '18' : theme.backgroundElement,
       }}>
-      {emoji ? <ThemedText style={{ fontSize: 14 }}>{emoji}</ThemedText> : null}
+      {emoji ? <Icon glyph={emoji} size={15} color={selected ? Brand[500] : theme.textSecondary} /> : null}
       <ThemedText style={{ fontSize: 14, fontWeight: '700', color: selected ? Brand[500] : theme.textSecondary }}>
         {label}
       </ThemedText>

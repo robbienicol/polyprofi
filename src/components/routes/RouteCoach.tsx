@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { ActivityIndicator, Pressable, TextInput, View } from 'react-native';
 
 import { fetchRouteCoachReply } from '@/api/client/insights';
+import { formatProbability } from '@/components/molecules/RouteCard';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, OnBrand, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -19,7 +20,7 @@ export function RouteCoach({ route }: { route: Route }): React.ReactElement {
   const [question, setQuestion] = useState('');
   const [messages, setMessages] = useState<CoachMessage[]>([]);
   const [loading, setLoading] = useState(false);
-  const starter = `This route has a ${route.probability}% chance of reaching the goal with $${route.expectedReturn} potential profit. Ask me why it ranks here, what could go wrong, or how to size it.`;
+  const starter = `This route has a ${formatProbability(route.probability)} chance of reaching the goal with $${route.expectedReturn} potential profit. Ask me why it ranks here, what could go wrong, or how to size it.`;
 
   async function sendQuestion(): Promise<void> {
     const trimmed = question.trim();

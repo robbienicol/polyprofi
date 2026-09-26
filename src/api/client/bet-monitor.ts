@@ -8,6 +8,8 @@ import {
   monitoredProfitGoal,
   quotedQuestion,
   resolveOutcomePrice,
+  resolvedPolymarketOutcome,
+  resolvedSportsOutcome,
   sportsScoreMargin,
 } from '@/lib/bet-monitor-match';
 import { isPredictionMarketBet } from '@/lib/parse-bet-line';
@@ -30,7 +32,7 @@ const ESPN_SPORTS = [
  * markets misses anything outside it, and a $9M election market is easily
  * outside Gamma's first 100. No fuzzy matching: see @/lib/bet-monitor-match.
  */
-async function fetchMarketsForBets(bets: TrackedBet[]): Promise<PolymarketEntry[]> {
+export async function fetchMarketsForBets(bets: TrackedBet[]): Promise<PolymarketEntry[]> {
   const predictionBets = bets.filter(isPredictionMarketBet);
   if (predictionBets.length === 0) return [];
   const slugs = predictionBets.flatMap((bet) => (bet.sourceSlug ? [bet.sourceSlug] : []));
@@ -155,10 +157,49 @@ async function fetchBetLiveStatus(bet: TrackedBet, markets?: PolymarketEntry[], 
       // Strong in-game lead → contract likely repriced well above entry; nudge check even before price fetch.
       base.reason = `Your pick is up ${margin} — contract may have hit your $${profitGoal} target`;
     }
+
+    // A legacy sportsbook-style pick (tracked by game match, not a Polymarket
+    // contract) has no market price to confirm anything — the final score IS
+    // the result, so it can resolve itself the moment the game ends. A real
+    // Polymarket contract is deliberately NOT resolved off the score here:
+    // its own close/settlement below is the authoritative signal (overtime
+    // rules, pushes and voided markets can all disagree with the raw final).
+    if (!isPoly) {
+      const resolved = resolvedSportsOutcome(game, side);
+      if (resolved) {
+        return {
+          ...base,
+          resolvedStatus: resolved,
+          reason: resolved === 'won' ? `Final: ${liveContext}. You won.` : `Final: ${liveContext}. This one didn't hit.`,
+          liveContext,
+          gameStatus,
+          homeScore: game.homeScore,
+          awayScore: game.awayScore,
+          isLive: false,
+        };
+      }
+    }
   }
 
   if (isPoly && entryPrice) {
     const market = findMarketForBet(bet, polyMarkets);
+    const resolved = market ? resolvedPolymarketOutcome(market, side) : null;
+    if (resolved) {
+      const realizedPnl = resolved === 'won' ? bet.amountWagered * (1 / entryPrice - 1) : -bet.amountWagered;
+      return {
+        ...base,
+        unrealizedPnl: realizedPnl,
+        currentPrice: resolved === 'won' ? 1 : 0,
+        profitGoalHit: realizedPnl >= profitGoal,
+        sellRecommended: false,
+        resolvedStatus: resolved,
+        reason: resolved === 'won'
+          ? `Market resolved — you won $${realizedPnl.toFixed(0)}.`
+          : `Market resolved — this one didn't hit ($${bet.amountWagered.toFixed(0)}).`,
+        isLive: false,
+      };
+    }
+
     const currentPrice = market ? resolveOutcomePrice(market, side) : null;
     if (currentPrice != null) {
       const unrealizedPnl = calcPolymarketPnl(bet.amountWagered, entryPrice, currentPrice);

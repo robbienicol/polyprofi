@@ -1,8 +1,17 @@
 import { fetchKalshiMarketByTicker } from '@/api/client/kalshi-market-data';
 import { fetchPolymarketUniverse } from '@/api/client/polymarket-market-data';
+import { computeDailyGenericMatches } from '@/lib/kalshi-generic-matching-job';
 import { computeDailySportsMatches } from '@/lib/sports-market-matching-job';
 import { netYesPrice } from '@/lib/platform-fees';
 import type { Route } from '@/types/routes';
+
+/** The bit both match kinds reduce to once we only care about a ticker per side —
+ * a sports match has one ticker per team, a generic match has one ticker for
+ * both sides of its single Yes/No market. */
+interface ResolvedMatch {
+  kalshiYesTicker: string;
+  kalshiNoTicker: string;
+}
 
 export interface MarketComparison {
   kalshiTicker: string;
@@ -31,8 +40,7 @@ const CONTRACTS_FOR_FEE_ESTIMATE = 100;
 export async function resolveMarketComparison(route: Route): Promise<MarketComparison | null> {
   if (!route.sourceSlug) return null;
 
-  const matches = await computeDailySportsMatches();
-  const match = matches.find((m) => m.polymarketSlug === route.sourceSlug);
+  const match = await resolveMatch(route.sourceSlug);
   if (!match) return null;
 
   const polymarketUniverse = await fetchPolymarketUniverse();
@@ -72,4 +80,18 @@ export async function resolveMarketComparison(route: Route): Promise<MarketCompa
     betterPlatform,
     edgeCents,
   };
+}
+
+/** Sports first (the sturdier, team+date-anchored matcher), then the generic
+ * question-text matcher for everything sports doesn't cover. */
+async function resolveMatch(sourceSlug: string): Promise<ResolvedMatch | null> {
+  const sportsMatches = await computeDailySportsMatches();
+  const sportsMatch = sportsMatches.find((m) => m.polymarketSlug === sourceSlug);
+  if (sportsMatch) return sportsMatch;
+
+  const genericMatches = await computeDailyGenericMatches();
+  const genericMatch = genericMatches.find((m) => m.polymarketSlug === sourceSlug);
+  if (genericMatch) return { kalshiYesTicker: genericMatch.kalshiTicker, kalshiNoTicker: genericMatch.kalshiTicker };
+
+  return null;
 }

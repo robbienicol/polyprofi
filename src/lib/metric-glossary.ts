@@ -63,10 +63,10 @@ export const METRIC_EXPLAINERS = {
       '"Protected" means the principal is not exposed to market moves — savings and Treasury holdings. It does not mean insured, and it does not mean the return is guaranteed.',
   },
   goalProbability: {
-    title: 'Goal probability',
+    title: 'Avg. pick probability',
     what: 'The chance your positions land, averaged across them and weighted by how much money is in each.',
     why: 'A high number on a small stake does not carry a goal. Weighting by money is what makes this reflect the portfolio you actually hold.',
-    reading: 'It is the average chance your positions come good, not the chance the goal itself is reached by a date.',
+    reading: 'It is the average chance your positions come good, not the chance the goal itself is reached by a date — see the dollar progress on the value above for that.',
   },
   goalContribution: {
     title: 'What is moving the goal',

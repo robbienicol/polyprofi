@@ -2,9 +2,11 @@ import { useAuth } from '@clerk/clerk-expo';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useState } from 'react';
 
-import { saveTrackedBets, setSavingsGoalState } from '@/api/client/storage';
+import { clearSpendingCuts, saveSpendingCuts, saveTrackedBets, setSavingsGoalState } from '@/api/client/storage';
 import { apiBaseUrl } from '@/lib/api-base-url';
+import { isArrayOf, isRecord, isSpendingCut, parseJson } from '@/lib/runtime-validation';
 import { GOAL_ACCOUNTING_VERSION } from '@/lib/savings-goal';
+import type { SpendingCut } from '@/lib/spending-cut-routes';
 import type { SavingsGoal, SavingsGoalState, TrackedBet } from '@/types/bets';
 
 const DAY_MS = 24 * 60 * 60 * 1_000;
@@ -172,6 +174,34 @@ function demoBets(): TrackedBet[] {
 }
 
 /**
+ * The cuts detected in YOUR OWN statement, read from `EXPO_PUBLIC_DEV_SPENDING_CUTS`
+ * and written there by `bun run seed:statement`.
+ *
+ * Nothing is invented here, and that is the point: an earlier version of this file
+ * hand-wrote plausible-looking cuts, and a "Cancel Netflix" for a subscription the
+ * user did not have read as the detector being broken rather than as demo data. So
+ * the seed either replays a real statement or seeds no cuts at all.
+ *
+ * The env var holds the detected cuts only — never the transactions — and `.env` is
+ * gitignored, so no real spending reaches a tracked file. Returns null when it is
+ * unset, malformed, or empty, which is the ordinary case on a clean checkout.
+ */
+function statementSpendingCuts(): { cuts: SpendingCut[]; monthsCovered: number; transactionCount: number } | null {
+  const raw = process.env.EXPO_PUBLIC_DEV_SPENDING_CUTS;
+  if (!raw) return null;
+  const parsed = parseJson(raw);
+  if (!isRecord(parsed) || !isArrayOf(isSpendingCut)(parsed.cuts) || parsed.cuts.length === 0) {
+    console.warn('[dev-seed] EXPO_PUBLIC_DEV_SPENDING_CUTS is set but unreadable — run: bun run seed:statement');
+    return null;
+  }
+  return {
+    cuts: parsed.cuts,
+    monthsCovered: typeof parsed.monthsCovered === 'number' ? parsed.monthsCovered : 0,
+    transactionCount: typeof parsed.transactionCount === 'number' ? parsed.transactionCount : 0,
+  };
+}
+
+/**
  * Fills the signed-in dev account with a few weeks of history — two goals,
  * eight positions across stocks, Treasuries and Polymarket, some up, some
  * down, some flat — so the "been using it a while" screens (Home, Portfolio,
@@ -209,8 +239,12 @@ export function useDevSeedDemoData(): {
     setLoading(true);
     try {
       await saveTrackedBets(demoBets());
+      // Only when a real statement has been staged into .env; never invented.
+      const statement = statementSpendingCuts();
+      if (statement) await saveSpendingCuts({ ...statement, importedAt: Date.now() });
       await pushGoals({ goals: demoGoals(), achievedCount: 0, accountingVersion: GOAL_ACCOUNTING_VERSION });
       await queryClient.invalidateQueries({ queryKey: ['TRACKED_BETS'] });
+      await queryClient.invalidateQueries({ queryKey: ['SPENDING_CUTS'] });
     } finally {
       setLoading(false);
     }
@@ -221,8 +255,10 @@ export function useDevSeedDemoData(): {
     setLoading(true);
     try {
       await saveTrackedBets([]);
+      await clearSpendingCuts();
       await pushGoals({ goals: [], achievedCount: 0, accountingVersion: GOAL_ACCOUNTING_VERSION });
       await queryClient.invalidateQueries({ queryKey: ['TRACKED_BETS'] });
+      await queryClient.invalidateQueries({ queryKey: ['SPENDING_CUTS'] });
     } finally {
       setLoading(false);
     }

@@ -6,10 +6,13 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Linking, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useBankConnect } from '@/api/hooks/useBankConnect';
 import { useBiometricLock } from '@/api/hooks/useBiometricLock';
 import { useDeleteAccount } from '@/api/hooks/useDeleteAccount';
 import { usePreferences } from '@/api/hooks/usePreferences';
 import { useSavingsGoal } from '@/api/hooks/useSavingsGoal';
+import { useSpendingCuts } from '@/api/hooks/useSpendingCuts';
+import { useUserProfile } from '@/api/hooks/useUserProfile';
 import { ScoreWeightSliders } from '@/components/routes/ScoreWeightSliders';
 import { ThemedText } from '@/components/themed-text';
 import {
@@ -47,6 +50,12 @@ export default function SettingsScreen(): React.ReactElement {
     setEnabled: setBiometricEnabled,
   } = useBiometricLock();
   const { deleteAccount, isDeleting } = useDeleteAccount();
+  const { profile } = useUserProfile();
+  const bank = useBankConnect();
+  const { imported: importedCuts } = useSpendingCuts();
+  // The stored answer is the durable one; the hook only knows about a connection
+  // made on this mount, and the profile read is what survives a relaunch.
+  const bankConnected = profile?.bankConnected === true || bank.connected;
   const [deleteError, setDeleteError] = useState('');
   const [currencyOpen, setCurrencyOpen] = useState(false);
   const [showScoreWeights, setShowScoreWeights] = useState(false);
@@ -231,6 +240,47 @@ export default function SettingsScreen(): React.ReactElement {
               />
             ) : null}
             <SettingsRow
+              icon="🏦"
+              label="Bank account"
+              description={
+                bank.error
+                  ? bank.error
+                  : bankConnected
+                    ? 'Connected — real spending counts alongside every pick'
+                    : 'Weighs real spending — a subscription, a coffee habit — alongside every pick'
+              }
+              chevron={!bankConnected}
+              disabled={bank.connecting}
+              onPress={bankConnected ? undefined : () => void bank.connect()}
+              accessory={
+                bankConnected ? (
+                  <ThemedText style={{ fontSize: 13, fontWeight: '800', color: Brand[500] }}>Connected</ThemedText>
+                ) : (
+                  <ThemedText style={{ fontSize: 13, fontWeight: '800', color: Brand[500] }}>
+                    {bank.connecting ? 'Connecting…' : 'Connect'}
+                  </ThemedText>
+                )
+              }
+            />
+            {/* Under bank connect, not beside it: an Apple Card is the account Plaid
+                covers worst, and this is the same signal arriving by the only road
+                that works for it. */}
+            <SettingsRow
+              icon="📄"
+              label="Apple Card statement"
+              description={
+                importedCuts
+                  ? `${importedCuts.cuts.length} cuts from ${importedCuts.monthsCovered} months of spending`
+                  : 'Import a CSV export — finds what repeats and scores it as routes'
+              }
+              onPress={() => router.push('/import-statement')}
+              accessory={
+                <ThemedText style={{ fontSize: 13, fontWeight: '800', color: Brand[500] }}>
+                  {importedCuts ? 'Imported' : 'Import'}
+                </ThemedText>
+              }
+            />
+            <SettingsRow
               icon={goals[0]?.emoji ?? '🎯'}
               label="Goals"
               description={
@@ -240,7 +290,7 @@ export default function SettingsScreen(): React.ReactElement {
                     ? goals[0].label
                     : `${goals[0].label} + ${goals.length - 1} more`
               }
-              value={achievedCount > 0 ? `🏆 ${achievedCount}` : undefined}
+              value={achievedCount > 0 ? `${achievedCount} reached` : undefined}
               onPress={() => router.push('/(tabs)/goals')}
             />
           </SettingsSection>

@@ -226,7 +226,7 @@ export default function SignInScreen(): React.ReactElement {
           <View className="gap-1 mt-2">
             {devAvailable && (
               <AuthTextButton
-                label={devLoading ? 'Signing in…' : '⚡ Dev sign-in'}
+                label={devLoading ? 'Signing in…' : 'Dev sign-in'}
                 onPress={handleDevLogin}
                 disabled={devLoading || loading}
               />

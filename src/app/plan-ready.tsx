@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useOnboardingProfile } from '@/api/hooks/useOnboardingProfile';
 import { OnboardingGlow } from '@/components/onboarding/OnboardingPreviews';
 import { SOMETHING_ELSE } from '@/components/onboarding/quiz-pages';
+import { Icon } from '@/components/ui/Icon';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, OnBrand, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -48,22 +49,6 @@ export default function PlanReadyScreen(): React.ReactElement {
             gap: compact ? 18 : 26,
           }}>
           <View style={{ gap: 10 }}>
-            <View
-              className="flex-row items-center self-start"
-              style={{
-                gap: 6,
-                paddingHorizontal: 10,
-                paddingVertical: 5,
-                borderRadius: Radius.pill,
-                backgroundColor: Brand[500] + '18',
-                borderWidth: 1,
-                borderColor: Brand[500] + '3D',
-              }}>
-              <View style={{ width: 5, height: 5, borderRadius: 999, backgroundColor: Brand[500] }} />
-              <ThemedText style={{ fontSize: 9.5, fontWeight: '900', color: Brand[500], letterSpacing: 0.9 }}>
-                PLAN READY
-              </ThemedText>
-            </View>
             <ThemedText
               style={{
                 fontSize: compact ? 29 : 34,
@@ -200,7 +185,7 @@ function PlanRow({ row, delay }: { row: Row; delay: number }): React.ReactElemen
         borderColor: theme.border,
         backgroundColor: theme.backgroundElement,
       }}>
-      <ThemedText style={{ fontSize: 18 }}>{row.emoji}</ThemedText>
+      <Icon glyph={row.emoji} size={17} color={theme.textSecondary} />
       <View style={{ flex: 1, gap: 2 }}>
         <ThemedText style={{ fontSize: 10.5, fontWeight: '900', letterSpacing: 0.8, color: theme.textTertiary }}>
           {row.label.toUpperCase()}

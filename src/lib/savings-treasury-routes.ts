@@ -1,5 +1,6 @@
 import { TreasuryBillYield } from '@/api/client/market-data';
 import { projectedProfitFromAnnualYield } from '@/lib/factual-route-data';
+import { plainYieldDescription } from '@/lib/plain-yield-copy';
 import { Route } from '@/types/routes';
 
 /** The 13-week T-bill is the app's standing proxy for "the going short-term rate" (see
@@ -7,11 +8,6 @@ import { Route } from '@/types/routes';
  * since both float with the Fed funds rate, just without a lock-in period. */
 const HYSA_PROXY_TERM_LABEL = '13-week T-bill';
 
-function formatMaturity(days: number): string {
-  if (days < 60) return `${Math.round(days / 7)}w`;
-  if (days < 365) return `${Math.round(days / 30)}mo`;
-  return `${(days / 365).toFixed(1)}y`;
-}
 
 export function buildTreasuryRoutes({
   yields,
@@ -29,12 +25,11 @@ export function buildTreasuryRoutes({
     .map((term) => {
       const projectedProfit = projectedProfitFromAnnualYield(balance, term.yieldPct, term.days);
       const hitsGoal = projectedProfit >= target;
-      const maturity = formatMaturity(term.days);
       return {
         id: `treasury-${term.days}d`,
         category: 'Savings & Treasuries',
         emoji: '🏦',
-        description: `Buy a ${term.label} — ${term.yieldPct.toFixed(2)}% sourced yield projects +$${projectedProfit} in ${maturity}.`,
+        description: plainYieldDescription({ instrument: 'tbill', stake: balance, profit: projectedProfit, days: term.days, yieldPct: term.yieldPct }),
         riskLevel: 1,
         probability: 99,
         expectedReturn: projectedProfit,
@@ -95,7 +90,7 @@ export function buildSavingsAccountRoute({
     id: 'savings-account-hysa',
     category: 'Savings & Treasuries',
     emoji: '🏦',
-    description: `Park your $${balance.toLocaleString()} in a high-yield online savings account — top HYSAs track the ${proxy.label} closely (~${proxy.yieldPct.toFixed(2)}%), projecting +$${projectedProfit} over ${deadlineDays}d, withdrawable anytime.`,
+    description: plainYieldDescription({ instrument: 'hysa', stake: balance, profit: projectedProfit, days: null, yieldPct: proxy.yieldPct }),
     riskLevel: 1,
     probability: 99,
     expectedReturn: projectedProfit,

@@ -1,12 +1,15 @@
-import { Pressable, View } from "react-native";
+import { View } from "react-native";
 
 import {
   formatMaturity,
+  formatProbability,
+  displayRiskLevel,
   riskColor,
   riskLabel,
 } from "@/components/molecules/RouteCard";
+import { Icon } from "@/components/ui/Icon";
 import { ThemedText } from "@/components/themed-text";
-import { Brand, OnBrand, Radius, Semantic, Shadow } from "@/constants/theme";
+import { Brand, Radius, Semantic, Shadow } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 import {
   formatMarketLiquidity,
@@ -33,9 +36,6 @@ interface RouteOpportunityCardProps {
   route: Route;
   stake: number;
   neededToHitGoal: number | null;
-  added: boolean;
-  adding: boolean;
-  onAdd: () => void;
   /** Calendar days until the user's goal deadline, when a goal is in context. */
   deadlineDays?: number | null;
 }
@@ -45,12 +45,10 @@ export function RouteOpportunityCard({
   stake,
   neededToHitGoal,
   deadlineDays,
-  added,
-  adding,
-  onAdd,
 }: RouteOpportunityCardProps): React.ReactElement {
   const theme = useTheme();
-  const color = riskColor(route.riskLevel);
+  const shownRisk = displayRiskLevel(route);
+  const color = riskColor(shownRisk);
   const binary = route.lossProfile === "binary";
   const returnPct = stake > 0 ? (route.expectedReturn / stake) * 100 : 0;
   // The holding period this profit is earned over, so the return can say so. A T-bill
@@ -82,6 +80,8 @@ export function RouteOpportunityCard({
   // A bill that pays out after the goal date is the wrong instrument however good
   // the yield is, so the comparison is stated rather than left to the user.
   const deadlineFit = deadlineFitLabel(route.maturesInDays, deadlineDays);
+  const question = /“([^”]+)”/.exec(route.description)?.[1] ?? null;
+  const traded = /(\$[\d.,]+[KMB]?) traded/.exec(route.description)?.[1] ?? null;
 
   return (
     <View
@@ -107,7 +107,7 @@ export function RouteOpportunityCard({
             }}
           >
             <ThemedText style={{ fontSize: 11, color, fontWeight: "900" }}>
-              {riskLabel(route.riskLevel).toUpperCase()}
+              {riskLabel(shownRisk).toUpperCase()}
             </ThemedText>
           </View>
           {route.maturesInDays ? (
@@ -121,15 +121,18 @@ export function RouteOpportunityCard({
                 borderColor: theme.border,
               }}
             >
-              <ThemedText
-                style={{
-                  fontSize: 11,
-                  color: theme.textSecondary,
-                  fontWeight: "800",
-                }}
-              >
-                ⏳ {formatMaturity(route.maturesInDays)}
-              </ThemedText>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                <Icon glyph="⏳" size={11} color={theme.textSecondary} strokeWidth={2.4} />
+                <ThemedText
+                  style={{
+                    fontSize: 11,
+                    color: theme.textSecondary,
+                    fontWeight: "800",
+                  }}
+                >
+                  {formatMaturity(route.maturesInDays)}
+                </ThemedText>
+              </View>
             </View>
           ) : null}
         </View>
@@ -140,21 +143,31 @@ export function RouteOpportunityCard({
         </ThemedText>
       </View>
 
-      <View className="flex-row items-center gap-4">
-        <View
-          style={{
-            width: 76,
-            height: 76,
-            borderRadius: Radius.xl,
-            backgroundColor: color + "20",
-            alignItems: "center",
-            justifyContent: "center",
-            ...Shadow.card,
-          }}
-        >
-          <ThemedText style={{ fontSize: 38 }}>{route.emoji}</ThemedText>
+      {/* No icon tile: route.emoji was a generic fallback glyph on most routes and
+          cost a 76pt column, squeezing the one thing that says what the bet is.
+          For a quoted market, the question is the headline and the side/price sits
+          above it; the description only restated the metrics below. */}
+      {question ? (
+        <View style={{ gap: 6 }}>
+          <ThemedText
+            style={{ fontSize: 13, fontWeight: "800", color: Brand[500], ...MONO }}
+          >
+            {`Buy ${routeDisplayTitle(route)}${traded ? ` · ${traded} traded` : ""}`}
+          </ThemedText>
+          <ThemedText
+            style={{
+              fontSize: 20,
+              lineHeight: 26,
+              fontWeight: "800",
+              color: theme.text,
+              letterSpacing: -0.2,
+            }}
+          >
+            {question}
+          </ThemedText>
         </View>
-        <View className="flex-1">
+      ) : (
+        <View>
           <ThemedText
             style={{
               fontSize: 19,
@@ -178,44 +191,41 @@ export function RouteOpportunityCard({
             {route.description}
           </ThemedText>
         </View>
-      </View>
+      )}
 
       <View className="flex-row items-center">
         <Metric
-          value={route.meetsTarget ? `${route.probability}%` : "No"}
+          value={route.meetsTarget ? formatProbability(route.probability) : "No"}
           label={route.meetsTarget ? "Chance of goal" : "Hits goal"}
           valueColor={theme.text}
         />
         <Divider />
         <Metric
-          value={`+$${route.expectedReturn}`}
+          value={`+$${route.expectedReturn.toLocaleString()}`}
           label={debt ? "Projected profit" : "Potential profit"}
           subLabel={
-            returnPeriodDays != null
-              ? `(${returnPct.toFixed(1)}% over ${formatMaturity(returnPeriodDays)})`
-              : `(${returnPct.toFixed(1)}% return)`
+            returnPeriodDays != null ? `in ${formatMaturity(returnPeriodDays)}` : undefined
           }
           valueColor={Semantic.positive}
         />
         <Divider />
-        <Metric
-          value={
-            neededToHitGoal != null
-              ? `$${neededToHitGoal.toLocaleString()}`
-              : "Met"
-          }
-          label="Need to hit goal"
-          subLabel={
-            neededToHitGoal != null
-              ? `of $${stake.toLocaleString()} now`
-              : undefined
-          }
-          valueColor={
-            neededToHitGoal != null && !route.meetsTarget
-              ? Semantic.caution
-              : Semantic.positive
-          }
-        />
+        {/* What goes in, said as the money it is. "Need to hit goal $20,000 / of $20,000
+            now" was two copies of one number under a label that read like a verdict. */}
+        {neededToHitGoal != null && neededToHitGoal > stake ? (
+          <Metric
+            value={`$${neededToHitGoal.toLocaleString()}`}
+            label="Needed for goal"
+            subLabel={`you set $${stake.toLocaleString()}`}
+            valueColor={Semantic.caution}
+          />
+        ) : (
+          <Metric
+            value={`$${stake.toLocaleString()}`}
+            label="Puts in"
+            subLabel={`${returnPct.toFixed(returnPct >= 10 ? 0 : 1)}% return`}
+            valueColor={theme.text}
+          />
+        )}
       </View>
       <ThemedText style={{ fontSize: 13, color: theme.textSecondary }}>
         Based on historical data & live market prices
@@ -227,11 +237,11 @@ export function RouteOpportunityCard({
           category match with nothing to correlate against. Both were noise.
           Debt skips this entirely: its probability is ~100% by construction, and yield,
           term and issuer are what decide it — see Investment Facts below. */}
-      {debt ? null : (
+      {debt || marketQuality ? null : (
         <Section title="Risk Breakdown">
           <RiskRow
             label="Probability"
-            value={`${route.probability}%`}
+            value={formatProbability(route.probability)}
             percent={route.probability}
             color={Semantic.positive}
           />
@@ -297,18 +307,20 @@ export function RouteOpportunityCard({
 
       {marketQuality && (
         <Section title="Market Quality">
+          {/* Resolution is already the chip up top, and liquidity's label and dollar
+              figure were split across two sections; each fact now appears once. */}
           <View className="flex-row gap-2">
             <Fact
-              label="Resolution"
-              value={
-                route.maturesInDays
-                  ? formatMaturity(route.maturesInDays)
-                  : "Unavailable"
-              }
+              label="Liquidity"
+              value={`${liquidity} · ${formatMarketLiquidity(marketQuality.liquidityUsd)}`}
             />
             <Fact
-              label="Liquidity proxy"
-              value={formatMarketLiquidity(marketQuality.liquidityUsd)}
+              label="Spread"
+              value={
+                marketQuality.spreadCents != null
+                  ? `${marketQuality.spreadCents}¢`
+                  : "Unavailable"
+              }
             />
           </View>
           <View className="flex-row gap-2">
@@ -322,22 +334,12 @@ export function RouteOpportunityCard({
               }
             />
             <Fact
-              label="Spread"
-              value={
-                marketQuality.spreadCents != null
-                  ? `${marketQuality.spreadCents}¢`
-                  : "Unavailable"
-              }
-            />
-          </View>
-          <View className="flex-row gap-2">
-            <Fact label="Price position" value={pricePositionLabel(route)} />
-            <Fact
-              label="Recent range"
-              value={
+              label="Price position"
+              value={pricePositionLabel(route)}
+              subLabel={
                 marketQuality.recentRangePts != null
-                  ? `${marketQuality.recentRangePts} pts`
-                  : "Unavailable"
+                  ? `${marketQuality.recentRangePts} pt recent range`
+                  : undefined
               }
             />
           </View>
@@ -440,7 +442,7 @@ export function RouteOpportunityCard({
                 paddingVertical: 10,
               }}
             >
-              <ThemedText style={{ fontSize: 13 }}>⚠️</ThemedText>
+              <Icon glyph="⚠️" size={14} color={Semantic.caution} />
               <ThemedText
                 style={{ flex: 1, fontSize: 12, lineHeight: 17, color: theme.text }}
               >
@@ -482,14 +484,14 @@ export function RouteOpportunityCard({
         <Outcome
           color={Semantic.positive}
           label={binary ? "Resolves in your favour" : "Target hit"}
-          chance={`${route.probability}% chance`}
+          chance={`${formatProbability(route.probability)} chance`}
           value={`+$${route.expectedReturn}`}
         />
         {binary ? (
           <Outcome
             color={Semantic.negative}
             label="Resolves against you"
-            chance={`${100 - route.probability}% chance`}
+            chance={`${formatProbability(100 - route.probability)} chance`}
             value={`−$${stake}`}
           />
         ) : (
@@ -517,27 +519,6 @@ export function RouteOpportunityCard({
         </ThemedText>
       </Section>
 
-      <Pressable
-        onPress={onAdd}
-        disabled={added || adding}
-        className="py-4 items-center active:opacity-85"
-        style={{
-          borderRadius: Radius.lg,
-          backgroundColor: Brand[500],
-          opacity: added || adding ? 0.65 : 1,
-          ...Shadow.card,
-        }}
-      >
-        <ThemedText
-          style={{ fontSize: 16, fontWeight: "900", color: OnBrand }}
-        >
-          {added
-            ? "Saved to your plan"
-            : adding
-              ? "Saving..."
-              : "Add to plan →"}
-        </ThemedText>
-      </Pressable>
     </View>
   );
 }

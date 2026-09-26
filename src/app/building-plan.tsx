@@ -11,7 +11,7 @@ import { OnboardingGlow } from '@/components/onboarding/OnboardingPreviews';
 import { TaskRow, useTaskProgress } from '@/components/onboarding/quiz-kit';
 import { buildTasks, SKIP, SOMETHING_ELSE } from '@/components/onboarding/quiz-pages';
 import { ThemedText } from '@/components/themed-text';
-import { Brand, Radius, Shadow } from '@/constants/theme';
+import { Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { deviceCountry } from '@/lib/device-region';
 import { syncWeeklyReminder } from '@/lib/notifications';
@@ -184,9 +184,6 @@ function BuildStages({ tasks, onDone }: { tasks: string[]; onDone: () => void })
       showsVerticalScrollIndicator={false}
       contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 24, paddingTop: 28, gap: 26 }}>
       <View style={{ gap: 8 }}>
-        <ThemedText style={{ fontSize: 10, fontWeight: '900', letterSpacing: 1, color: Brand[500] }}>
-          BUILDING YOUR PLAN
-        </ThemedText>
         <View className="flex-row items-end" style={{ gap: 8 }}>
           <ThemedText
             style={{

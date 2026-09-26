@@ -61,6 +61,24 @@ export interface SurveyAnswers {
   bankConnected: boolean;
 }
 
+/**
+ * Every market the quiz offers, and what a run starts with: all of them on.
+ * Asking someone to opt in market by market made the common answer ("all of it,
+ * show me everything") the most work, and anyone who never touched the page came
+ * out with no markets at all. Now they deselect what they don't want.
+ *
+ * Kept as plain labels rather than imported from `quiz-pages` so the type module
+ * stays free of the copy module; `quiz-pages`' own self-check asserts the two lists
+ * still agree.
+ */
+export const DEFAULT_MARKETS = [
+  'Cut spending',
+  'Stocks & ETFs',
+  'Savings & T-bills',
+  'Crypto',
+  'Prediction markets',
+];
+
 export const EMPTY_ANSWERS: SurveyAnswers = {
   outcome: null,
   outcomeOther: '',
@@ -69,7 +87,7 @@ export const EMPTY_ANSWERS: SurveyAnswers = {
   amount: null,
   horizon: null,
   lossReaction: null,
-  markets: [],
+  markets: [...DEFAULT_MARKETS],
   avoidMarkets: [],
   avoidPlatforms: [],
   bankConnected: false,

@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { View } from 'react-native';
 
 import { useMoney } from '@/api/hooks/usePreferences';
+import { Icon } from '@/components/ui/Icon';
 import { ThemedText } from '@/components/themed-text';
 import { MetricInfo } from '@/components/ui/MetricInfo';
 import { Radius, RiskScale, Semantic, Shadow } from '@/constants/theme';
@@ -171,7 +172,7 @@ export function GoalContributionCard({
           return (
             <View key={row.id} style={{ gap: 6 }}>
               <View className="flex-row items-center" style={{ gap: 8 }}>
-                <ThemedText style={{ fontSize: 14 }}>{row.emoji}</ThemedText>
+                <Icon glyph={row.emoji} size={14} color={theme.textSecondary} />
                 <ThemedText
                   style={{ flex: 1, fontSize: 13, fontWeight: '700', color: theme.text }}
                   numberOfLines={1}>
@@ -256,7 +257,7 @@ export function MaturityTimelineCard({
             <View
               key={entry.id}
               style={{ position: 'absolute', left: `${at(Math.max(entry.days, 0))}%`, alignItems: 'center', marginLeft: -9 }}>
-              <ThemedText style={{ fontSize: 13 }}>{entry.emoji}</ThemedText>
+              <Icon glyph={entry.emoji} size={13} color={theme.textSecondary} />
               <View style={{ width: 1.5, height: 8, backgroundColor: theme.borderStrong }} />
             </View>
           ))}
@@ -354,7 +355,7 @@ export function CheapestPathCard({
               style={{ fontSize: 11, fontWeight: '900', color: theme.textTertiary, width: 14, ...MONO }}>
               {index + 1}
             </ThemedText>
-            <ThemedText style={{ fontSize: 14 }}>{path.emoji}</ThemedText>
+            <Icon glyph={path.emoji} size={14} color={theme.textSecondary} />
             <View className="flex-1">
               <ThemedText style={{ fontSize: 13, fontWeight: '700', color: theme.text }} numberOfLines={1}>
                 {path.label}

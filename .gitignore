@@ -59,3 +59,7 @@ example
 # signed app binaries — regenerate via eas build
 *.ipa
 .calibration-cache/
+.screenshots/
+
+# Real statement exports used to develop the CSV import. Personal spending — never committed.
+fixtures/*.csv

@@ -74,6 +74,9 @@ RULES:
 - Set meetsTarget true only when expectedReturn is at least $${target}.
 - maturesInDays is calendar days until the market resolves.
 - Return 8–12 routes ranked safest to riskiest.
+- The emoji field is a key, not decoration: every route is drawn with an icon looked up
+  from it, so use "🔮" and nothing else. An emoji outside the app's table draws a
+  generic mark.
 
 Return only a JSON array inside <routes> tags with this shape:
 <routes>

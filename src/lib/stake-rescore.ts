@@ -1,6 +1,7 @@
 import { Route } from '@/types/routes';
 import { parseEntryPrice } from '@/lib/parse-bet-line';
 import { projectedProfitFromAnnualYield } from '@/lib/factual-route-data';
+import { describeYieldRoute } from '@/lib/plain-yield-copy';
 
 /**
  * New app model: the goal is a fixed TARGET ($ to make) + timeframe. The results
@@ -44,12 +45,6 @@ function sourcedYieldDays(route: Route): number | null {
   return route.maturesInDays ?? null;
 }
 
-function maturityLabel(days: number): string {
-  if (days < 14) return `${days}d`;
-  if (days < 60) return `${Math.round(days / 7)}w`;
-  if (days < 365) return `${Math.round(days / 30)}mo`;
-  return `${(days / 365).toFixed(1)}y`;
-}
 
 function returnAtStake(route: Route, refStake: number, stake: number): number {
   // A spending cut (or anything else flagged zero-capital) pays the same fixed amount
@@ -99,16 +94,10 @@ export function rescoreForStake(
     const sourcedYield = r.investmentFacts?.yieldPct;
     const sourcedDays = sourcedYieldDays(r);
     if (sourcedYield != null && sourcedDays != null) {
-      // Strip whatever lead-in the source route used, or the rewrite below stacks a
-      // second one on top: "Put your $1,000 in Park your $1,000 in a savings account".
-      const instrument = r.description
-        .split('—')[0]
-        ?.replace(/^(buy a|buy|put|park|place|move)\s+(your\s+)?(\$[\d,]+\s+)?(in|into|on)?\s*/i, '')
-        .trim() || r.category;
-      const yieldLabel = r.investmentFacts?.yieldLabel ?? 'sourced yield';
       return {
         ...r,
-        description: `Put your $${stake.toLocaleString()} in ${instrument} — ${sourcedYield.toFixed(2)}% ${yieldLabel} projects +$${expectedReturn} over ${maturityLabel(sourcedDays)}.`,
+        // The same plain sentence the route was built with, at this stake.
+        description: describeYieldRoute(r, stake, expectedReturn, sourcedDays) ?? r.description,
         expectedReturn,
         maturesInDays: sourcedDays,
         meetsTarget: expectedReturn >= target,
@@ -119,7 +108,9 @@ export function rescoreForStake(
         },
       };
     }
-    return { ...r, expectedReturn, meetsTarget: expectedReturn >= target };
+    // A savings account has a rate but no term; its sentence still names the amount.
+    const description = sourcedYield != null ? describeYieldRoute(r, stake, expectedReturn, null) ?? r.description : r.description;
+    return { ...r, description, expectedReturn, meetsTarget: expectedReturn >= target };
   });
 }
 
@@ -204,8 +195,8 @@ export function __selfCheck(): void {
     'a proxy yield does not hand its source instrument\'s term to the route',
   );
   console.assert(
-    hysaRescored.description.startsWith('Put your $1,000 in a high-yield online savings account'),
-    'the lead-in is replaced rather than doubled for a "Park your $X in" description',
+    hysaRescored.description.startsWith('Put $1,000 in a high-yield savings account'),
+    'a rescored savings account keeps the plain description, at the new stake',
   );
 
   // ── zero-capital routes (spending cuts) ───────────────────────────────────

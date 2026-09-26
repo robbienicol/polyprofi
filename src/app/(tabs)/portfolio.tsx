@@ -74,6 +74,19 @@ export default function PortfolioScreen(): React.ReactElement {
   );
   const activeBets = useMemo(() => bets.filter((bet) => bet.status === 'active'), [bets]);
   const staked = activeBets.reduce((sum, bet) => sum + bet.amountWagered, 0);
+  const chart = useMemo(() => ({
+    live: progress.activeCount > 0
+      ? {
+        time: progress.updatedAt?.getTime() ?? progress.observedAt,
+        value: progress.value,
+        basisValue: progress.basisValue,
+        livePnl: progress.livePnl,
+        projectedPnl: progress.projectedPnl,
+      }
+      : null,
+    // The stored series is the whole portfolio's; a goal-scoped view must not borrow it.
+    recorded: scoped ? undefined : progress.points,
+  }), [progress.activeCount, progress.basisValue, progress.livePnl, progress.observedAt, progress.points, progress.projectedPnl, progress.updatedAt, progress.value, scoped]);
 
   // What this portfolio is worth if every goal lands: what's staked plus what the
   // goals still need. Goals own the targets now, so there is no second target to
@@ -125,7 +138,7 @@ export default function PortfolioScreen(): React.ReactElement {
               livePositions: progress.livePositions,
               projectedPositions: progress.projectedPositions,
             }}
-            historyPoints={progress.points}
+            chart={chart}
             positionById={progress.positionById}
             onFindRoutes={() => router.push('/(tabs)/routes')}
             onOpenPositions={() => router.push('/positions')}

@@ -102,6 +102,33 @@ export interface Route {
    * would either divide by a stake of 0 or scale a fixed saving as if it were a position.
    */
   noCapitalRequired?: boolean;
+  /**
+   * The detected spending cut behind a "Cut spending" route, carried through so the
+   * two things a cut needs downstream can happen without parsing its description:
+   * a cancellation link needs the merchant, and a partial cut needs the monthly
+   * figure to rescale against when the user picks how much of it they will give up.
+   *
+   * Absent on every other kind of route.
+   */
+  spendingCut?: {
+    merchant: string;
+    kind: 'subscription' | 'discretionary';
+    /** What a month of this costs today — NOT what cutting it saves. */
+    monthlyAmount: number;
+  };
+  /**
+   * The card-rewards plan behind a "Card rewards" route (@/lib/card-reward-routes):
+   * re-routing spending across cards already held, or opening one. Like a cut, it
+   * needs no stake; `applyUrl` is where a new card is applied for.
+   */
+  cardRewards?: {
+    kind: 'reroute' | 'new-card';
+    cardId?: string;
+    cardName?: string;
+    applyUrl?: string;
+    /** The full-year gain, for context next to the deadline figure. */
+    annualGainUsd: number;
+  };
   expertSentiment?: ExpertSentiment;
   investmentFacts?: RouteInvestmentFacts;
   marketQuality?: MarketQualityFacts;

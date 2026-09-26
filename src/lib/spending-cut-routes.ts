@@ -61,16 +61,41 @@ function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n));
 }
 
-function describe(cut: SpendingCut, months: number, totalSaved: number): { description: string; strategy: string } {
+/**
+ * How much of a discretionary category a cut actually asks you to give up.
+ *
+ * Not all of it. Pricing a category cut at its full monthly average quietly assumes
+ * the user stops eating out — or buying food — entirely until the deadline, and the
+ * number that falls out is both unreachable and plainly silly: a $380/mo grocery
+ * average came out as "$4,623 toward your goal", true only if you stop eating. A
+ * quarter is a change someone can describe to themselves and hold.
+ *
+ * A subscription has no equivalent: cancelling is all or nothing, so it keeps 1.
+ */
+const DISCRETIONARY_CUT_SHARE = 0.25;
+
+/** What one month of actually taking this cut is worth, as opposed to what it costs. */
+export function monthlySaving(cut: SpendingCut): number {
+  return cut.kind === 'subscription' ? cut.monthlyAmount : cut.monthlyAmount * DISCRETIONARY_CUT_SHARE;
+}
+
+function describe(
+  cut: SpendingCut,
+  months: number,
+  totalSaved: number,
+  saving: number,
+): { description: string; strategy: string } {
+  const over = months === 1 ? 'in a month' : `over the next ${months} months`;
   if (cut.kind === 'subscription') {
     return {
-      description: `Cancel ${cut.merchant} — $${cut.monthlyAmount.toFixed(2)}/mo, ${months}mo to your deadline ≈ $${totalSaved} toward your goal.`,
-      strategy: `A fixed, contractual charge — cancelling it is a one-time action with no behavior to maintain. Confirm there's no early-cancellation fee before you do.`,
+      description: `Cancel ${cut.merchant}, $${cut.monthlyAmount.toFixed(2)} a month. Saves $${totalSaved} ${over}.`,
+      strategy: `Charged on the same date ${cut.monthsObserved} months running, so this is a live subscription rather than a one-off. Cancelling is a single action with nothing to keep up afterwards — check for an early-cancellation fee first.`,
     };
   }
+  const share = Math.round(DISCRETIONARY_CUT_SHARE * 100);
   return {
-    description: `Cut back on ${cut.merchant} — averaging $${cut.monthlyAmount.toFixed(2)}/mo, ${months}mo to your deadline ≈ $${totalSaved} toward your goal.`,
-    strategy: `Based on ${cut.monthsObserved}mo of your own spending in this category, not a one-off charge. Unlike a subscription, holding this cut is an ongoing choice, not a single action — reliability is scored lower for it.`,
+    description: `Spend ${share}% less on ${cut.merchant} — about $${saving.toFixed(0)} of the $${cut.monthlyAmount.toFixed(0)} a month you average. Saves $${totalSaved} ${over}.`,
+    strategy: `Your own spending across ${cut.monthsObserved} months, not a single charge. The figure is ${share}% of it rather than all of it, because cutting a category to zero is not a plan anyone holds. It is a habit to keep up rather than one action, which is why it scores below a cancellation.`,
   };
 }
 
@@ -98,8 +123,9 @@ export function buildSpendingCutRoutes({
   return cuts
     .filter((cut) => cut.monthlyAmount > 0)
     .map((cut) => {
-      const totalSaved = Math.round(cut.monthlyAmount * months);
-      const { description, strategy } = describe(cut, Math.round(months), totalSaved);
+      const saving = monthlySaving(cut);
+      const totalSaved = Math.round(saving * months);
+      const { description, strategy } = describe(cut, Math.round(months), totalSaved, saving);
       return {
         id: `cut-${cut.id}`,
         category: 'Cut spending',
@@ -113,6 +139,7 @@ export function buildSpendingCutRoutes({
         lossProfile: 'partial',
         meetsTarget: totalSaved >= target,
         noCapitalRequired: true,
+        spendingCut: { merchant: cut.merchant, kind: cut.kind, monthlyAmount: cut.monthlyAmount },
       } satisfies Route;
     })
     .sort((a, b) => b.expectedReturn - a.expectedReturn);
@@ -140,8 +167,18 @@ export function __selfCheck(): void {
   const routes = buildSpendingCutRoutes({ cuts: [netflix, coffeeSteady], target: 100, deadlineDays: 90 });
   console.assert(routes.length === 2, 'one route per cut');
   console.assert(routes.every((r) => r.noCapitalRequired && r.riskLevel === 1 && r.lossProfile === 'partial'), 'every cut route is flagged zero-capital and capital-preserving');
-  console.assert(routes[0].id === 'cut-coffee-steady', 'the bigger monthly saving sorts first');
-  console.assert(routes.find((r) => r.id === 'cut-netflix')?.expectedReturn === 46, '$15.49/mo × 3mo rounds to $46');
+  console.assert(routes.find((r) => r.id === 'cut-netflix')?.expectedReturn === 46, 'a cancellation is worth all of it: $15.49/mo × 3mo rounds to $46');
+  console.assert(
+    routes.find((r) => r.id === 'cut-coffee-steady')?.expectedReturn === 30,
+    'a category cut is worth a quarter of it: $40/mo × 25% × 3mo is $30, not $120',
+  );
+  console.assert(routes[0].id === 'cut-netflix', 'the bigger REAL saving sorts first, which a $40/mo habit no longer is');
+  console.assert(
+    routes.find((r) => r.id === 'cut-coffee-steady')?.description.includes('$40 a month you average'),
+    'the copy shows both numbers — what to save, out of what is being spent',
+  );
+  console.assert(monthlySaving(netflix) === netflix.monthlyAmount, 'cancelling saves the whole charge');
+  console.assert(monthlySaving(coffeeSteady) === 10, 'cutting back saves a quarter of the habit');
   console.assert(routes.every((r) => r.maturesInDays === undefined), 'no fixed maturity — same convention as a liquid savings account');
 
   console.assert(

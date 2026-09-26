@@ -11,6 +11,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, Pressable, View } from 'react-native';
 
+import { Icon } from '@/components/ui/Icon';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, Radius } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -173,24 +174,6 @@ export function PageHead({
     <View style={{ gap: compact ? 10 : 13 }}>
       {copy.ack ? <SpokenLine speech={speech} compact={compact} /> : null}
       <View style={{ gap: 7 }}>
-        {copy.badge ? (
-          <View
-            className="flex-row items-center self-start"
-            style={{
-              gap: 6,
-              paddingHorizontal: 9,
-              paddingVertical: 4,
-              borderRadius: Radius.pill,
-              backgroundColor: Brand[500] + '14',
-              borderWidth: 1,
-              borderColor: Brand[500] + '3D',
-            }}>
-            <View style={{ width: 5, height: 5, borderRadius: 999, backgroundColor: Brand[500] }} />
-            <ThemedText style={{ fontSize: 9.5, fontWeight: '900', color: Brand[500], letterSpacing: 0.8 }}>
-              {copy.badge.toUpperCase()}
-            </ThemedText>
-          </View>
-        ) : null}
         <ThemedText
           style={{
             fontSize: compact ? 25 : 29,
@@ -258,7 +241,7 @@ export function Choice({
         backgroundColor: selected ? Brand[500] + '18' : theme.backgroundElement,
       }}>
       <View className="flex-row items-center" style={{ gap: 7 }}>
-        {emoji ? <ThemedText style={{ fontSize: 15 }}>{emoji}</ThemedText> : null}
+        {emoji ? <Icon glyph={emoji} size={16} color={selected ? Brand[500] : theme.textSecondary} /> : null}
         <ThemedText
           style={{
             flex: 1,

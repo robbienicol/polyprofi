@@ -75,6 +75,17 @@ export function resolveOutcomePrice(market: PolymarketEntry, side: string | null
 }
 
 /**
+ * The CLOB token for the side the user bought — what its price history is keyed
+ * on. Same exact-name rule as the live price, for the same reason.
+ */
+export function outcomeTokenId(market: PolymarketEntry, side: string | null): string | null {
+  if (!side || !market.clobTokenIds) return null;
+  const wanted = normalizeText(side);
+  const index = market.outcomes.findIndex((outcome) => normalizeText(outcome) === wanted);
+  return index >= 0 ? market.clobTokenIds[index] ?? null : null;
+}
+
+/**
  * The market this bet is actually on — by stored slug, else by exact question
  * text. Deliberately no fuzzy fallback: an approximate market is a wrong price.
  */
@@ -119,6 +130,39 @@ export function matchSportsGame(
     }
   }
   return best && !tied ? best.game : null;
+}
+
+/**
+ * Win/lost once Polymarket has actually settled the market — not a price
+ * guess while it is still trading. `resolveOutcomePrice` deliberately rejects
+ * 0 and 1 as degenerate live quotes, so this reads the raw settled price
+ * directly and requires `closed` before trusting it: an in-flight market that
+ * has merely drifted to 99¢ is not the same thing as one UMA has resolved.
+ */
+export function resolvedPolymarketOutcome(market: PolymarketEntry, side: string | null): 'won' | 'lost' | null {
+  if (!market.closed || !side) return null;
+  const wanted = normalizeText(side);
+  if (!wanted) return null;
+  const index = market.outcomes.findIndex((outcome) => normalizeText(outcome) === wanted);
+  if (index < 0) return null;
+  const price = market.prices[index];
+  if (!Number.isFinite(price)) return null;
+  if (price >= 0.99) return 'won';
+  if (price <= 0.01) return 'lost';
+  // Closed but not cleanly settled to 0/1 yet (e.g. still in UMA dispute) —
+  // leave it for the next poll rather than guess.
+  return null;
+}
+
+/**
+ * Win/lost for a sports pick once the game is actually over. Gated on ESPN's
+ * own phase rather than the score alone — a live blowout is not a result.
+ */
+export function resolvedSportsOutcome(game: SportsGame, side: string | null): 'won' | 'lost' | null {
+  if (game.state !== 'post') return null;
+  const margin = sportsScoreMargin(game, side);
+  if (margin == null || margin === 0) return null; // a tie/push is not ours to call automatically
+  return margin > 0 ? 'won' : 'lost';
 }
 
 /**
@@ -318,5 +362,41 @@ export function __selfCheck(): void {
   console.assert(
     monitoredProfitGoal({ ...electionBet, category: 'Stocks & ETFs', platform: 'Robinhood' }, null) === 100,
     'non-prediction positions keep their requested goal — there is no contract ceiling',
+  );
+
+  // ── auto-resolution ───────────────────────────────────────────────────────
+  console.assert(
+    resolvedPolymarketOutcome({ ...electionMarket, prices: [0.01, 0.99], closed: true }, 'No') === 'won',
+    'a No position is won once the market closes with No settled at 99¢+',
+  );
+  console.assert(
+    resolvedPolymarketOutcome({ ...electionMarket, prices: [0.99, 0.01], closed: true }, 'No') === 'lost',
+    'a No position is lost once the market closes with No settled at 1¢ or less',
+  );
+  console.assert(
+    resolvedPolymarketOutcome({ ...electionMarket, prices: [0.08, 0.92], closed: true }, 'No') === null,
+    'a merely lopsided price (92¢, not 99¢+) is not treated as settled',
+  );
+  console.assert(
+    resolvedPolymarketOutcome({ ...electionMarket, prices: [0.01, 0.99], closed: false }, 'No') === null,
+    'a market that has not actually closed is never auto-resolved, however extreme the price',
+  );
+
+  const finalGame: SportsGame = { ...lakersGame, status: 'Final', state: 'post', homeScore: 100, awayScore: 104 };
+  console.assert(
+    resolvedSportsOutcome(finalGame, betOutcomeSide(lakersBet)) === 'won',
+    'the Lakers bet resolves won once the final score has them ahead',
+  );
+  console.assert(
+    resolvedSportsOutcome({ ...finalGame, homeScore: 110 }, betOutcomeSide(lakersBet)) === 'lost',
+    'the same bet resolves lost once the final score has them behind',
+  );
+  console.assert(
+    resolvedSportsOutcome(lakersGame, betOutcomeSide(lakersBet)) === null,
+    'a game still in progress is never auto-resolved, however large the lead',
+  );
+  console.assert(
+    resolvedSportsOutcome({ ...finalGame, homeScore: 100, awayScore: 100 }, betOutcomeSide(lakersBet)) === null,
+    'a tied final score is left for the user to call, not guessed at',
   );
 }

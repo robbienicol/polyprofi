@@ -6,17 +6,21 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useGoalsProgress, type GoalProgress } from '@/api/hooks/useGoalProgress';
 import { usePortfolioProgress } from '@/api/hooks/usePortfolioProgress';
+import { usePortfolioSeries } from '@/api/hooks/usePortfolioSeries';
 import { useMoney, usePreferences } from '@/api/hooks/usePreferences';
 import { useQuizAnswers } from '@/api/hooks/useQuizAnswers';
+import type { PortfolioProgressPoint } from '@/api/client/storage';
 import { useSavedRoutes } from '@/api/hooks/useSavedRoutes';
 import { useSavingsGoal } from '@/api/hooks/useSavingsGoal';
 import { useTrackedBets } from '@/api/hooks/useTrackedBets';
 import {
   PortfolioLineChart,
   PortfolioRange,
+  rangeLabel,
 } from '@/components/molecules/PortfolioLineChart';
 import { OutcomeRangeBar } from '@/components/portfolio/PortfolioVisuals';
 import { MetricInfo } from '@/components/ui/MetricInfo';
+import { Icon } from '@/components/ui/Icon';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, OnBrand, Radius, Semantic, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -29,11 +33,13 @@ import type { SavingsGoal } from '@/types/bets';
 
 const MONO = { fontVariant: ['tabular-nums' as const] };
 
-const RANGE_MS: Record<Exclude<PortfolioRange, 'ALL'>, number> = {
-  '1D': 24 * 60 * 60 * 1_000,
-  '1W': 7 * 24 * 60 * 60 * 1_000,
-  '1M': 30 * 24 * 60 * 60 * 1_000,
-};
+/** The moment under the finger, written the way a person reads a timestamp. */
+function scrubTime(time: number): string {
+  const date = new Date(time);
+  const sameDay = new Date().toDateString() === date.toDateString();
+  const clock = date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  return sameDay ? clock : `${date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} · ${clock}`;
+}
 
 function relativeUpdate(date: Date | null): string {
   if (!date) return 'Waiting for first refresh';
@@ -59,7 +65,10 @@ export default function HomeScreen(): React.ReactElement {
   const lastAnswers = quizAnswers ?? latestSearch?.quizSnapshot ?? null;
   const fallbackBalance = latestSearch?.quizSnapshot.balance ?? 0;
   const progress = usePortfolioProgress(fallbackBalance);
-  const [range, setRange] = useState<PortfolioRange>('1W');
+  const [range, setRange] = useState<PortfolioRange>('1D');
+  // The point under the finger on the chart. While it is set the header reads
+  // that moment instead of now — the whole point of scrubbing.
+  const [scrubbed, setScrubbed] = useState<PortfolioProgressPoint | null>(null);
 
   // Home used to be live money only, with the goals a tab away. But the whole
   // proposition is "here is the goal, here is the route to it", and the first screen
@@ -111,42 +120,43 @@ export default function HomeScreen(): React.ReactElement {
     ? (outcomes.staked - outcomes.worst) / (outcomes.best - outcomes.worst)
     : null;
 
-  const chartPoints = useMemo(() => {
-    const current = {
-      time: progress.updatedAt?.getTime() ?? progress.observedAt,
-      value: progress.value,
-      basisValue: progress.basisValue,
-      livePnl: progress.livePnl,
-      projectedPnl: progress.projectedPnl,
-    };
-    if (progress.points.length === 0) {
-      return progress.basisValue > 0
-        ? [{ ...current, time: current.time - 60_000 }, current]
-        : [];
-    }
-    const last = progress.points[progress.points.length - 1];
-    return last.time === current.time && Math.abs(last.value - current.value) < 0.005
-      ? progress.points
-      : [...progress.points, current];
-  }, [progress.basisValue, progress.livePnl, progress.observedAt, progress.points, progress.projectedPnl, progress.updatedAt, progress.value]);
-
-  const rangeStartPoint = useMemo(() => {
-    if (chartPoints.length === 0) {
-      return {
-        time: progress.observedAt,
-        value: progress.basisValue,
+  // Now, as the header shows it. The chart ends on exactly this point.
+  const livePoint = useMemo<PortfolioProgressPoint | null>(() => (
+    progress.activeCount > 0
+      ? {
+        time: progress.updatedAt?.getTime() ?? progress.observedAt,
+        value: progress.value,
         basisValue: progress.basisValue,
-        livePnl: 0,
-        projectedPnl: 0,
-      };
-    }
-    if (range === 'ALL') return chartPoints[0];
-    const cutoff = chartPoints[chartPoints.length - 1].time - RANGE_MS[range];
-    const first = chartPoints.find((point) => point.time >= cutoff);
-    return first ?? chartPoints[0];
-  }, [chartPoints, progress.basisValue, progress.observedAt, range]);
+        livePnl: progress.livePnl,
+        projectedPnl: progress.projectedPnl,
+      }
+      : null
+  ), [progress.activeCount, progress.basisValue, progress.livePnl, progress.observedAt, progress.projectedPnl, progress.updatedAt, progress.value]);
 
-  const adjustedChange = cashFlowAdjustedChange(rangeStartPoint, progress);
+  // Drawn from each holding's own price history, not from the moments the app was open.
+  const { series } = usePortfolioSeries({
+    bets: activeBets,
+    range,
+    live: livePoint,
+    positionById: progress.positionById,
+    recorded: progress.points,
+  });
+
+  const rangeStartPoint = series.baseline ?? {
+    time: progress.observedAt,
+    value: progress.basisValue,
+    basisValue: progress.basisValue,
+    livePnl: 0,
+    projectedPnl: 0,
+  };
+  // The range as a whole, for the chart's colour. The header below follows the finger.
+  const rangeRising = cashFlowAdjustedChange(rangeStartPoint, progress).amount >= 0;
+
+  // Scrubbing compares the point under the finger with the start of the range,
+  // so both numbers describe the same moment: "here is what it was worth, and
+  // what it had made by then".
+  const headPoint = scrubbed ?? progress;
+  const adjustedChange = cashFlowAdjustedChange(rangeStartPoint, headPoint);
   const change = adjustedChange.amount;
   const changePct = adjustedChange.percent;
   const positive = change >= 0;
@@ -227,21 +237,30 @@ export default function HomeScreen(): React.ReactElement {
                 marginTop: 9,
                 ...MONO,
               }}>
-              {money(progress.value)}
+              {money(headPoint.value)}
             </ThemedText>
             <View className="flex-row items-center" style={{ gap: 7, marginTop: 2 }}>
               <ThemedText style={{ fontSize: 14, fontWeight: '800', color: changeColor, ...MONO }}>
                 {money(change, { signed: true })} ({positive ? '+' : '−'}{Math.abs(changePct).toFixed(2)}%)
               </ThemedText>
-              <ThemedText style={{ fontSize: 12, color: theme.textTertiary }}>{range}</ThemedText>
+              <ThemedText style={{ fontSize: 12, color: theme.textTertiary }}>
+                {scrubbed ? scrubTime(scrubbed.time) : rangeLabel(range)}
+              </ThemedText>
             </View>
 
-            <View style={{ marginHorizontal: -3, marginTop: 7 }}>
+            <View style={{ marginTop: 10 }}>
               <PortfolioLineChart
-                points={chartPoints}
+                series={series}
                 range={range}
-                onRangeChange={setRange}
+                onRangeChange={(next) => {
+                  setScrubbed(null);
+                  setRange(next);
+                }}
+                onScrub={setScrubbed}
                 projected={progress.projectedPositions > 0}
+                rising={rangeRising}
+                surface={theme.backgroundElevated}
+                bleed={18}
               />
             </View>
 
@@ -424,7 +443,7 @@ export default function HomeScreen(): React.ReactElement {
                 paddingVertical: 14,
                 gap: 12,
               }}>
-              <ThemedText style={{ fontSize: 20 }}>🔔</ThemedText>
+              <Icon glyph="🔔" size={19} color={theme.textSecondary} />
               <View className="flex-1">
                 <ThemedText style={{ fontSize: 14, fontWeight: '800', color: theme.text }}>
                   {progress.sellAlerts.length} position{progress.sellAlerts.length === 1 ? '' : 's'} worth a look
@@ -490,7 +509,7 @@ function GoalTrack({
         gap: 9,
       }}>
       <View className="flex-row items-center" style={{ gap: 10 }}>
-        <ThemedText style={{ fontSize: 18 }}>{goal.emoji}</ThemedText>
+        <Icon glyph={goal.emoji} size={17} color={theme.textSecondary} />
         <ThemedText
           style={{ flex: 1, fontSize: 14, fontWeight: '700', color: theme.text, letterSpacing: -0.2 }}
           numberOfLines={1}>

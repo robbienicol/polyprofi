@@ -7,13 +7,18 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": ["pathey", "polyprofit"],
+    "scheme": [
+      "pathey",
+      "polyprofit"
+    ],
     "userInterfaceStyle": "automatic",
     "ios": {
       "bundleIdentifier": "com.robbiehey.polyprofit",
       "buildNumber": "25",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "UIFileSharingEnabled": true,
+        "LSSupportsOpeningDocumentsInPlace": true
       }
     },
     "android": {

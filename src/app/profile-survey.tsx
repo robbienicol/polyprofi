@@ -12,12 +12,10 @@ import {
   AMOUNTS,
   buildPageCopy,
   CAN_CONTINUE,
-  EXPERIENCE_LEVELS,
   isPageVisible,
   MARKETS,
   OUTCOMES,
   PAGE_IDS,
-  profilingTasks,
   SCAN_TASK_COUNT,
   scanTasks,
   SKIP,
@@ -25,6 +23,7 @@ import {
   type PageId,
 } from '@/components/onboarding/quiz-pages';
 import { BrandMark } from '@/components/ui/BrandMark';
+import { Icon } from '@/components/ui/Icon';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, OnBrand, Radius, Semantic, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -75,10 +74,10 @@ function SurveyForm({
 
   const pageId = PAGE_IDS[index];
 
-  // Start warming market data at the first pause, four answers in. Early enough to
+  // Start warming market data once the first two answers are in. Early enough to
   // buy the search most of a minute, late enough that someone who bounces off the
   // first question never triggers it.
-  useRoutePrefetch(index >= PAGE_IDS.indexOf('profiling'));
+  useRoutePrefetch(index >= PAGE_IDS.indexOf('capital'));
   const copy = buildPageCopy(answers, name);
   // One clock for the page's read-back line. Keyed on the page rather than the
   // text, which is rebuilt on every tap.
@@ -172,7 +171,7 @@ function SurveyForm({
   const unlocked = CAN_CONTINUE[pageId](answers);
   const isLast = index === PAGE_IDS.length - 1;
   // Both loaders drive themselves; the notification page has its own two buttons.
-  const hidesFooter = pageId === 'scan' || pageId === 'profiling' || pageId === 'notifications';
+  const hidesFooter = pageId === 'scan' || pageId === 'notifications';
 
   const pageStyle = {
     width,
@@ -210,9 +209,6 @@ function SurveyForm({
               />
             </View>
           </View>
-          <ThemedText style={{ fontSize: 9.5, fontWeight: '900', letterSpacing: 1, color: Brand[500] }}>
-            BUILDING YOUR PLAN
-          </ThemedText>
         </View>
 
         {/* Every page sits side by side on one long track, so advancing carries
@@ -331,26 +327,6 @@ function renderPageBody(props: BodyProps): React.ReactElement | null {
             />
           ) : null}
         </View>
-      );
-
-    case 'experience':
-      return (
-        <Options>
-          {EXPERIENCE_LEVELS.map((option) => (
-            <Choice
-              key={option.label}
-              label={option.label}
-              note={option.note}
-              selected={answers.experience === option.label}
-              onPress={() => set('experience', option.label)}
-            />
-          ))}
-        </Options>
-      );
-
-    case 'profiling':
-      return (
-        <LoaderPage tasks={profilingTasks(answers)} active={props.active} onDone={props.onScanDone} />
       );
 
     case 'capital':
@@ -540,7 +516,9 @@ function ServiceCard({
           backgroundColor: theme.backgroundElevated,
           ...Shadow.card,
         }}>
-        <ThemedText style={{ fontSize: 24 }}>{platform.icon}</ThemedText>
+        <View style={{ width: 40, height: 40, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center', backgroundColor: Brand[500] + '18' }}>
+          <Icon glyph={platform.icon} size={20} color={Brand[500]} strokeWidth={1.75} />
+        </View>
         <View style={{ flex: 1, gap: 1 }}>
           <ThemedText style={{ fontSize: 14.5, fontWeight: '800', color: theme.text }}>{platform.label}</ThemedText>
           <ThemedText style={{ fontSize: 12, color: theme.textSecondary }}>{platform.description}</ThemedText>
@@ -554,7 +532,7 @@ function ServiceCard({
             alignItems: 'center',
             justifyContent: 'center',
           }}>
-          <ThemedText style={{ fontSize: 13, fontWeight: '900', color: OnBrand }}>✓</ThemedText>
+          <Icon glyph="✓" size={13} color={OnBrand} strokeWidth={3} />
         </View>
       </Pressable>
     );
@@ -574,7 +552,9 @@ function ServiceCard({
         borderStyle: 'dashed',
         borderColor: theme.border,
       }}>
-      <ThemedText style={{ fontSize: 24, opacity: 0.4 }}>{platform.icon}</ThemedText>
+      <View style={{ width: 40, height: 40, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.backgroundSelected }}>
+        <Icon glyph={platform.icon} size={20} color={theme.textTertiary} strokeWidth={1.75} />
+      </View>
       <View style={{ flex: 1, gap: 1 }}>
         <ThemedText style={{ fontSize: 14.5, fontWeight: '800', color: theme.textTertiary }}>
           {platform.label} — not added
@@ -605,7 +585,7 @@ const SERVICE_PITCH: Record<AcquisitionPlatform, { headline: string; body: strin
   },
   kalshi: {
     headline: "Don't skip Kalshi",
-    body: "It's a CFTC-regulated exchange that lists event contracts Polymarket doesn't carry. Skip it and those markets are gone from your plan entirely.",
+    body: "It's a CFTC-regulated exchange. When a sports contract lists on both, we show you whichever is cheaper — skip it and you only ever see the Polymarket price.",
   },
 };
 
@@ -644,7 +624,9 @@ function ServicePitchModal({
             showsVerticalScrollIndicator={false}>
             {platform && pitch ? (
               <>
-                <ThemedText style={{ fontSize: 52, textAlign: 'center' }}>{platform.icon}</ThemedText>
+                <View style={{ alignSelf: 'center', width: 84, height: 84, borderRadius: 999, alignItems: 'center', justifyContent: 'center', backgroundColor: Brand[500] + '1F' }}>
+                  <Icon glyph={platform.icon} size={38} color={Brand[500]} strokeWidth={1.6} />
+                </View>
                 <ThemedText
                   style={{
                     fontSize: 27,
@@ -728,11 +710,17 @@ function BankServiceCard({
         ...Shadow.card,
       }}>
       <View className="flex-row items-center" style={{ gap: 12 }}>
-        <ThemedText style={{ fontSize: 24 }}>🏦</ThemedText>
+        <View style={{ width: 40, height: 40, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center', backgroundColor: done ? Brand[500] + '18' : theme.backgroundSelected }}>
+          <Icon glyph="💳" size={20} color={done ? Brand[500] : theme.textSecondary} strokeWidth={1.75} />
+        </View>
         <View style={{ flex: 1, gap: 1 }}>
-          <ThemedText style={{ fontSize: 14.5, fontWeight: '800', color: theme.text }}>Bank account</ThemedText>
+          <ThemedText style={{ fontSize: 14.5, fontWeight: '800', color: theme.text }}>Bank & credit cards</ThemedText>
           <ThemedText style={{ fontSize: 12, color: theme.textSecondary }}>
-            Weighs real spending — a subscription, a coffee habit — alongside every pick
+            {done
+              ? bank.linkedCount > 1
+                ? `${bank.linkedCount} linked. Add any other card you use so we see all of your spending.`
+                : 'Linked. Add any other card you use so we see all of your spending.'
+              : 'Link your bank and every card you use. We check which card each purchase should go on, and what you could cut.'}
           </ThemedText>
         </View>
         {done ? (
@@ -745,27 +733,34 @@ function BankServiceCard({
               alignItems: 'center',
               justifyContent: 'center',
             }}>
-            <ThemedText style={{ fontSize: 13, fontWeight: '900', color: OnBrand }}>✓</ThemedText>
+            <Icon glyph="✓" size={13} color={OnBrand} strokeWidth={3} />
           </View>
         ) : null}
       </View>
-      {!done ? (
-        <View style={{ gap: 8 }}>
-          {bank.error ? (
-            <ThemedText style={{ fontSize: 12, color: Semantic.negative }}>{bank.error}</ThemedText>
-          ) : null}
-          <Pressable
-            onPress={() => void bank.connect()}
-            disabled={bank.connecting}
-            accessibilityRole="button"
-            className="py-3 items-center active:opacity-85"
-            style={{ borderRadius: Radius.md, backgroundColor: Brand[500], opacity: bank.connecting ? 0.6 : 1 }}>
-            <ThemedText style={{ fontSize: 14, fontWeight: '800', color: OnBrand }}>
-              {bank.connecting ? 'Connecting…' : 'Connect my bank'}
-            </ThemedText>
-          </Pressable>
-        </View>
-      ) : null}
+      {/* Each Link run connects one bank or card issuer, so after the first there is
+          always a way to add the next one — cards are what the card-rewards routes
+          are built from, and a wallet is rarely one issuer. */}
+      <View style={{ gap: 8 }}>
+        {bank.error ? (
+          <ThemedText style={{ fontSize: 12, color: Semantic.negative }}>{bank.error}</ThemedText>
+        ) : null}
+        <Pressable
+          onPress={() => void bank.connect()}
+          disabled={bank.connecting}
+          accessibilityRole="button"
+          className="py-3 items-center active:opacity-85"
+          style={{
+            borderRadius: Radius.md,
+            backgroundColor: done ? 'transparent' : Brand[500],
+            borderWidth: done ? 1.5 : 0,
+            borderColor: Brand[500],
+            opacity: bank.connecting ? 0.6 : 1,
+          }}>
+          <ThemedText style={{ fontSize: 14, fontWeight: '800', color: done ? Brand[500] : OnBrand }}>
+            {bank.connecting ? 'Connecting…' : done ? 'Add another card' : 'Connect a bank or card'}
+          </ThemedText>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -789,6 +784,10 @@ function ServicesStep({
 
   return (
     <View style={{ gap: 10 }}>
+      {/* First, not fourth: the platforms below are on by default and need no
+          action, so burying the one card that asks for something under three
+          that don't left most people scrolling past it without seeing it. */}
+      <BankServiceCard connected={bankConnected} onConnected={onBankConnected} />
       {ACQUISITION_PLATFORMS.map((platform) => (
         <ServiceCard
           key={platform.value}
@@ -798,7 +797,6 @@ function ServicesStep({
           onAddBack={() => onTogglePlatform(platform.value)}
         />
       ))}
-      <BankServiceCard connected={bankConnected} onConnected={onBankConnected} />
       <ServicePitchModal
         platform={pitchPlatform}
         onKeepIt={() => setPitchFor(null)}
@@ -903,7 +901,6 @@ function ReviewPage({
       page: 'outcome',
     },
     { label: 'Ways', value: answers.markets.join(', ') || 'Everything', page: 'markets' },
-    { label: 'Experience', value: answers.experience || '—', page: 'experience' },
     { label: 'Can put in', value: answers.amount || '—', page: 'capital' },
     {
       label: 'Timeframe',

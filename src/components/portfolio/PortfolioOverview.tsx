@@ -7,8 +7,12 @@ import {
   AllocationDonut,
   buildAllocationRows,
   compactAssetClass,
-  PerformanceChart,
 } from '@/components/portfolio/PortfolioVisuals';
+import { PortfolioLineChart, rangeLabel, type PortfolioRange } from '@/components/molecules/PortfolioLineChart';
+import { usePortfolioSeries } from '@/api/hooks/usePortfolioSeries';
+import type { PortfolioProgressPoint } from '@/api/client/storage';
+import { cashFlowAdjustedChange } from '@/lib/portfolio-progress';
+import { Icon } from '@/components/ui/Icon';
 import { ThemedText } from '@/components/themed-text';
 import { MetricInfo } from '@/components/ui/MetricInfo';
 import { Brand, OnBrand, Radius, Semantic, Shadow } from '@/constants/theme';
@@ -19,6 +23,17 @@ import type { PositionValuation } from '@/lib/portfolio-progress';
 import type { TrackedBet } from '@/types/bets';
 
 const MONO = { fontVariant: ['tabular-nums' as const] };
+const NO_BETS: TrackedBet[] = [];
+const NO_VALUATIONS: Record<string, PositionValuation> = {};
+
+/** The moment under the finger, as a person reads a timestamp. */
+function scrubLabel(time: number): string {
+  const date = new Date(time);
+  const clock = date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  return new Date().toDateString() === date.toDateString()
+    ? clock
+    : `${date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} · ${clock}`;
+}
 
 type AllocationMetric = 'share' | 'return';
 
@@ -106,11 +121,12 @@ export interface PortfolioOverviewProps {
   /** Measured value of the positions. Absent while it is still being fetched. */
   valueNow?: PortfolioValueNow;
   /**
-   * Recorded value history, for the chart. Only the whole-portfolio view has one:
-   * history is not kept per goal, and drawing the global series on a single goal
-   * would be a lie about that goal.
+   * The value chart. Drawn from each position's market price history, so it is
+   * true for whatever set of positions is in scope. `live` is now, as measured;
+   * `recorded` is what the app saw while open, used only if no history comes back
+   * — pass it only for the whole portfolio, since that is the series it records.
    */
-  historyPoints?: { time: number; value: number }[];
+  chart?: { live: PortfolioProgressPoint | null; recorded?: PortfolioProgressPoint[] };
   /**
    * Live valuation per position, when prices have arrived. Without it a row can only
    * report the payout the route was taken for, which is a forecast wearing the colour
@@ -149,7 +165,7 @@ export function PortfolioOverview({
   fallbackCash,
   targetValue,
   valueNow,
-  historyPoints,
+  chart,
   positionById,
   onFindRoutes,
   onOpenPositions,
@@ -188,7 +204,20 @@ export function PortfolioOverview({
     (longest, bet) => Math.max(longest, bet.maturesInDays ?? 0),
     0,
   );
-  const chartPoints = historyPoints && historyPoints.length >= 2 ? historyPoints : null;
+  const [range, setRange] = useState<PortfolioRange>('1D');
+  const [scrubbed, setScrubbed] = useState<PortfolioProgressPoint | null>(null);
+  const { series } = usePortfolioSeries({
+    bets: chart ? activeBets : NO_BETS,
+    range,
+    live: chart?.live ?? null,
+    positionById: positionById ?? NO_VALUATIONS,
+    recorded: chart?.recorded,
+  });
+  const showChart = chart != null && series.points.length >= 2;
+  const rangeChange = series.baseline && chart?.live
+    ? cashFlowAdjustedChange(series.baseline, chart.live)
+    : null;
+  const scrubChange = scrubbed && series.baseline ? cashFlowAdjustedChange(series.baseline, scrubbed) : null;
   const goalProbability = activeBets.length > 0 ? stats.goalProbability : 0;
   const weightedReturn = activeBets.length > 0 ? stats.weightedReturnPct : 0;
   const isEmpty = activeBets.length === 0 && fallbackCash <= 0;
@@ -221,9 +250,31 @@ export function PortfolioOverview({
         <ThemedText
           style={{ fontSize: 38, lineHeight: 46, fontWeight: '800', color: theme.text, letterSpacing: -1.3, marginTop: 8, ...MONO }}
           numberOfLines={1}>
-          {money(showExpected ? projectedValue : value)}
+          {money(showExpected ? projectedValue : scrubbed?.value ?? value)}
         </ThemedText>
 
+        {/* The one genuinely cumulative number here: what's in plus what your goals
+            still need, versus what you're actually worth right now. Distinct from
+            "Avg. pick probability" below, which is a per-position average and was
+            wrongly captioned with this same target before. */}
+        {targetValue != null && targetValue > 0 && (
+          <ThemedText style={{ fontSize: 12, color: theme.textSecondary, marginTop: 2 }}>
+            {money(value, { decimals: 0 })} of {money(targetValue, { decimals: 0 })} goal
+            {' · '}
+            {Math.min(100, Math.max(0, (value / targetValue) * 100)).toFixed(0)}%
+          </ThemedText>
+        )}
+
+        {scrubChange && !showExpected ? (
+          <View className="flex-row items-center" style={{ gap: 7, marginTop: 1 }}>
+            <ThemedText style={{ fontSize: 14, fontWeight: '800', color: scrubChange.amount >= 0 ? Semantic.positive : Semantic.negative, ...MONO }}>
+              {money(scrubChange.amount, { signed: true })} ({scrubChange.percent >= 0 ? '+' : '−'}{Math.abs(scrubChange.percent).toFixed(2)}%)
+            </ThemedText>
+            <ThemedText style={{ fontSize: 12, color: theme.textTertiary }}>
+              {scrubLabel(scrubbed!.time)}
+            </ThemedText>
+          </View>
+        ) : (
         <View className="flex-row items-center" style={{ gap: 7, marginTop: 1 }}>
           <ThemedText
             style={{
@@ -247,13 +298,31 @@ export function PortfolioOverview({
               : 'return since you bought in'}
           </ThemedText>
         </View>
+        )}
 
-        {/* Real recorded history only. The old chart plotted each position's expected
-            future profit against the date it was opened, so the line climbed simply
+        {/* Market price history of what is held — never the expected future profit
+            plotted against the date a position was opened, which climbed simply
             because you had opened something. */}
-        {chartPoints ? (
-          <View style={{ marginTop: 10 }}>
-            <PerformanceChart points={chartPoints} />
+        {showChart ? (
+          <View style={{ marginTop: 12 }}>
+            <PortfolioLineChart
+              series={series}
+              range={range}
+              onRangeChange={(next) => {
+                setScrubbed(null);
+                setRange(next);
+              }}
+              onScrub={setScrubbed}
+              projected={(valueNow?.projectedPositions ?? 0) > 0}
+              rising={rangeChange ? rangeChange.amount >= 0 : undefined}
+              surface={theme.backgroundElevated}
+              bleed={18}
+            />
+            <ThemedText style={{ fontSize: 11, color: theme.textTertiary, marginTop: 8 }}>
+              {rangeChange
+                ? `${money(rangeChange.amount, { signed: true })} (${rangeChange.percent >= 0 ? '+' : '−'}${Math.abs(rangeChange.percent).toFixed(2)}%) ${rangeLabel(range).toLowerCase()}`
+                : rangeLabel(range)}
+            </ThemedText>
           </View>
         ) : null}
 
@@ -286,10 +355,13 @@ export function PortfolioOverview({
               borderColor: conservative ? Semantic.caution + '66' : theme.border,
               backgroundColor: conservative ? Semantic.caution + '18' : 'transparent',
             }}>
-            <ThemedText
-              style={{ fontSize: 11, fontWeight: '800', color: conservative ? Semantic.caution : theme.textSecondary }}>
-              {conservative ? '🛡 Conservative' : 'Conservative off'}
-            </ThemedText>
+            <View className="flex-row items-center" style={{ gap: 5 }}>
+              {conservative ? <Icon glyph="🛡" size={12} color={Semantic.caution} /> : null}
+              <ThemedText
+                style={{ fontSize: 11, fontWeight: '800', color: conservative ? Semantic.caution : theme.textSecondary }}>
+                {conservative ? 'Conservative' : 'Conservative off'}
+              </ThemedText>
+            </View>
           </Pressable>
         </View>
       </View>
@@ -316,15 +388,13 @@ export function PortfolioOverview({
           }
         />
         <MetricTile
-          label="Goal probability"
+          label="Avg. pick probability"
           metric="goalProbability"
           value={`${goalProbability.toFixed(0)}%`}
           valueColor={Semantic.positive}
-          caption={
-            targetValue != null
-              ? `To reach ${money(targetValue, { decimals: 0 })}`
-              : 'Amount-weighted average hit rate'
-          }
+          // Not the chance of reaching the goal itself — see the glossary entry.
+          // "To reach $X" here previously implied it was, which is exactly backwards.
+          caption="Stake-weighted average across your positions"
           meter={goalProbability / 100}
         />
       </View>
@@ -505,7 +575,7 @@ function PositionRow({
             justifyContent: 'center',
             backgroundColor: theme.backgroundSelected,
           }}>
-          <ThemedText style={{ fontSize: 17 }}>{bet.emoji}</ThemedText>
+          <Icon glyph={bet.emoji} size={17} color={theme.textSecondary} />
         </View>
         <View className="flex-1" style={{ gap: 2 }}>
           <ThemedText style={{ fontSize: 14, fontWeight: '700', color: theme.text }} numberOfLines={1}>
@@ -541,12 +611,12 @@ function PositionRow({
           className="flex-row"
           style={{ borderTopWidth: 1, borderTopColor: theme.border }}>
           <ResolveAction
-            label="Won ✓"
+            label="Won"
             color={Semantic.positive}
             onPress={() => onResolve({ id: bet.id, status: 'won' })}
           />
           <ResolveAction
-            label="Lost ✗"
+            label="Lost"
             color={theme.textSecondary}
             onPress={() => onResolve({ id: bet.id, status: 'lost' })}
             divided
@@ -724,7 +794,7 @@ function EmptyPortfolio({
           justifyContent: 'center',
           backgroundColor: Brand[500] + '18',
         }}>
-        <ThemedText style={{ fontSize: 28 }}>📊</ThemedText>
+        <Icon glyph="📊" size={26} color={Brand[500]} strokeWidth={1.6} />
       </View>
       <ThemedText style={{ fontSize: 17, fontWeight: '800', color: theme.text }}>{title}</ThemedText>
       <ThemedText className="text-center" style={{ fontSize: 13, lineHeight: 19, color: theme.textSecondary, maxWidth: 260 }}>

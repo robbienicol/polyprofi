@@ -144,17 +144,20 @@ function applyRiskTolerance(
 }
 
 /**
- * The profile survey's amount buckets, as the top of each range in dollars — what the
- * user told us they are willing to put in. "$100,000+" is open-ended, so it is held at
- * its floor rather than invented upward. Keep the keys in sync with AMOUNTS in
+ * The profile survey's amount buckets, as the LOW end of each range in dollars — the
+ * starting "willing to invest" on a search, which the user can see and change there.
+ * It used to be the top of the range, so someone who ticked "$25,000 - $100,000" had
+ * every search quietly sized to $100,000 and was shown routes tying up $20,000 to make
+ * $300. The low end is what they have definitely said they have. "$100,000+" is
+ * open-ended, so it is held at its floor rather than invented upward. Keep the keys in sync with AMOUNTS in
  * `@/app/profile-survey`; an unrecognised answer (or "Prefer not to say") yields null
  * and the goal-derived stake is used instead.
  */
 const SURVEY_AMOUNT_CEILING: Record<string, number> = {
-  'Under $1,000': 1_000,
-  '$1,000 - $5,000': 5_000,
-  '$5,000 - $25,000': 25_000,
-  '$25,000 - $100,000': 100_000,
+  'Under $1,000': 500,
+  '$1,000 - $5,000': 1_000,
+  '$5,000 - $25,000': 5_000,
+  '$25,000 - $100,000': 25_000,
   '$100,000+': 100_000,
 };
 
@@ -269,13 +272,34 @@ function sortSafestFirst(routes: Route[]): Route[] {
   });
 }
 
+/**
+ * How many routes of a requested asset class are kept when the risk bounds would
+ * otherwise leave that class with none at all. Enough to show the class is real,
+ * few enough that a class the bounds dislike can't dominate the feed.
+ */
+const MIN_ROUTES_PER_REQUESTED_CATEGORY = 3;
+
+/**
+ * Whether a route clears the probability floor.
+ *
+ * `probability` means two different things depending on the route, and one floor
+ * applied to both is what made the whole feed prediction markets. On a binary
+ * contract it is the chance of being paid at all — below the floor, the stake is
+ * most likely gone, so the floor is exactly right. On a capital-preserving route
+ * (an ETF, a coin, a T-bill) it is the chance of clearing the *full target move*;
+ * missing it means a smaller gain or a dip you still own, not a loss of the stake.
+ * Holding those to "60% chance of +10% this month" excluded every stock and coin
+ * ever built, which is why ticking them in the quiz changed nothing.
+ */
+function clearsProbabilityFloor(route: Route, minProbability: number): boolean {
+  return route.lossProfile === 'binary' ? route.probability >= minProbability : true;
+}
+
 /** Client-side filter so quiz categories & risk bounds actually shape the feed. */
 export function filterRoutesForQuiz(routes: Route[], params: RouteParams): Route[] {
-  let result = routes.filter(
-    (r) =>
-      r.riskLevel <= params.maxRiskLevel
-      && r.probability >= params.minProbability
-      && routeFitsTimeframe(r, params.timeframe)
+  const inTimeframe = routes.filter((r) => routeFitsTimeframe(r, params.timeframe));
+  let result = inTimeframe.filter(
+    (r) => r.riskLevel <= params.maxRiskLevel && clearsProbabilityFloor(r, params.minProbability)
   );
 
   if (params.categories.length > 0) {
@@ -285,11 +309,29 @@ export function filterRoutesForQuiz(routes: Route[], params: RouteParams): Route
       /etf|treasury|savings|hysa|broad/i.test(`${r.category} ${r.strategy} ${r.platform}`)
     );
     result = [...new Map([...matched, ...baselines].map((r) => [r.id, r])).values()];
+
+    // A class the user ticked must never come back empty. Crypto is the clearest
+    // case — every coin is riskLevel 5, so any cap below that silently deleted the
+    // answer — but the same holds for any class the bounds happen to dislike.
+    // These are the safest few of what that class actually offers, nothing more.
+    for (const category of params.categories) {
+      if (result.some((r) => routeMatchesCategories(r, [category]))) continue;
+      const rescued = sortSafestFirst(
+        inTimeframe.filter((r) => routeMatchesCategories(r, [category]))
+      ).slice(0, MIN_ROUTES_PER_REQUESTED_CATEGORY);
+      result = [...new Map([...result, ...rescued].map((r) => [r.id, r])).values()];
+    }
   }
 
   // Applied last, and to the baseline rescue above as well: a market someone asked
   // us to leave out does not come back in through the safe-route back door.
-  const excluded = params.excludedCategories ?? [];
+  //
+  // An exclusion never beats an explicit pick, though. The excluded list is built
+  // once from the onboarding survey and never recomputed, so without this a user
+  // who avoided crypto at signup and then ticked Crypto in the quiz had it stripped
+  // out again with nothing on screen to say why.
+  const requested = new Set(params.categories);
+  const excluded = (params.excludedCategories ?? []).filter((category) => !requested.has(category));
   if (excluded.length > 0) {
     result = result.filter((r) => !routeMatchesCategories(r, excluded));
   }
@@ -355,7 +397,7 @@ export function __selfCheck(): void {
   // the user said they had. The survey answer has to raise it.
   console.assert(referenceStakeFor(100) === 1000, 'a $100 goal alone still derives $1,000');
   console.assert(
-    referenceStakeFor(100, surveyAmountCeiling('$5,000 - $25,000')) === 25_000,
+    referenceStakeFor(100, surveyAmountCeiling('$5,000 - $25,000')) === 5_000,
     'the survey ceiling raises a small goal\'s reference stake to what the user actually has',
   );
   console.assert(
@@ -412,6 +454,45 @@ export function __selfCheck(): void {
   console.assert(
     filterRoutesForQuiz([cryptoRoute, etfRoute], weekParams).length === 2,
     'a search saved before excludedCategories existed filters exactly as it used to',
+  );
+
+  // the reported bug: every asset class ticked, only prediction markets on screen.
+  const strictParams: RouteParams = { ...weekParams, maxRiskLevel: 4, minProbability: 55 };
+  const etfLowOdds: Route = {
+    ...voo, id: 'etf-low-odds', category: 'Stocks & ETFs', lossProfile: 'partial', probability: 6,
+  };
+  const contract: Route = {
+    ...voo, id: 'contract', category: 'Polymarket', lossProfile: 'binary', probability: 80,
+  };
+  const longshotContract: Route = {
+    ...voo, id: 'longshot-contract', category: 'Polymarket', lossProfile: 'binary', probability: 20,
+  };
+  const kept = filterRoutesForQuiz([etfLowOdds, contract, longshotContract], strictParams);
+  console.assert(
+    kept.some((route) => route.id === 'etf-low-odds'),
+    "a capital-preserving route is not held to the binary contract's probability floor — that floor is why the feed was all prediction markets",
+  );
+  console.assert(
+    kept.every((route) => route.id !== 'longshot-contract'),
+    'the probability floor still applies to all-or-nothing contracts, where it means "your stake is probably gone"',
+  );
+
+  // crypto is riskLevel 5 across the board, so any cap below that deleted the answer
+  const coin: Route = { ...voo, id: 'coin', category: 'Crypto', riskLevel: 5, probability: 8, lossProfile: 'partial' };
+  const cappedOut = filterRoutesForQuiz([coin, contract], { ...strictParams, categories: ['Crypto', 'Polymarket'] });
+  console.assert(
+    cappedOut.some((route) => route.id === 'coin'),
+    'a class the user explicitly ticked never comes back empty, even when the risk cap excludes every route in it',
+  );
+
+  // an onboarding exclusion must not override what they just ticked in the quiz
+  const overridden = filterRoutesForQuiz(
+    [cryptoRoute],
+    { ...weekParams, categories: ['Crypto'], excludedCategories: ['Crypto'] },
+  );
+  console.assert(
+    overridden.length === 1,
+    'ticking a market in the quiz beats the same market being avoided in onboarding — the later, explicit answer wins',
   );
 
   // an unresolved Polymarket contract (no end date) must not get waved through as a match —

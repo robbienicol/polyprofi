@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useSavingsGoal } from '@/api/hooks/useSavingsGoal';
 import { OnboardingGlow } from '@/components/onboarding/OnboardingPreviews';
+import { Icon } from '@/components/ui/Icon';
 import { ThemedText } from '@/components/themed-text';
 import { Confetti } from '@/components/ui/Confetti';
 import { Brand, OnBrand, Radius, Semantic, Shadow } from '@/constants/theme';
@@ -64,7 +65,7 @@ export default function GoalAchievedScreen(): React.ReactElement {
               borderColor: Semantic.positive,
               ...Shadow.card,
             }}>
-            <ThemedText style={{ fontSize: 64 }}>{goal.emoji}</ThemedText>
+            <Icon glyph={goal.emoji} size={58} color={Brand[500]} strokeWidth={1.4} />
           </Animated.View>
 
           <ThemedText
@@ -112,7 +113,7 @@ export default function GoalAchievedScreen(): React.ReactElement {
 
           {achievedCount > 0 ? (
             <ThemedText style={{ fontSize: 13, fontWeight: '700', color: Semantic.caution, marginTop: 16 }}>
-              🏆 {achievedCount} goal{achievedCount === 1 ? '' : 's'} reached
+              {achievedCount} goal{achievedCount === 1 ? '' : 's'} reached
             </ThemedText>
           ) : null}
         </View>
