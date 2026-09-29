@@ -6,7 +6,7 @@
  *   Dark background  #141312
  *   Light background #F7F3EC
  *   Primary text     #1C1A18
- *   Muted text       #756F68
+ *   Muted text       #615B55 light / #ADA69C dark
  *   Positive only    #2FA66A
  *   Caution only     #E2A33C
  *   Negative only    #DB4B4B
@@ -18,26 +18,28 @@ import { Platform, type TextStyle } from 'react-native';
 export const Colors = {
   light: {
     text: '#1C1A18',
-    textSecondary: '#756F68',
-    textTertiary: '#A29A90',
+    textSecondary: '#615B55',
+    textTertiary: '#766D63',
     background: '#F7F3EC',
     backgroundElement: '#FFFCF6',
     backgroundElevated: '#FFFFFF',
     backgroundSelected: '#EDE6DA',
     border: '#E3DCD0',
     borderStrong: '#D3CABB',
+    borderControl: '#A28F70',
   },
   dark: {
     // Warm near-black, not pure black — keeps the paper-and-clay feel after dark
     text: '#F7F3EC',
-    textSecondary: '#A79F95',
-    textTertiary: '#756F68',
+    textSecondary: '#ADA69C',
+    textTertiary: '#8E8880',
     background: '#141312',
     backgroundElement: '#1D1B19',
     backgroundElevated: '#24211E',
     backgroundSelected: '#2C2925',
     border: '#2A2724',
     borderStrong: '#3A3631',
+    borderControl: '#736B61',
   },
 } as const;
 
@@ -72,6 +74,50 @@ export const Semantic = {
 
 /** Risk scale: safe → risky. Shared by cards, meters, badges. */
 export const RiskScale = ['#2FA66A', '#8FAE4E', '#E2A33C', '#E07D45', '#DB4B4B'] as const;
+
+/**
+ * Text-safe counterparts. `Semantic`, `Brand[500]` and `RiskScale` are tuned to
+ * be seen as *fills* — as ink under 18pt they sit between 2.0:1 and 3.6:1 on the
+ * warm light grounds, which is not legible and not what DESIGN.md asks for.
+ *
+ * These carry the same hue and the same meaning at >=4.5:1 on every surface in
+ * their theme. Rule: a semantic hue colors a fill, a bar or a badge; its
+ * `*Text` counterpart colors the words. Resolve with `semanticText(scheme)`.
+ *
+ * Exception: `textTertiary` and these values are tuned for `background` and
+ * `backgroundElement`. On `backgroundSelected` they land near 4:1 — use
+ * `textSecondary` there instead.
+ */
+export const SemanticText = {
+  light: {
+    positive: '#21744A',
+    caution: '#8A5D15',
+    negative: '#C42727',
+    info: '#355FCC',
+    brand: '#AD4622',
+  },
+  dark: {
+    positive: '#2FA66A',
+    caution: '#E2A33C',
+    negative: '#E26E6E',
+    info: '#7290DC',
+    brand: '#DD744F',
+  },
+} as const;
+
+/** Risk ramp as ink. Same order and meaning as `RiskScale`, legible as text. */
+export const RiskTextScale = {
+  light: ['#21744A', '#5A6D31', '#8A5D15', '#A54D1C', '#C42727'],
+  dark: ['#2FA66A', '#8FAE4E', '#E2A33C', '#E07D45', '#E26E6E'],
+} as const;
+
+export function semanticText(scheme: 'light' | 'dark') {
+  return SemanticText[scheme];
+}
+
+export function riskTextColor(scheme: 'light' | 'dark', level: number): string {
+  return RiskTextScale[scheme][level - 1] ?? Colors[scheme].textSecondary;
+}
 
 /**
  * Categorical scale — asset classes, category chips, legend swatches. Drawn

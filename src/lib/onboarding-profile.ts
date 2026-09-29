@@ -12,6 +12,8 @@
  * builder, and the screens can all depend on it without a cycle.
  */
 
+import { RESIDENCE_CODES, type ResidenceCode } from '@/lib/us-states';
+
 /** How someone says they'd react to a position going against them. */
 export const LOSS_REACTIONS = [
   { value: 'sell', label: 'Sell it', note: 'Take what is left' },
@@ -59,6 +61,12 @@ export interface SurveyAnswers {
    *  — the access token it produced lives server-side in `plaid_items`, keyed on
    *  their Clerk id, not in this locally-stored blob. */
   bankConnected: boolean;
+  /**
+   * Primary state of residence as a two-letter code, or NON_US. Kept for the
+   * after-tax estimates: state tax on a gain ranges from nothing to double
+   * digits, so the same pick nets very different money depending on this.
+   */
+  residenceState: ResidenceCode | null;
 }
 
 /**
@@ -91,6 +99,7 @@ export const EMPTY_ANSWERS: SurveyAnswers = {
   avoidMarkets: [],
   avoidPlatforms: [],
   bankConnected: false,
+  residenceState: null,
 };
 
 export interface OnboardingProfile {
@@ -98,6 +107,11 @@ export interface OnboardingProfile {
   name: string;
   /** Agreed to the privacy/AI terms slide before a single question was asked. */
   consented: boolean;
+  /**
+   * Ticked "I'm 18 or older" on the first slide. Required: every venue we route to
+   * (Robinhood, Kalshi, Polymarket) is adults-only, so the run cannot start without it.
+   */
+  ageConfirmed: boolean;
   /** Their answer to the permission ask. */
   notifications: NotificationChoice;
   /**
@@ -110,6 +124,7 @@ export interface OnboardingProfile {
 export const DEFAULT_ONBOARDING_PROFILE: OnboardingProfile = {
   name: '',
   consented: false,
+  ageConfirmed: false,
   notifications: null,
   answers: EMPTY_ANSWERS,
 };
@@ -131,6 +146,7 @@ export function sanitizeOnboardingProfile(value: unknown): OnboardingProfile {
   return {
     name: typeof value.name === 'string' ? value.name.trim().slice(0, MAX_NAME_LENGTH) : '',
     consented: value.consented === true,
+    ageConfirmed: value.ageConfirmed === true,
     notifications: oneOf(value.notifications, ['enabled', 'skipped'] as const),
     answers: sanitizeAnswers(value.answers),
   };
@@ -165,6 +181,7 @@ function sanitizeAnswers(value: unknown): SurveyAnswers {
     avoidMarkets: strings(value.avoidMarkets),
     avoidPlatforms: strings(value.avoidPlatforms),
     bankConnected: value.bankConnected === true,
+    residenceState: oneOf(value.residenceState, RESIDENCE_CODES),
   };
 }
 

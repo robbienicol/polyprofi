@@ -17,6 +17,8 @@ import { RouteOpportunityCard } from "@/components/routes/RouteOpportunityCard";
 import { TrackRecordCard } from "@/components/routes/TrackRecordCard";
 import { ScoreMathCard } from "@/components/routes/ScoreMathCard";
 import { TrackRouteForm } from "@/components/routes/TrackRouteForm";
+import { cancellationActionLabel, cancellationTargetFor } from "@/lib/cancel-links";
+import { spendingCutPosition } from "@/lib/spending-cut-position";
 import { ThemedText } from "@/components/themed-text";
 import { BrandLoader } from "@/components/ui/loaders";
 import { KEYBOARD_AWARE_SCROLL_PROPS } from "@/constants/keyboard";
@@ -56,12 +58,14 @@ export default function RouteDetailScreen(): React.ReactElement {
   const [added, setAdded] = useState(false);
   const [showAcquireForm, setShowAcquireForm] = useState(false);
   const [acquireAmount, setAcquireAmount] = useState("");
+  const [cutPercent, setCutPercent] = useState(25);
 
-  // Saved history first, then the list this row was tapped from: a keyword search
-  // merges live Polymarket and asset hits into that list, and those were never
-  // saved to a batch.
-  const batch = history.find((item) => item.routes.some((route) => route.id === id))
-    ?? (preview?.routes.some((route) => route.id === id) ? preview : undefined);
+  // The list this row was tapped from first, then saved history. Route ids repeat
+  // across searches that share a daily pool, so history alone can resolve to another
+  // goal's batch; the preview is the exact list (and goal) the tap came from. Keyword
+  // hits merged in live are only ever in the preview.
+  const batch = (preview?.routes.some((route) => route.id === id) ? preview : undefined)
+    ?? history.find((item) => item.routes.some((route) => route.id === id));
   const savedRoute = batch?.routes.find((route) => route.id === id);
   // A goal swept away since the search is dropped rather than left dangling on a
   // position that would then belong to nothing.
@@ -72,7 +76,7 @@ export default function RouteDetailScreen(): React.ReactElement {
   // History is read from disk, so a cold open here starts with an empty list. Calling
   // that a missing pick shows the dead end before we have looked.
   if (!savedRoute && historyLoading) {
-    return <BrandLoader subtitle="Loading this pick…" />;
+    return <BrandLoader subtitle="Loading this route…" />;
   }
   if (!savedRoute) {
     return (
@@ -81,7 +85,7 @@ export default function RouteDetailScreen(): React.ReactElement {
         style={{ backgroundColor: theme.background }}
       >
         <ThemedText themeColor="textSecondary">
-          This pick is no longer available.
+          This route is no longer available.
         </ThemedText>
         <Pressable
           onPress={() => router.back()}
@@ -176,11 +180,39 @@ export default function RouteDetailScreen(): React.ReactElement {
   function beginAcquire(): void {
     if (added || isTracking) return;
     setAcquireAmount(String(stake));
+    setCutPercent(25);
     setShowAcquireForm(true);
+  }
+
+  /** A spending cut stakes nothing: the same position the results list saves. */
+  function confirmCut(cut: NonNullable<typeof route.spendingCut>): void {
+    const subscription = cut.kind === "subscription";
+    trackBet(
+      spendingCutPosition({
+        route,
+        cut,
+        cutPercent,
+        timeframe: batch?.quizSnapshot.timeframe,
+        goalId: routeGoalId,
+        target: targetProfit,
+      }),
+      {
+        onSuccess: () => {
+          setAdded(true);
+          setShowAcquireForm(false);
+          if (routeGoalId) confirmGoal(routeGoalId);
+          if (subscription) void openTradeDestination(route, "cancel");
+        },
+      },
+    );
   }
 
   function confirmAcquire(): void {
     if (added || isTracking) return;
+    if (route.spendingCut) {
+      confirmCut(route.spendingCut);
+      return;
+    }
     // A card-rewards plan stakes nothing; its value is the rewards themselves.
     const amount = route.cardRewards ? 0 : Number(acquireAmount);
     if (!route.cardRewards && (!Number.isFinite(amount) || amount <= 0)) return;
@@ -196,6 +228,9 @@ export default function RouteDetailScreen(): React.ReactElement {
         ? route.probability / 100
         : undefined);
     const openedAt = new Date().toISOString();
+    // The card is priced at `stake`; the form may have been edited to another
+    // amount, and the position must store the return for what was actually put in.
+    const [atAmount = route] = rescoreForStake([route], stake || 1, amount, targetProfit);
     trackBet(
       {
         // Derived from openedAt rather than a second clock read, so the id and the
@@ -206,12 +241,12 @@ export default function RouteDetailScreen(): React.ReactElement {
         goalId: routeGoalId,
         category: route.category,
         emoji: route.emoji,
-        description: route.description,
+        description: atAmount.description,
         platform: route.platform,
         strategy: route.strategy,
         riskLevel: route.riskLevel,
         probability: route.probability,
-        expectedReturn: route.expectedReturn,
+        expectedReturn: atAmount.expectedReturn,
         amountWagered: amount,
         status: "active",
         createdAt: openedAt,
@@ -234,6 +269,16 @@ export default function RouteDetailScreen(): React.ReactElement {
       },
     );
   }
+
+  // A subscription cut's button says what the link will actually do — cancel, or
+  // search for how to — never a trade venue.
+  const cutActionLabel =
+    route.spendingCut?.kind === "subscription"
+      ? cancellationActionLabel(
+          cancellationTargetFor(route.spendingCut.merchant),
+          route.spendingCut.merchant,
+        )
+      : null;
 
   return (
     <View className="flex-1" style={{ backgroundColor: theme.background }}>
@@ -265,7 +310,7 @@ export default function RouteDetailScreen(): React.ReactElement {
             <ThemedText
               style={{ fontSize: 18, fontWeight: "800", color: theme.text }}
             >
-              Opportunity
+              This route
             </ThemedText>
             <Pressable
               onPress={() =>
@@ -420,11 +465,14 @@ export default function RouteDetailScreen(): React.ReactElement {
             {showAcquireForm ? (
               <TrackRouteForm
                 amount={acquireAmount}
-                destinationLabel={tradeDestinationLabel(destination)}
+                destinationLabel={cutActionLabel ?? tradeDestinationLabel(destination)}
                 onAmountChange={setAcquireAmount}
                 onConfirm={confirmAcquire}
                 onCancel={() => setShowAcquireForm(false)}
                 cardRewards={route.cardRewards}
+                cut={route.spendingCut}
+                cutPercent={cutPercent}
+                onCutPercentChange={setCutPercent}
               />
             ) : (
               <Pressable

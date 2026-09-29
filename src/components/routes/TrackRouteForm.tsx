@@ -1,7 +1,7 @@
-import { Platform, Pressable, TextInput, View } from 'react-native';
+import { Pressable, TextInput, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { Brand, OnBrand, Radius } from '@/constants/theme';
+import { Brand, OnBrand, Radius, bodyFontFamily } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { Route } from '@/types/routes';
 
@@ -37,16 +37,13 @@ export function TrackRouteForm({
   cardRewards,
 }: TrackRouteFormProps): React.ReactElement {
   const theme = useTheme();
-  const buttonPadding = Platform.select({ ios: 10, android: 6 }) ?? 10;
+  // Every control here either commits money or backs out of committing it. None of
+  // them was 44pt before; the confirm button was 38.
+  const buttonStyle = { minHeight: 44, justifyContent: 'center' as const, alignItems: 'center' as const };
 
   if (cardRewards) {
     return (
-      <CardRewardsForm
-        plan={cardRewards}
-        onConfirm={onConfirm}
-        onCancel={onCancel}
-        buttonPadding={buttonPadding}
-      />
+      <CardRewardsForm plan={cardRewards} onConfirm={onConfirm} onCancel={onCancel} />
     );
   }
 
@@ -59,7 +56,6 @@ export function TrackRouteForm({
         destinationLabel={destinationLabel}
         onConfirm={onConfirm}
         onCancel={onCancel}
-        buttonPadding={buttonPadding}
       />
     );
   }
@@ -69,14 +65,36 @@ export function TrackRouteForm({
     <View className="gap-3" style={{ borderRadius: Radius.lg, padding: 14, backgroundColor: theme.backgroundElevated, borderWidth: 1, borderColor: theme.border }}>
       <ThemedText style={{ fontSize: 12, fontWeight: '700', color: theme.textSecondary, letterSpacing: 0.3 }}>HOW MUCH DO YOU PLAN ON INVESTING?</ThemedText>
       <View className="flex-row items-center gap-2">
-        <View className="flex-1 flex-row items-center px-3 border" style={{ borderRadius: Radius.md, borderColor: theme.borderStrong, paddingVertical: buttonPadding, backgroundColor: theme.background }}>
-          <ThemedText style={{ color: theme.textTertiary, fontSize: 16 }}>$</ThemedText>
-          <TextInput value={amount} onChangeText={onAmountChange} keyboardType="numeric" placeholder="0" placeholderTextColor={theme.textTertiary} className="flex-1" style={{ color: theme.text, fontSize: 16, fontWeight: '700', fontVariant: ['tabular-nums'] }} autoFocus />
+        <View className="flex-1 flex-row items-center px-3 border" style={{ borderRadius: Radius.md, borderColor: theme.borderStrong, minHeight: 44, backgroundColor: theme.background }}>
+          <ThemedText style={{ color: theme.textSecondary, fontSize: 16 }}>$</ThemedText>
+          <TextInput
+            value={amount}
+            onChangeText={onAmountChange}
+            keyboardType="numeric"
+            placeholder="0"
+            placeholderTextColor={theme.textSecondary}
+            accessibilityLabel="How much you plan to invest, in dollars"
+            className="flex-1"
+            style={{ color: theme.text, fontSize: 16, fontFamily: bodyFontFamily('700'), fontVariant: ['tabular-nums'], minHeight: 44 }}
+            autoFocus
+          />
         </View>
-        <Pressable disabled={!canConfirm} onPress={onConfirm} className="px-4 active:opacity-80" style={{ borderRadius: Radius.md, backgroundColor: Brand[500], paddingVertical: buttonPadding, opacity: canConfirm ? 1 : 0.4 }}>
-          <ThemedText style={{ fontSize: 14, fontWeight: '800', color: OnBrand }}>Open {destinationLabel}</ThemedText>
+      </View>
+      {/* The confirm says what it records, not what it opens. "Open Polymarket" read
+          as "have a look", and a position had already been written by the time the
+          browser appeared. Nothing opens until the receipt offers it. */}
+      <View className="flex-row items-center" style={{ gap: 8 }}>
+        <Pressable
+          disabled={!canConfirm}
+          onPress={onConfirm}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: !canConfirm }}
+          accessibilityHint={`Records the amount against this route, then offers to open ${destinationLabel}`}
+          className="flex-1 px-4 active:opacity-80"
+          style={{ ...buttonStyle, borderRadius: Radius.md, backgroundColor: Brand[500], opacity: canConfirm ? 1 : 0.4 }}>
+          <ThemedText style={{ fontSize: 14, fontWeight: '800', color: OnBrand }}>Add ${Number(amount || 0).toLocaleString()} to my plan</ThemedText>
         </Pressable>
-        <Pressable onPress={onCancel} className="px-3 border active:opacity-70" style={{ borderRadius: Radius.md, borderColor: theme.border, paddingVertical: buttonPadding }}>
+        <Pressable onPress={onCancel} accessibilityRole="button" className="px-4 border active:opacity-70" style={{ ...buttonStyle, borderRadius: Radius.md, borderColor: theme.borderControl }}>
           <ThemedText type="small" themeColor="textSecondary">Cancel</ThemedText>
         </Pressable>
       </View>
@@ -99,7 +117,6 @@ function CutForm({
   destinationLabel,
   onConfirm,
   onCancel,
-  buttonPadding,
 }: {
   cut: NonNullable<Route['spendingCut']>;
   percent: number;
@@ -107,7 +124,6 @@ function CutForm({
   destinationLabel: string;
   onConfirm: () => void;
   onCancel: () => void;
-  buttonPadding: number;
 }): React.ReactElement {
   const theme = useTheme();
   const subscription = cut.kind === 'subscription';
@@ -131,15 +147,15 @@ function CutForm({
                 accessibilityRole="button"
                 accessibilityState={{ selected: active }}
                 onPress={() => onPercentChange?.(option)}
-                className="flex-1 items-center active:opacity-80"
+                className="flex-1 items-center justify-center active:opacity-80"
                 style={{
                   borderRadius: Radius.md,
-                  paddingVertical: 10,
-                  borderWidth: 1,
-                  borderColor: active ? Brand[500] : theme.border,
+                  minHeight: 44,
+                  borderWidth: active ? 2 : 1,
+                  borderColor: active ? Brand[500] : theme.borderControl,
                   backgroundColor: active ? Brand[500] + '1A' : theme.background,
                 }}>
-                <ThemedText style={{ fontSize: 14, fontWeight: active ? '800' : '600', color: active ? Brand[500] : theme.textSecondary }}>
+                <ThemedText style={{ fontSize: 15, fontWeight: active ? '800' : '600', color: active ? theme.text : theme.textSecondary }}>
                   {option}%
                 </ThemedText>
               </Pressable>
@@ -157,13 +173,15 @@ function CutForm({
       <View className="flex-row items-center" style={{ gap: 8 }}>
         <Pressable
           onPress={onConfirm}
-          className="flex-1 items-center active:opacity-80"
-          style={{ borderRadius: Radius.md, backgroundColor: Brand[500], paddingVertical: buttonPadding }}>
+          accessibilityRole="button"
+          accessibilityHint={subscription ? 'Records the cancellation, then offers to open it' : 'Records the cut against your goal'}
+          className="flex-1 items-center justify-center active:opacity-80"
+          style={{ borderRadius: Radius.md, minHeight: 44, backgroundColor: Brand[500] }}>
           <ThemedText style={{ fontSize: 14, fontWeight: '800', color: OnBrand }}>
-            {subscription ? destinationLabel : 'Add to my plan'}
+            {subscription ? 'Add this cancellation to my plan' : 'Add to my plan'}
           </ThemedText>
         </Pressable>
-        <Pressable onPress={onCancel} className="px-3 border active:opacity-70" style={{ borderRadius: Radius.md, borderColor: theme.border, paddingVertical: buttonPadding }}>
+        <Pressable onPress={onCancel} accessibilityRole="button" className="px-4 border items-center justify-center active:opacity-70" style={{ borderRadius: Radius.md, minHeight: 44, borderColor: theme.borderControl }}>
           <ThemedText type="small" themeColor="textSecondary">Cancel</ThemedText>
         </Pressable>
       </View>
@@ -180,12 +198,10 @@ function CardRewardsForm({
   plan,
   onConfirm,
   onCancel,
-  buttonPadding,
 }: {
   plan: NonNullable<Route['cardRewards']>;
   onConfirm: () => void;
   onCancel: () => void;
-  buttonPadding: number;
 }): React.ReactElement {
   const theme = useTheme();
   const newCard = plan.kind === 'new-card';
@@ -202,13 +218,13 @@ function CardRewardsForm({
       <View className="flex-row items-center" style={{ gap: 8 }}>
         <Pressable
           onPress={onConfirm}
-          className="flex-1 items-center active:opacity-80"
-          style={{ borderRadius: Radius.md, backgroundColor: Brand[500], paddingVertical: buttonPadding }}>
-          <ThemedText style={{ fontSize: 14, fontWeight: '800', color: OnBrand }}>
-            {newCard && plan.applyUrl ? 'Add to my plan & apply' : 'Add to my plan'}
-          </ThemedText>
+          accessibilityRole="button"
+          accessibilityHint={newCard && plan.applyUrl ? 'Records the plan, then offers to open the application' : 'Records the plan against your goal'}
+          className="flex-1 items-center justify-center active:opacity-80"
+          style={{ borderRadius: Radius.md, minHeight: 44, backgroundColor: Brand[500] }}>
+          <ThemedText style={{ fontSize: 14, fontWeight: '800', color: OnBrand }}>Add to my plan</ThemedText>
         </Pressable>
-        <Pressable onPress={onCancel} className="px-3 border active:opacity-70" style={{ borderRadius: Radius.md, borderColor: theme.border, paddingVertical: buttonPadding }}>
+        <Pressable onPress={onCancel} accessibilityRole="button" className="px-4 border items-center justify-center active:opacity-70" style={{ borderRadius: Radius.md, minHeight: 44, borderColor: theme.borderControl }}>
           <ThemedText type="small" themeColor="textSecondary">Cancel</ThemedText>
         </Pressable>
       </View>

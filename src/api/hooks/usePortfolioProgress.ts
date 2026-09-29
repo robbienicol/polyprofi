@@ -18,6 +18,13 @@ import type { TrackedBet } from '@/types/bets';
 const PROGRESS_QUERY_KEY = ['PORTFOLIO_PROGRESS'] as const;
 
 /**
+ * Positions already handed to resolveBet this session. The resolve effect below runs
+ * in every mounted copy of this hook (root alerts, Home, Portfolio, Goals), so without
+ * a shared record one settled market resolved — and notified — once per copy.
+ */
+const resolvingIds = new Set<string>();
+
+/**
  * Live inputs every progress calculation needs: the monitoring feed, refreshed
  * asset quotes and a ticking clock. Shared so that valuing one goal, all goals,
  * or the whole portfolio costs exactly one set of fetches.
@@ -36,7 +43,8 @@ export function usePortfolioMarketInputs() {
   useEffect(() => {
     for (const bet of allActive) {
       const status = monitoring.statusById[bet.id];
-      if (!status?.resolvedStatus) continue;
+      if (!status?.resolvedStatus || resolvingIds.has(bet.id)) continue;
+      resolvingIds.add(bet.id);
       resolveBet({ id: bet.id, status: status.resolvedStatus });
       const verb = status.resolvedStatus === 'won' ? 'won' : "didn't hit";
       void notifyPositionResolved(
@@ -77,6 +85,7 @@ export function usePortfolioMarketInputs() {
   }, [monitoring, quotesQuery, symbols.length]);
 
   return {
+    allBets: bets,
     allActive,
     betsLoading,
     now,

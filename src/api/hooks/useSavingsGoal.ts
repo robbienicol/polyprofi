@@ -2,7 +2,12 @@ import { useAuth } from '@clerk/clerk-expo';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 
-import { getSavingsGoalState, setSavingsGoalState } from '@/api/client/storage';
+import {
+  getSavingsGoalState,
+  isSavingsGoalUnsynced,
+  setSavingsGoalState,
+  setSavingsGoalUnsynced,
+} from '@/api/client/storage';
 import { deviceQuery } from '@/api/query-client';
 import { apiBaseUrl } from '@/lib/api-base-url';
 import { isRecord, isSavingsGoalState, responseJson } from '@/lib/runtime-validation';
@@ -25,6 +30,9 @@ function parseSavingsGoalPayload(value: unknown): SavingsGoalState | LegacySavin
     ? value.savingsGoalState
     : null;
 }
+
+/** Goal writes run one at a time — see mutateState. Module-level so every hook instance shares it. */
+let goalWriteQueue: Promise<unknown> = Promise.resolve();
 
 const EMPTY_STATE: SavingsGoalState = {
   goals: [],
@@ -70,15 +78,32 @@ export function useSavingsGoal() {
     },
   });
 
-  const persistState = async (next: SavingsGoalState): Promise<SavingsGoalState> => {
-    await setSavingsGoalState(next, signedIn ? userId : undefined);
-    if (signedIn) {
+  /** POSTs the state; true when the server has it. Never throws. */
+  const pushToServer = async (next: SavingsGoalState): Promise<boolean> => {
+    try {
       const response = await request({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(next),
       });
-      if (!response.ok) throw new Error(`Failed to save savings goal (${response.status})`);
+      return response.ok;
+    } catch {
+      return false;
+    }
+  };
+
+  /**
+   * Device first, server second. A goal saved with no connection is a real save:
+   * it is kept on the device and flagged unsynced, and the next load pushes it up
+   * instead of letting the server's older copy overwrite it. Before this, the
+   * server copy always won, so a goal added offline — and every position taken
+   * against it — silently vanished the next time the app was online.
+   */
+  const persistState = async (next: SavingsGoalState): Promise<SavingsGoalState> => {
+    await setSavingsGoalState(next, signedIn ? userId : undefined);
+    if (signedIn) {
+      await setSavingsGoalUnsynced(userId, true);
+      if (await pushToServer(next)) await setSavingsGoalUnsynced(userId, false);
     }
     return next;
   };
@@ -87,9 +112,16 @@ export function useSavingsGoal() {
   const mutateState = async (
     change: (prev: SavingsGoalState) => SavingsGoalState | null,
   ): Promise<SavingsGoalState | null> => {
-    const stored = await getSavingsGoalState(signedIn ? userId : undefined);
-    const next = change(stored ?? EMPTY_STATE);
-    return next ? persistState(next) : null;
+    // Chained, so two edits in quick succession (maintenance marking a goal reached
+    // while the user adds one) can't both read the old list and drop each other.
+    const write = async (): Promise<SavingsGoalState | null> => {
+      const stored = await getSavingsGoalState(signedIn ? userId : undefined);
+      const next = change(stored ?? EMPTY_STATE);
+      return next ? persistState(next) : null;
+    };
+    const run = goalWriteQueue.then(write, write);
+    goalWriteQueue = run.catch(() => undefined);
+    return run;
   };
 
   const { data, status } = useQuery({
@@ -98,6 +130,13 @@ export function useSavingsGoal() {
     queryFn: async (): Promise<SavingsGoalState | null> => {
       const local = await getSavingsGoalState(signedIn ? userId : undefined);
       if (!signedIn) return local;
+
+      // A change the server never received wins over the server's copy: send it
+      // now, and keep showing it whether or not that works.
+      if (local && (await isSavingsGoalUnsynced(userId))) {
+        if (await pushToServer(local)) await setSavingsGoalUnsynced(userId, false);
+        return local;
+      }
 
       try {
         const response = await request();
@@ -123,6 +162,9 @@ export function useSavingsGoal() {
     // Refetching on mount re-ran the whole load-migrate-seed dance and made the
     // goal list blink between the local and the server answer.
     ...deviceQuery,
+    // Coming back online is the one moment worth a re-read: it is when an offline
+    // change finally reaches the server.
+    refetchOnReconnect: 'always',
   });
   const state = data ?? EMPTY_STATE;
 
@@ -146,6 +188,14 @@ export function useSavingsGoal() {
       },
       onError: (_error: unknown, _input: TInput, context: { previous: SavingsGoalState | null | undefined } | undefined) => {
         queryClient.setQueryData(queryKey, context?.previous ?? null);
+      },
+      // Whatever happened, re-read the source of truth once the write settles. On
+      // success it confirms what the cache already shows; on a failed POST it pulls
+      // back what was actually stored rather than trusting the rollback snapshot.
+      // Skipped while another write is still in flight (this one counts as 1):
+      // refetching then would overwrite that write's optimistic row mid-flight.
+      onSettled: () => {
+        if (queryClient.isMutating() <= 1) void queryClient.invalidateQueries({ queryKey });
       },
     };
   }

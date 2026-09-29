@@ -53,9 +53,9 @@ export function TrackRecordCard({
           </ThemedText>
           <MetricInfo metric="historicalHitRate" size={15} />
         </View>
-        <ThemedText style={{ fontSize: 11.5, lineHeight: 16, color: theme.textTertiary }}>
+        <ThemedText style={{ fontSize: 12, lineHeight: 17, color: theme.textSecondary }}>
           {reading.sampleSize} settled markets — {reading.cohortLabel} — resolved{" "}
-          {Math.round(reading.hitRatePct)}% of the time, against this pick&apos;s{" "}
+          {Math.round(reading.hitRatePct)}% of the time, against this route&apos;s{" "}
           {formatCents(reading.priceCents)}¢.
         </ThemedText>
       </View>
@@ -107,10 +107,10 @@ export function TrackRecordCard({
 
       <IntervalBar reading={reading} tone={tone.color} />
 
-      <ThemedText style={{ fontSize: 11.5, lineHeight: 16, color: theme.textTertiary }}>
+      <ThemedText style={{ fontSize: 12, lineHeight: 17, color: theme.textSecondary }}>
         From {reading.sampleSize} settled markets — {reading.cohortLabel}.
         The bar is the range the true rate is very likely to sit in; the marker is this
-        pick's price on the same scale.
+        route&apos;s price on the same scale.
       </ThemedText>
 
       <View style={{ height: 1, backgroundColor: theme.border }} />
@@ -126,9 +126,9 @@ export function TrackRecordCard({
         <VenueReturnRow key={venue.venue} venue={venue} />
       ))}
 
-      <ThemedText style={{ fontSize: 11.5, lineHeight: 16, color: theme.textTertiary }}>
+      <ThemedText style={{ fontSize: 12, lineHeight: 17, color: theme.textSecondary }}>
         Return per market, after estimated fees, on the group above — not a forecast for
-        this pick, and not a return over time. This market has its own outcome coming and
+        this route, and not a return over time. This market has its own outcome coming and
         can land either way.
       </ThemedText>
     </View>
@@ -156,7 +156,7 @@ function Figure({
         gap: 2,
       }}
     >
-      <ThemedText style={{ fontSize: 10, fontWeight: "800", color: theme.textTertiary }}>
+      <ThemedText style={{ fontSize: 11, fontWeight: "800", color: theme.textSecondary }}>
         {label}
       </ThemedText>
       <ThemedText style={{ fontSize: 22, fontWeight: "900", color }}>{value}</ThemedText>
@@ -218,10 +218,10 @@ function IntervalBar({
         />
       </View>
       <View className="flex-row justify-between">
-        <ThemedText style={{ fontSize: 10, color: theme.textTertiary, fontWeight: "700" }}>
+        <ThemedText style={{ fontSize: 11, color: theme.textSecondary, fontWeight: "700" }}>
           {Math.round(low)}%
         </ThemedText>
-        <ThemedText style={{ fontSize: 10, color: theme.textTertiary, fontWeight: "700" }}>
+        <ThemedText style={{ fontSize: 11, color: theme.textSecondary, fontWeight: "700" }}>
           {Math.round(high)}%
         </ThemedText>
       </View>
@@ -240,7 +240,7 @@ function VenueReturnRow({ venue }: { venue: VenueCalibration }): React.ReactElem
           {venue.label}
         </ThemedText>
         {venue.routedVia ? (
-          <ThemedText style={{ fontSize: 10.5, color: theme.textTertiary }}>
+          <ThemedText style={{ fontSize: 11, color: theme.textSecondary }}>
             fills on {venue.routedVia}
           </ThemedText>
         ) : null}

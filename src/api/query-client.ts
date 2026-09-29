@@ -1,4 +1,12 @@
-import { QueryClient } from '@tanstack/react-query';
+import NetInfo from '@react-native-community/netinfo';
+import { onlineManager, QueryClient } from '@tanstack/react-query';
+
+// React Query only knows the device came back online if something tells it. Without
+// this `refetchOnReconnect` never fires on native: the offline banner cleared but
+// failed screens stayed failed until they were remounted.
+onlineManager.setEventListener((setOnline) =>
+  NetInfo.addEventListener((state) => setOnline(state.isConnected !== false)),
+);
 
 /**
  * One client for the whole app.

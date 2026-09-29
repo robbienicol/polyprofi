@@ -3,8 +3,8 @@ import { useState } from 'react';
 import { Pressable, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { Brand, Radius, Semantic } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import { Brand, Radius } from '@/constants/theme';
+import { useSemanticText, useTheme } from '@/hooks/use-theme';
 import { normalizeScoreWeights, SCORE_WEIGHT_KEYS, type ScoreWeights } from '@/lib/score';
 
 const MONO = { fontVariant: ['tabular-nums' as const] };
@@ -72,6 +72,7 @@ export function ScoreWeightSliders({
   isDefault,
 }: ScoreWeightSlidersProps): React.ReactElement {
   const theme = useTheme();
+  const semantic = useSemanticText();
   // Where the thumbs are mid-drag. `onChange` persists to storage and re-ranks the
   // whole pool, so it fires once per drag rather than on every event a drag emits —
   // otherwise the sliders stutter against their own disk writes.
@@ -93,10 +94,10 @@ export function ScoreWeightSliders({
       }}>
       <View className="flex-row items-start justify-between" style={{ gap: 10 }}>
         <View className="flex-1">
-          <ThemedText style={{ fontSize: 11, fontWeight: '900', color: Brand[500], letterSpacing: 0.8 }}>
+          <ThemedText style={{ fontSize: 11, fontWeight: '900', color: semantic.brand, letterSpacing: 0.8 }}>
             YOUR SCORE
           </ThemedText>
-          <ThemedText style={{ fontSize: 11, lineHeight: 15, color: theme.textSecondary, marginTop: 3 }}>
+          <ThemedText style={{ fontSize: 13, lineHeight: 19, color: theme.textSecondary, marginTop: 3 }}>
             Every route is scored out of 100 on these four things. Decide how much each one
             counts and the list re-ranks when you let go.
           </ThemedText>
@@ -109,15 +110,15 @@ export function ScoreWeightSliders({
             }}
             accessibilityRole="button"
             accessibilityLabel="Reset the score to its default weighting"
-            hitSlop={8}
-            className="active:opacity-70">
-            <ThemedText style={{ fontSize: 12, fontWeight: '800', color: Brand[500] }}>Reset</ThemedText>
+            className="active:opacity-70 justify-center"
+            style={{ minHeight: 44, paddingHorizontal: 8 }}>
+            <ThemedText style={{ fontSize: 14, fontWeight: '800', color: semantic.brand }}>Reset</ThemedText>
           </Pressable>
         )}
       </View>
 
       {allZero ? (
-        <ThemedText style={{ fontSize: 11, lineHeight: 15, color: Semantic.caution, fontWeight: '700' }}>
+        <ThemedText style={{ fontSize: 13, lineHeight: 19, color: semantic.caution, fontWeight: '700' }}>
           Everything is at zero, so there is nothing to rank on — the default weighting is
           being used until you raise one of these.
         </ThemedText>
@@ -139,17 +140,17 @@ export function ScoreWeightSliders({
                 style={{
                   fontSize: 13,
                   fontWeight: '800',
-                  color: value === 0 ? theme.textTertiary : Brand[500],
+                  color: value === 0 ? theme.textSecondary : theme.text,
                   ...MONO,
                 }}>
                 {value === 0 ? 'Ignored' : `${share}% of score`}
               </ThemedText>
             </View>
-            <ThemedText style={{ fontSize: 11, lineHeight: 15, color: theme.textTertiary }}>
+            <ThemedText style={{ fontSize: 13, lineHeight: 19, color: theme.textSecondary }}>
               {copy.question}
             </ThemedText>
             <Slider
-              style={{ width: '100%', height: 32 }}
+              style={{ width: '100%', height: 44 }}
               minimumValue={0}
               maximumValue={100}
               step={5}
@@ -160,15 +161,17 @@ export function ScoreWeightSliders({
                 onChange({ ...weights, [key]: Math.round(next) });
               }}
               minimumTrackTintColor={Brand[500]}
-              maximumTrackTintColor={theme.backgroundSelected}
-              thumbTintColor={value === 0 ? theme.textTertiary : Brand[500]}
+              maximumTrackTintColor={theme.borderControl}
+              thumbTintColor={value === 0 ? theme.textSecondary : Brand[500]}
+              accessibilityRole="adjustable"
               accessibilityLabel={`${copy.label}: ${copy.question}`}
+              accessibilityValue={{ text: value === 0 ? 'Ignored' : `${share} percent of the score` }}
             />
-            <ThemedText style={{ fontSize: 11, lineHeight: 15, color: theme.textSecondary }}>
-              <ThemedText style={{ fontSize: 11, fontWeight: '800', color: theme.text }}>Right: </ThemedText>
+            <ThemedText style={{ fontSize: 12, lineHeight: 17, color: theme.textSecondary }}>
+              <ThemedText style={{ fontSize: 12, fontWeight: '800', color: theme.text }}>Right: </ThemedText>
               {copy.raises}
               {'.  '}
-              <ThemedText style={{ fontSize: 11, fontWeight: '800', color: theme.text }}>Left: </ThemedText>
+              <ThemedText style={{ fontSize: 12, fontWeight: '800', color: theme.text }}>Left: </ThemedText>
               {copy.lowers}
               {'.'}
             </ThemedText>
@@ -177,7 +180,7 @@ export function ScoreWeightSliders({
       })}
 
       {/* The one thing sliders cannot do, said before someone tries. */}
-      <ThemedText style={{ fontSize: 11, lineHeight: 15, color: theme.textTertiary }}>
+      <ThemedText style={{ fontSize: 12, lineHeight: 17, color: theme.textSecondary }}>
         Only the balance between these counts, so raising all four changes nothing. A route
         you cannot afford, or one that resolves after your deadline, stays capped whatever
         you set here.

@@ -1,37 +1,31 @@
 import { useRouter, type Href } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, TextInput, View } from 'react-native';
+import { useRef, useState } from 'react';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useSavingsGoal } from '@/api/hooks/useSavingsGoal';
 import { OnboardingGlow } from '@/components/onboarding/OnboardingPreviews';
 import { Icon } from '@/components/ui/Icon';
 import { ThemedText } from '@/components/themed-text';
-import { Brand, OnBrand, Radius, Shadow } from '@/constants/theme';
+import { bodyFontFamily, Brand, displayFontFamily, OnBrand, Radius, Semantic, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { Haptic } from '@/lib/haptics';
+import { goalByLabel } from '@/lib/savings-goal';
 
-interface GoalPreset {
-  emoji: string;
-  label: string;
-  targetAmount: number;
-  note: string;
-}
+/**
+ * Two ways to set a goal, and nothing pre-picked. The preset grid (headphones, a
+ * surfboard, a car…) put six stranger's goals between the user and their own, and
+ * its dollar figures were guesses. Now it is: name it and set the number, or skip
+ * the finish line entirely.
+ */
+type Mode = 'target' | 'open';
 
-// A spectrum from small, near-term wins to life-sized goals — the range itself is the pitch.
-const GOAL_PRESETS: GoalPreset[] = [
-  { emoji: '🎧', label: 'Headphones', targetAmount: 350, note: 'A quick first win' },
-  { emoji: '🏄', label: 'A surfboard', targetAmount: 1_200, note: 'Treat yourself' },
-  { emoji: '✈️', label: 'A dream trip', targetAmount: 4_000, note: 'Somewhere new' },
-  { emoji: '🛟', label: 'Emergency fund', targetAmount: 6_000, note: 'Peace of mind' },
-  { emoji: '🚗', label: 'A car', targetAmount: 12_000, note: 'Keys in hand' },
-  { emoji: '🏠', label: 'Rent/mortgage', targetAmount: 30_000, note: 'The big one' },
-];
-
-const CUSTOM_ID = 'custom';
-const OPEN_ENDED_ID = 'open-ended';
-
-/** For people who don't want a finish line — no target, so it never completes. */
-const OPEN_ENDED_GOAL = { emoji: '💸', label: 'Custom goal' };
+const TARGET_EMOJI = '🎯';
+const OPEN_EMOJI = '💸';
+/** What an unnamed open-ended goal is called on the Goals tab. */
+const OPEN_DEFAULT_LABEL = 'Custom goal';
+/** Widest amount the hero field shows without running off a small phone. */
+const MAX_DIGITS = 7;
 
 interface ChosenGoal {
   emoji: string;
@@ -40,52 +34,86 @@ interface ChosenGoal {
   targetAmount?: number;
 }
 
+function groupingCommas(digits: string): number {
+  return Math.max(0, Math.ceil(digits.length / 3) - 1);
+}
+
 export default function GoalSetupScreen(): React.ReactElement {
   const theme = useTheme();
   const router = useRouter();
-  const { hasAnyGoal, isLoading } = useSavingsGoal();
+  const { allGoals, hasAnyGoal, isLoading, addGoalAsync } = useSavingsGoal();
+  const amountRef = useRef<TextInput>(null);
 
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [customLabel, setCustomLabel] = useState('');
-  const [customAmount, setCustomAmount] = useState('');
-  const [amountFocused, setAmountFocused] = useState(false);
+  const [mode, setMode] = useState<Mode>('target');
+  const [label, setLabel] = useState('');
+  const [amount, setAmount] = useState('');
   const [labelFocused, setLabelFocused] = useState(false);
+  const [amountFocused, setAmountFocused] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
-  const isCustom = selectedId === CUSTOM_ID;
-  const isOpenEnded = selectedId === OPEN_ENDED_ID;
-  const customAmountValue = Number(customAmount.replace(/[^0-9]/g, '')) || 0;
-  // Whether this is the very first goal decides the copy. Read live rather than
-  // latched on mount: on mount the stored goals may still be loading, which would
-  // make every visit look like the first one. Drafts count, so a goal that has been
-  // searched for but not yet committed to does not read as "no goals yet".
+  const amountValue = Number(amount) || 0;
+  const trimmedLabel = label.trim();
+  // Read live rather than latched on mount: on mount the stored goals may still be
+  // loading, which would make every visit look like the first one. Drafts count.
   const isFirstGoal = !hasAnyGoal;
 
-  const chosen = useMemo((): ChosenGoal | null => {
-    if (isOpenEnded) return OPEN_ENDED_GOAL;
-    if (isCustom) {
-      return customLabel.trim() && customAmountValue > 0
-        ? { emoji: '🎯', label: customLabel.trim(), targetAmount: customAmountValue }
+  const chosen: ChosenGoal | null =
+    mode === 'open'
+      ? { emoji: OPEN_EMOJI, label: trimmedLabel || OPEN_DEFAULT_LABEL }
+      : trimmedLabel && amountValue > 0
+        ? { emoji: TARGET_EMOJI, label: trimmedLabel, targetAmount: amountValue }
         : null;
-    }
-    const preset = GOAL_PRESETS.find((goal) => goal.label === selectedId);
-    return preset ? { emoji: preset.emoji, label: preset.label, targetAmount: preset.targetAmount } : null;
-  }, [isOpenEnded, isCustom, customLabel, customAmountValue, selectedId]);
 
-  // The goal is NOT created here. Picking a target is half the question — the quiz
-  // asks the other half (by when, how much to put in, which markets), and a goal with
-  // no search behind it went straight onto the Goals tab having been asked nothing.
-  // The quiz creates it, as a draft, when the search is saved; abandoning the quiz
-  // leaves nothing behind. An open-ended goal carries no target, so it is identified
-  // by the absence of one rather than by a second flag.
-  const start = (): void => {
-    if (!chosen) return;
-    const params = new URLSearchParams({ goalLabel: chosen.label, goalEmoji: chosen.emoji });
-    if (chosen.targetAmount != null) params.set('goalTarget', String(chosen.targetAmount));
-    router.replace(`/quiz?${params.toString()}` as Href);
+  // The goal is created here, on the tap, so it is on the Goals tab the moment
+  // this screen closes — tapping "Add goal" and then finding nothing there read as
+  // a broken button. The quiz then runs its search against that goal by id.
+  //
+  // A name that already exists continues that goal rather than opening a rival
+  // with the same label, which is what the quiz did with a name before.
+  const start = async (): Promise<void> => {
+    if (!chosen || saving) return;
+    Haptic.press();
+    setSaveError(null);
+
+    // Only a goal still in play: a reached goal, or a hidden draft, reused here would
+    // throw the new target away. The default open-ended name never matches, or a
+    // second "Custom goal" could never be created.
+    const live = allGoals.filter((goal) => !goal.draft && !goal.achievedAt);
+    const existing = chosen.label === OPEN_DEFAULT_LABEL ? null : goalByLabel(live, chosen.label);
+    if (existing) {
+      Haptic.success();
+      router.replace(`/quiz?goalId=${existing.id}` as Href);
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const { goal } = await addGoalAsync({
+        label: chosen.label,
+        emoji: chosen.emoji,
+        ...(chosen.targetAmount != null ? { targetAmount: chosen.targetAmount } : null),
+      });
+      Haptic.success();
+      router.replace(`/quiz?goalId=${goal.id}` as Href);
+    } catch {
+      Haptic.error();
+      setSaving(false);
+      setSaveError("Couldn't save that goal. Please try again.");
+    }
   };
 
   // Existing goals decide the copy, so don't paint until they're known.
   if (isLoading) return <View className="flex-1" style={{ backgroundColor: theme.background }} />;
+
+  const hint =
+    mode === 'open'
+      ? 'Routes ranked, earnings tracked'
+      : !trimmedLabel
+        ? 'Name your goal to continue'
+        : amountValue <= 0
+          ? 'Set how much to continue'
+          : null;
 
   return (
     <View className="flex-1" style={{ backgroundColor: theme.background }}>
@@ -95,187 +123,231 @@ export default function GoalSetupScreen(): React.ReactElement {
           <ScrollView
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
-            contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 24, paddingBottom: 24 }}>
+            keyboardDismissMode="on-drag"
+            contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 20, paddingBottom: 28, gap: 26 }}>
+            <View>
+              {isFirstGoal ? null : (
+                <Pressable
+                  onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)' as Href))}
+                  accessibilityRole="button"
+                  hitSlop={8}
+                  className="self-start active:opacity-60 py-1"
+                  style={{ marginBottom: 10 }}>
+                  <ThemedText style={{ fontSize: 14, fontWeight: '700', color: theme.textSecondary }}>← Cancel</ThemedText>
+                </Pressable>
+              )}
+              <ThemedText style={{ fontSize: 36, lineHeight: 42, fontWeight: '700', color: theme.text, letterSpacing: -0.9 }}>
+                {isFirstGoal ? <>What are you{'\n'}saving for?</> : <>What&apos;s the{'\n'}next goal?</>}
+              </ThemedText>
+              <ThemedText style={{ fontSize: 15, lineHeight: 22, color: theme.textSecondary, marginTop: 10, maxWidth: 330 }}>
+                One goal. Every route. Ranked. Name it, set the number, and we price every way there.
+              </ThemedText>
+            </View>
 
-            {isFirstGoal ? null : (
-              <Pressable onPress={() => router.back()} accessibilityRole="button" hitSlop={8} className="self-start active:opacity-60 py-1" style={{ marginBottom: 6 }}>
-                <ThemedText style={{ fontSize: 14, fontWeight: '700', color: theme.textSecondary }}>← Cancel</ThemedText>
-              </Pressable>
-            )}
-            <ThemedText style={{ fontSize: 34, lineHeight: 40, fontWeight: '800', color: theme.text, letterSpacing: -0.8 }}>
-              {isFirstGoal ? <>What are you{'\n'}saving for?</> : <>What&apos;s the{'\n'}next goal?</>}
-            </ThemedText>
-            <ThemedText style={{ fontSize: 15, lineHeight: 22, color: theme.textSecondary, marginTop: 10, maxWidth: 320 }}>
-              Pick a goal and we&apos;ll map the routes — safe to bold — that get you there.
-            </ThemedText>
-
-            <View className="flex-row flex-wrap" style={{ marginTop: 24, gap: 12 }}>
-              {GOAL_PRESETS.map((goal) => {
-                const selected = selectedId === goal.label;
+            {/* The two ways in. A segmented switch rather than two cards, so the page
+                reads as one form with a toggle, not a menu to choose from. */}
+            <View
+              className="flex-row"
+              style={{ padding: 4, borderRadius: Radius.pill, backgroundColor: theme.backgroundSelected }}>
+              {(
+                [
+                  { value: 'target', label: 'Set a target' },
+                  { value: 'open', label: 'No finish line' },
+                ] as const
+              ).map((option) => {
+                const selected = mode === option.value;
                 return (
                   <Pressable
-                    key={goal.label}
-                    onPress={() => setSelectedId(goal.label)}
-                    accessibilityRole="button"
+                    key={option.value}
+                    onPress={() => {
+                      if (mode !== option.value) Haptic.select();
+                      setMode(option.value);
+                    }}
+                    accessibilityRole="tab"
                     accessibilityState={{ selected }}
-                    className="active:opacity-90"
+                    className="flex-1 items-center active:opacity-80"
                     style={{
-                      width: '47%',
-                      flexGrow: 1,
-                      borderRadius: Radius.lg,
-                      borderWidth: 1.5,
-                      borderColor: selected ? Brand[500] : theme.border,
-                      backgroundColor: selected ? Brand[500] + '14' : theme.backgroundElement,
-                      padding: 16,
-                      transform: [{ scale: selected ? 1.02 : 1 }],
+                      paddingVertical: 10,
+                      borderRadius: Radius.pill,
+                      backgroundColor: selected ? theme.backgroundElevated : 'transparent',
                       ...(selected ? Shadow.card : null),
                     }}>
-                    <View className="flex-row items-start justify-between">
-                      <View style={{ width: 46, height: 46, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center', backgroundColor: selected ? Brand[500] + '22' : theme.backgroundSelected }}>
-                        <Icon glyph={goal.emoji} size={23} color={selected ? Brand[500] : theme.textSecondary} />
-                      </View>
-                      {selected ? (
-                        <View style={{ width: 22, height: 22, borderRadius: 999, backgroundColor: Brand[500], alignItems: 'center', justifyContent: 'center' }}>
-                          <Icon glyph="✓" size={13} color={OnBrand} strokeWidth={3} />
-                        </View>
-                      ) : null}
-                    </View>
-                    <ThemedText numberOfLines={1} style={{ fontSize: 15, fontWeight: '800', color: theme.text, marginTop: 12 }}>
-                      {goal.label}
-                    </ThemedText>
-                    <ThemedText style={{ fontSize: 11, color: theme.textTertiary, marginTop: 2 }}>{goal.note}</ThemedText>
-                    <ThemedText style={{ fontSize: 18, fontWeight: '900', color: selected ? Brand[500] : theme.textSecondary, marginTop: 8, fontVariant: ['tabular-nums'] }}>
-                      ${goal.targetAmount.toLocaleString()}
+                    <ThemedText
+                      style={{ fontSize: 14, fontWeight: '700', color: selected ? theme.text : theme.textSecondary }}>
+                      {option.label}
                     </ThemedText>
                   </Pressable>
                 );
               })}
+            </View>
 
-              {/* No finish line: for people who want the routes without the nagging. */}
-              <Pressable
-                onPress={() => setSelectedId(OPEN_ENDED_ID)}
-                accessibilityRole="button"
-                accessibilityState={{ selected: isOpenEnded }}
-                className="active:opacity-90"
-                style={{
-                  width: '100%',
-                  borderRadius: Radius.lg,
-                  borderWidth: 1.5,
-                  borderColor: isOpenEnded ? Brand[500] : theme.border,
-                  backgroundColor: isOpenEnded ? Brand[500] + '14' : theme.backgroundElement,
-                  padding: 16,
-                }}>
-                <View className="flex-row items-center" style={{ gap: 12 }}>
-                  <View style={{ width: 46, height: 46, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center', backgroundColor: isOpenEnded ? Brand[500] + '22' : theme.backgroundSelected }}>
-                    <Icon glyph={OPEN_ENDED_GOAL.emoji} size={23} color={theme.textSecondary} />
-                  </View>
-                  <View className="flex-1">
-                    <ThemedText style={{ fontSize: 15, fontWeight: '800', color: theme.textSecondary }}>
-                      {OPEN_ENDED_GOAL.label}
+            <View
+              style={{
+                borderRadius: Radius.xl,
+                borderWidth: 1,
+                borderColor: theme.border,
+                backgroundColor: theme.backgroundElevated,
+                padding: 20,
+                gap: 22,
+                ...Shadow.card,
+              }}>
+              <Field label={mode === 'open' ? 'Call it (optional)' : "It's for"}>
+                <TextInput
+                  value={label}
+                  onChangeText={(text) => {
+                    setLabel(text);
+                    setSaveError(null);
+                  }}
+                  onFocus={() => setLabelFocused(true)}
+                  onBlur={() => setLabelFocused(false)}
+                  onSubmitEditing={() => (mode === 'target' ? amountRef.current?.focus() : undefined)}
+                  placeholder={mode === 'open' ? OPEN_DEFAULT_LABEL : 'A new laptop'}
+                  placeholderTextColor={theme.textTertiary}
+                  maxLength={40}
+                  autoCapitalize="sentences"
+                  returnKeyType={mode === 'target' ? 'next' : 'done'}
+                  accessibilityLabel="Goal name"
+                  style={{
+                    fontFamily: displayFontFamily('700'),
+                    fontSize: 28,
+                    lineHeight: 36,
+                    color: theme.text,
+                    paddingVertical: 6,
+                    paddingHorizontal: 0,
+                    borderBottomWidth: 2,
+                    borderBottomColor: labelFocused ? Brand[500] : theme.borderStrong,
+                  }}
+                />
+              </Field>
+
+              {mode === 'target' ? (
+                <Field label="How much">
+                  <Pressable
+                    onPress={() => amountRef.current?.focus()}
+                    accessibilityRole="button"
+                    accessibilityLabel={amountValue > 0 ? `Amount, ${amountValue} dollars` : 'Set an amount'}
+                    className="flex-row items-end"
+                    style={{
+                      borderBottomWidth: 2,
+                      borderBottomColor: amountFocused ? Brand[500] : theme.borderStrong,
+                      paddingBottom: 2,
+                    }}>
+                    <ThemedText
+                      style={{
+                        fontFamily: bodyFontFamily('800'),
+                        fontSize: 30,
+                        lineHeight: 58,
+                        color: amountValue > 0 ? Brand[500] : theme.textTertiary,
+                        marginRight: 2,
+                      }}>
+                      $
                     </ThemedText>
-                    <ThemedText style={{ fontSize: 11, lineHeight: 15, color: theme.textTertiary, marginTop: 2 }}>
-                      No target, no progress bar. Just routes and what they earned.
-                    </ThemedText>
-                  </View>
-                  {isOpenEnded ? (
-                    <View style={{ width: 22, height: 22, borderRadius: 999, backgroundColor: Brand[500], alignItems: 'center', justifyContent: 'center' }}>
-                      <Icon glyph="✓" size={13} color={OnBrand} strokeWidth={3} />
-                    </View>
-                  ) : null}
-                </View>
-              </Pressable>
-
-              {/* Custom goal */}
-              <Pressable
-                onPress={() => setSelectedId(CUSTOM_ID)}
-                accessibilityRole="button"
-                accessibilityState={{ selected: isCustom }}
-                className="active:opacity-90"
-                style={{
-                  width: '100%',
-                  borderRadius: Radius.lg,
-                  borderWidth: 1.5,
-                  borderColor: isCustom ? Brand[500] : theme.border,
-                  backgroundColor: isCustom ? Brand[500] + '14' : theme.backgroundElement,
-                  padding: 16,
-                  gap: isCustom ? 14 : 0,
-                }}>
-                <View className="flex-row items-center" style={{ gap: 12 }}>
-                  <View style={{ width: 46, height: 46, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center', backgroundColor: isCustom ? Brand[500] + '22' : theme.backgroundSelected }}>
-                    <Icon glyph="🎯" size={23} color={theme.textSecondary} />
-                  </View>
-                  <View className="flex-1">
-                    <ThemedText style={{ fontSize: 15, fontWeight: '800', color: theme.text }}>Something else</ThemedText>
-                    <ThemedText style={{ fontSize: 11, color: theme.textTertiary, marginTop: 2 }}>Name your own goal</ThemedText>
-                  </View>
-                  {isCustom ? (
-                    <View style={{ width: 22, height: 22, borderRadius: 999, backgroundColor: Brand[500], alignItems: 'center', justifyContent: 'center' }}>
-                      <Icon glyph="✓" size={13} color={OnBrand} strokeWidth={3} />
-                    </View>
-                  ) : null}
-                </View>
-
-                {isCustom ? (
-                  <View style={{ gap: 10 }}>
                     <TextInput
-                      value={customLabel}
-                      onChangeText={setCustomLabel}
-                      onFocus={() => setLabelFocused(true)}
-                      onBlur={() => setLabelFocused(false)}
-                      placeholder="What is it? (e.g. New laptop)"
+                      ref={amountRef}
+                      value={amountValue > 0 ? amountValue.toLocaleString() : ''}
+                      onChangeText={(text) => setAmount(text.replace(/[^0-9]/g, '').slice(0, MAX_DIGITS))}
+                      onFocus={() => setAmountFocused(true)}
+                      onBlur={() => setAmountFocused(false)}
+                      keyboardType="number-pad"
+                      inputMode="numeric"
+                      placeholder="0"
                       placeholderTextColor={theme.textTertiary}
-                      maxLength={40}
-                      style={{ borderWidth: 1.5, borderRadius: Radius.md, borderColor: labelFocused ? Brand[500] : theme.borderStrong, backgroundColor: theme.background, color: theme.text, fontSize: 15, fontWeight: '600', paddingVertical: 13, paddingHorizontal: 14 }}
+                      style={{
+                        fontFamily: bodyFontFamily('800'),
+                        fontSize: 48,
+                        lineHeight: 58,
+                        color: Brand[500],
+                        fontVariant: ['tabular-nums'],
+                        padding: 0,
+                        // TextInput can't hug its text, so the tap target is the whole
+                        // row (the Pressable above) and the field just fills it.
+                        flex: 1,
+                        minWidth: Math.max(1, amount.length) * 30 + groupingCommas(amount) * 12 + 12,
+                      }}
                     />
-                    <View className="flex-row items-center" style={{ borderWidth: 1.5, borderRadius: Radius.md, borderColor: amountFocused ? Brand[500] : theme.borderStrong, backgroundColor: theme.background, paddingHorizontal: 14 }}>
-                      <ThemedText style={{ fontSize: 18, fontWeight: '800', color: Brand[500], marginRight: 4 }}>$</ThemedText>
-                      <TextInput
-                        value={customAmount}
-                        onChangeText={(text) => setCustomAmount(text.replace(/[^0-9]/g, ''))}
-                        onFocus={() => setAmountFocused(true)}
-                        onBlur={() => setAmountFocused(false)}
-                        placeholder="How much?"
-                        placeholderTextColor={theme.textTertiary}
-                        keyboardType="number-pad"
-                        inputMode="numeric"
-                        style={{ flex: 1, color: theme.text, fontSize: 18, fontWeight: '800', fontVariant: ['tabular-nums'], paddingVertical: 13 }}
-                      />
-                    </View>
+                  </Pressable>
+                </Field>
+              ) : (
+                <View className="flex-row" style={{ gap: 12 }}>
+                  <View
+                    style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: Radius.md,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      backgroundColor: Brand[500] + '18',
+                    }}>
+                    <Icon glyph={OPEN_EMOJI} size={20} color={Brand[500]} strokeWidth={1.75} />
                   </View>
-                ) : null}
-              </Pressable>
+                  <ThemedText style={{ flex: 1, fontSize: 13.5, lineHeight: 20, color: theme.textSecondary }}>
+                    No target and no progress bar. Just the best routes for what you put in, and a running
+                    total of what they earned.
+                  </ThemedText>
+                </View>
+              )}
             </View>
           </ScrollView>
 
-          {/* Sticky CTA */}
-          <View style={{ paddingHorizontal: 20, paddingTop: 12, paddingBottom: 8, borderTopWidth: 1, borderTopColor: theme.border, backgroundColor: theme.background }}>
-            {chosen ? (
-              <View className="flex-row items-center justify-between" style={{ marginBottom: 10, paddingHorizontal: 2 }}>
-                <ThemedText style={{ fontSize: 13, color: theme.textSecondary }}>
+          {/* Sticky CTA, with the goal read back above it once it is complete. */}
+          <View
+            style={{
+              paddingHorizontal: 24,
+              paddingTop: 12,
+              paddingBottom: 8,
+              borderTopWidth: 1,
+              borderTopColor: theme.border,
+              backgroundColor: theme.background,
+              gap: 10,
+            }}>
+            {saveError ? (
+              <ThemedText style={{ fontSize: 13, color: Semantic.negative, paddingHorizontal: 2 }}>{saveError}</ThemedText>
+            ) : chosen && mode === 'target' ? (
+              <View className="flex-row items-center justify-between" style={{ paddingHorizontal: 2 }}>
+                <ThemedText numberOfLines={1} style={{ flex: 1, fontSize: 13, color: theme.textSecondary }}>
                   Saving for {chosen.label}
                 </ThemedText>
-                <ThemedText style={{ fontSize: 15, fontWeight: '900', color: Brand[500], fontVariant: ['tabular-nums'] }}>
-                  {chosen.targetAmount != null ? `$${chosen.targetAmount.toLocaleString()}` : 'No target'}
+                <ThemedText
+                  style={{ fontFamily: bodyFontFamily('800'), fontSize: 15, color: Brand[500], fontVariant: ['tabular-nums'] }}>
+                  ${chosen.targetAmount?.toLocaleString()}
                 </ThemedText>
               </View>
-            ) : (
-              <ThemedText style={{ fontSize: 13, color: theme.textTertiary, marginBottom: 10, paddingHorizontal: 2 }}>
-                Choose a goal to continue
-              </ThemedText>
-            )}
+            ) : hint ? (
+              <ThemedText style={{ fontSize: 13, color: theme.textTertiary, paddingHorizontal: 2 }}>{hint}</ThemedText>
+            ) : null}
             <Pressable
-              onPress={start}
-              disabled={!chosen}
+              onPress={() => void start()}
+              disabled={!chosen || saving}
               accessibilityRole="button"
-              className="py-4 items-center active:opacity-85"
-              style={{ borderRadius: Radius.lg, backgroundColor: Brand[500], opacity: chosen ? 1 : 0.4, ...Shadow.card }}>
-              <ThemedText style={{ fontSize: 16, fontWeight: '900', color: OnBrand }}>
-                {isFirstGoal ? (chosen ? 'Start saving →' : 'Start saving') : chosen ? 'Add goal →' : 'Add goal'}
+              accessibilityState={{ disabled: !chosen || saving, busy: saving }}
+              className="py-4 flex-row items-center justify-center active:opacity-85"
+              style={{
+                gap: 10,
+                borderRadius: Radius.lg,
+                backgroundColor: Brand[500],
+                opacity: !chosen ? 0.4 : saving ? 0.8 : 1,
+                ...Shadow.card,
+              }}>
+              {saving ? <ActivityIndicator size="small" color={OnBrand} /> : null}
+              <ThemedText style={{ fontSize: 16, fontWeight: '800', color: OnBrand }}>
+                {saving ? 'Saving your goal…' : isFirstGoal ? 'Find my routes →' : 'Add goal →'}
               </ThemedText>
             </Pressable>
           </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
+    </View>
+  );
+}
+
+function Field({ label, children }: React.PropsWithChildren<{ label: string }>): React.ReactElement {
+  const theme = useTheme();
+  return (
+    <View style={{ gap: 6 }}>
+      <ThemedText style={{ fontSize: 11, fontWeight: '800', letterSpacing: 0.8, color: theme.textTertiary }}>
+        {label.toUpperCase()}
+      </ThemedText>
+      {children}
     </View>
   );
 }

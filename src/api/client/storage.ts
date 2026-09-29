@@ -40,6 +40,7 @@ const KEYS = {
   PORTFOLIO_PROGRESS: 'polyprofit:portfolioProgress',
   SAVINGS_GOAL: 'polyprofit:savingsGoal',
   SAVINGS_GOAL_OWNER: 'polyprofit:savingsGoalOwner',
+  SAVINGS_GOAL_UNSYNCED: 'polyprofit:savingsGoalUnsynced',
   SPORTS_MATCHES: 'polyprofit:sportsMatches',
   GENERIC_MATCHES: 'polyprofit:genericMatches',
   BIOMETRIC_LOCK: 'polyprofit:biometricLockEnabled',
@@ -194,6 +195,22 @@ export async function setSavingsGoalState(state: SavingsGoalState, userId?: stri
   if (userId) writes.push(AsyncStorage.setItem(KEYS.SAVINGS_GOAL_OWNER, userId));
   else writes.push(AsyncStorage.removeItem(KEYS.SAVINGS_GOAL_OWNER));
   await Promise.all(writes);
+}
+
+/**
+ * Whether this user's goals on the device hold a change the server never received
+ * (saved offline, or the POST failed). Stored as the owner's id so a flag left by one
+ * account never makes another account's device copy win over its server copy.
+ */
+export async function isSavingsGoalUnsynced(userId: string): Promise<boolean> {
+  return (await AsyncStorage.getItem(KEYS.SAVINGS_GOAL_UNSYNCED)) === userId;
+}
+
+export async function setSavingsGoalUnsynced(userId: string, unsynced: boolean): Promise<void> {
+  if (unsynced) await AsyncStorage.setItem(KEYS.SAVINGS_GOAL_UNSYNCED, userId);
+  else if ((await AsyncStorage.getItem(KEYS.SAVINGS_GOAL_UNSYNCED)) === userId) {
+    await AsyncStorage.removeItem(KEYS.SAVINGS_GOAL_UNSYNCED);
+  }
 }
 
 export async function getTrackedBets(): Promise<TrackedBet[]> {

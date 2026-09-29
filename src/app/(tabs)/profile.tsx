@@ -1,12 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth, useUser } from '@clerk/clerk-expo';
 import Constants from 'expo-constants';
+import { useQueryClient } from '@tanstack/react-query';
 import { useRouter, type Href } from 'expo-router';
 import React, { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Linking, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useBankConnect } from '@/api/hooks/useBankConnect';
+import { useOnboardingProfile } from '@/api/hooks/useOnboardingProfile';
 import { useBiometricLock } from '@/api/hooks/useBiometricLock';
 import { useDeleteAccount } from '@/api/hooks/useDeleteAccount';
 import { usePreferences } from '@/api/hooks/usePreferences';
@@ -50,12 +52,19 @@ export default function SettingsScreen(): React.ReactElement {
     setEnabled: setBiometricEnabled,
   } = useBiometricLock();
   const { deleteAccount, isDeleting } = useDeleteAccount();
-  const { profile } = useUserProfile();
+  const { profile, checkFailed: profileUnreachable } = useUserProfile();
+  const { profile: onboarding } = useOnboardingProfile();
   const bank = useBankConnect();
   const { imported: importedCuts } = useSpendingCuts();
   // The stored answer is the durable one; the hook only knows about a connection
-  // made on this mount, and the profile read is what survives a relaunch.
-  const bankConnected = profile?.bankConnected === true || bank.connected;
+  // made on this mount, and the profile read is what survives a relaunch. The quiz's
+  // own record is the fallback when the server can't be reached, so an offline
+  // Settings screen doesn't offer a second Plaid link for a bank already connected.
+  const bankConnected =
+    profile?.bankConnected === true || bank.connected || onboarding.answers.bankConnected;
+  // Unknown rather than "not connected" when the profile couldn't be read: the row
+  // says so instead of inviting a duplicate connection.
+  const bankStatusUnknown = !bankConnected && profileUnreachable;
   const [deleteError, setDeleteError] = useState('');
   const [currencyOpen, setCurrencyOpen] = useState(false);
   const [showScoreWeights, setShowScoreWeights] = useState(false);
@@ -88,10 +97,14 @@ export default function SettingsScreen(): React.ReactElement {
       : null;
   }, [user?.createdAt]);
 
+  const queryClient = useQueryClient();
   const handleSignOut = useCallback(async () => {
     await signOut();
+    // The cache outlives the session (gcTime), so the next account to sign in on this
+    // phone would otherwise be served this one's data from memory.
+    queryClient.clear();
     router.replace('/sign-in');
-  }, [signOut, router]);
+  }, [queryClient, signOut, router]);
 
   const confirmSignOut = useCallback(() => {
     Alert.alert('Sign out', 'You can sign back in at any time.', [
@@ -106,11 +119,14 @@ export default function SettingsScreen(): React.ReactElement {
       await deleteAccount();
       await AsyncStorage.clear();
       await signOut();
+      // Storage is wiped; the in-memory copies must go too or they reappear for
+      // whoever signs up next without a relaunch.
+      queryClient.clear();
       router.replace('/sign-in');
     } catch {
       setDeleteError('Could not delete your account. Please try again.');
     }
-  }, [deleteAccount, signOut, router]);
+  }, [deleteAccount, queryClient, signOut, router]);
 
   const handleDeleteAccount = useCallback(() => {
     Alert.alert(
@@ -245,19 +261,21 @@ export default function SettingsScreen(): React.ReactElement {
               description={
                 bank.error
                   ? bank.error
-                  : bankConnected
+                  : bankStatusUnknown
+                    ? "Couldn't check your connection. Try again when you're back online."
+                    : bankConnected
                     ? 'Connected — real spending counts alongside every pick'
                     : 'Weighs real spending — a subscription, a coffee habit — alongside every pick'
               }
-              chevron={!bankConnected}
-              disabled={bank.connecting}
-              onPress={bankConnected ? undefined : () => void bank.connect()}
+              chevron={!bankConnected && !bankStatusUnknown}
+              disabled={bank.connecting || bankStatusUnknown}
+              onPress={bankConnected || bankStatusUnknown ? undefined : () => void bank.connect()}
               accessory={
                 bankConnected ? (
                   <ThemedText style={{ fontSize: 13, fontWeight: '800', color: Brand[500] }}>Connected</ThemedText>
                 ) : (
                   <ThemedText style={{ fontSize: 13, fontWeight: '800', color: Brand[500] }}>
-                    {bank.connecting ? 'Connecting…' : 'Connect'}
+                    {bank.connecting ? 'Connecting…' : bankStatusUnknown ? '—' : 'Connect'}
                   </ThemedText>
                 )
               }

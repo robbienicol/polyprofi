@@ -8,21 +8,34 @@ function trackedBetsQueryKey() {
   return ['TRACKED_BETS'] as const;
 }
 
-async function addBet(newBet: TrackedBet): Promise<TrackedBet[]> {
+/**
+ * Every write below is a read-modify-write of one stored list. Two running at once
+ * (a market resolving while "Add to plan" saves) each read the old list and the
+ * second write drops the first's change. Chaining them makes each read see the
+ * last write.
+ */
+let writeQueue: Promise<unknown> = Promise.resolve();
+function serialized<T>(write: () => Promise<T>): Promise<T> {
+  const run = writeQueue.then(write, write);
+  writeQueue = run.catch(() => undefined);
+  return run;
+}
+
+async function addBetUnsafe(newBet: TrackedBet): Promise<TrackedBet[]> {
   const existing = await getTrackedBets();
   const updated = [newBet, ...existing];
   await saveTrackedBets(updated);
   return updated;
 }
 
-async function updateBetStatus(id: string, status: TrackedBet['status']): Promise<TrackedBet[]> {
+async function updateBetStatusUnsafe(id: string, status: TrackedBet['status']): Promise<TrackedBet[]> {
   const existing = await getTrackedBets();
   const updated = existing.map((b) => (b.id === id ? { ...b, status } : b));
   await saveTrackedBets(updated);
   return updated;
 }
 
-async function patchBet(id: string, patch: Partial<TrackedBet>): Promise<TrackedBet[]> {
+async function patchBetUnsafe(id: string, patch: Partial<TrackedBet>): Promise<TrackedBet[]> {
   const existing = await getTrackedBets();
   const updated = existing.map((b) => (b.id === id ? { ...b, ...patch } : b));
   await saveTrackedBets(updated);
@@ -33,12 +46,18 @@ async function patchBet(id: string, patch: Partial<TrackedBet>): Promise<Tracked
  * Move every position from one goal to another. Called before a goal is deleted,
  * so its positions land somewhere real instead of pointing at a goal that's gone.
  */
-async function moveBetsToGoal(fromGoalId: string, toGoalId: string | undefined): Promise<TrackedBet[]> {
+async function moveBetsToGoalUnsafe(fromGoalId: string, toGoalId: string | undefined): Promise<TrackedBet[]> {
   const existing = await getTrackedBets();
   const updated = existing.map((b) => (b.goalId === fromGoalId ? { ...b, goalId: toGoalId } : b));
   await saveTrackedBets(updated);
   return updated;
 }
+
+const addBet = (bet: TrackedBet) => serialized(() => addBetUnsafe(bet));
+const updateBetStatus = (id: string, status: TrackedBet['status']) => serialized(() => updateBetStatusUnsafe(id, status));
+const patchBet = (id: string, patch: Partial<TrackedBet>) => serialized(() => patchBetUnsafe(id, patch));
+const moveBetsToGoal = (fromGoalId: string, toGoalId: string | undefined) =>
+  serialized(() => moveBetsToGoalUnsafe(fromGoalId, toGoalId));
 
 export function useTrackedBets() {
   const queryClient = useQueryClient();

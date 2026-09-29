@@ -30,7 +30,7 @@ Never claim returns, safety, or anything that reads as a recommendation to buy.
 | 2 | Tell it the goal. It finds the route. | Goal setup |
 | 3 | Six months or six years — the math changes with your goals. | Quiz / timeframe |
 | 4 | A Roth IRA and a Polymarket bet deserve the same math. Sometimes the bet wins. | Ranked routes |
-| 5 | An AI coach for every pick — including what could go wrong. | Route coach |
+| 5 | An AI coach for every route — including what could go wrong. | Route coach |
 | 6 | We don't have the best recipe. We have the best compass. | Close / CTA |
 
 Bench: Every route, safest first. · Scored out of 100. Here's the working. ·
@@ -41,6 +41,8 @@ market. Everybody can read a map.
 
 Rules: short sentences, full stops not exclamation marks. No "guaranteed",
 "safe", "best returns", "easy money". Numbers specific or absent — no "up to".
+Never "pick" or "play" for a route: they are the vocabulary of a tout, and a route
+is what this product ranks.
 
 ## Colour
 
@@ -50,7 +52,7 @@ Rules: short sentences, full stops not exclamation marks. No "guaranteed",
 | Dark background | `#141312` | `Colors.dark.background` |
 | Light background | `#F7F3EC` | `Colors.light.background` |
 | Primary text | `#1C1A18` | `Colors.light.text` |
-| Muted text | `#756F68` | `Colors.light.textSecondary` |
+| Muted text | `#615B55` | `Colors.light.textSecondary` |
 | Positive | `#2FA66A` | `Semantic.positive` |
 | Caution | `#E2A33C` | `Semantic.caution` |
 | Negative | `#DB4B4B` | `Semantic.negative` |
@@ -60,6 +62,9 @@ Rules: short sentences, full stops not exclamation marks. No "guaranteed",
 - One meaning per semantic colour. No decorative use.
 - Text on brand is `#141312` (5.2:1). Light text on brand fails contrast.
 - Risk ramp safe → risky: `#2FA66A → #8FAE4E → #E2A33C → #E07D45 → #DB4B4B`.
+- Those hues are **fills**. As words they use their `SemanticText` / `RiskTextScale`
+  counterparts, which carry the same meaning at 4.5:1. See `DESIGN.md`.
+- Colour is never the only carrier of meaning: a band always has its word beside it.
 
 ## Icon
 
@@ -91,7 +96,13 @@ from the palette, not the type.
 | --- | --- | --- |
 | Headings, hero, screenshot copy, figures ≥ 18px | Source Serif 4 | 600 / 700 |
 | Body, labels, buttons, anything under 18px | Public Sans | 400–700 |
-| Figures | Public Sans + `fontVariant: ['tabular-nums']` | 700 |
+| Figures under 18px | Public Sans | 700 |
+
+Every figure takes `fontVariant: ['tabular-nums']` whatever its face, so columns
+do not jitter. The face itself follows the 18px threshold like everything else —
+`themed-text.tsx` resolves it from the final size, so a headline money figure is
+serif and a label figure is not. `adjustsFontSizeToFit` must not shrink a serif
+below 18: set `minimumFontScale` so the floor holds.
 
 - 18px threshold is `DISPLAY_MIN_SIZE` in `src/constants/theme.ts`.
 - Native ignores `fontWeight` on custom faces — each weight is its own family.

@@ -8,6 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { GoalProgress, useGoalsProgress } from '@/api/hooks/useGoalProgress';
 import { useMoney } from '@/api/hooks/usePreferences';
 import { useSavingsGoal } from '@/api/hooks/useSavingsGoal';
+import { Haptic } from '@/lib/haptics';
 import { useTrackedBets } from '@/api/hooks/useTrackedBets';
 import { Icon } from '@/components/ui/Icon';
 import { ThemedText } from '@/components/themed-text';
@@ -114,7 +115,10 @@ export default function GoalsScreen(): React.ReactElement {
     }
   };
 
-  const addGoal = (): void => router.push('/goal-setup');
+  const addGoal = (): void => {
+    Haptic.tap();
+    router.push('/goal-setup');
+  };
 
   return (
     <View className="flex-1" style={{ backgroundColor: theme.background }}>

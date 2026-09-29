@@ -61,6 +61,33 @@ export interface RouteResults {
    * "Cut spending" asset class, or a keyword search.
    */
   moreCuts: Route[];
+  /**
+   * Whether the goal is reachable at all, and by how much it is missed when it is not.
+   * Read off the whole pool before any filter, because the question it answers — "does
+   * this add up?" — is about the market and the budget, not about the chips.
+   */
+  goalReach: GoalReach;
+}
+
+/**
+ * The honest answer to "can I get there from here?", as numbers rather than an
+ * absence. Saying nothing when no route reaches the goal is the one failure this
+ * product cannot afford: the user reads an empty list as a broken app, when it is
+ * the app working exactly as intended.
+ */
+export interface GoalReach {
+  /** The profit the user asked for. */
+  target: number;
+  /** Best profit any route in the pool projects at the amount the user intends to invest. */
+  bestProjectedReturn: number;
+  /** `bestProjectedReturn / target`, floored at 0. 1 or more means the goal is met. */
+  proximity: number;
+  /** True when at least one route reaches the target at the intended amount. */
+  reachable: boolean;
+  /** Smallest amount that brings a goal-reaching route back, or null when none exists at any amount. */
+  investmentToReach: number | null;
+  /** Routes considered, before relevance and filters. Zero means there was nothing to judge. */
+  poolSize: number;
 }
 
 /** A run of routes that share a probability band, in descending order of chance. */
@@ -302,12 +329,21 @@ export function buildRouteResults(
   // exception: the user named what they want, so hiding a match for missing the goal
   // would look broken. The score and the "below current goal" label still say so.
   const keyword = activeKeyword(filters);
+  // What each route would actually pay at the amount the user intends to invest.
+  // Computed once: the relevance gate and the reachability answer below both need it,
+  // and rescoring the pool twice is the same work done twice.
+  const projectedAtIntended = new Map(
+    routes.map((route) => [
+      route.id,
+      rescoreForStake([route], referenceStake, intendedInvestment, target)[0].expectedReturn,
+    ] as const)
+  );
   const relevantRoutes = keyword
     ? routes
     : routes.filter((route) =>
       isRelevantRoute({
         target,
-        projectedReturn: rescoreForStake([route], referenceStake, intendedInvestment, target)[0].expectedReturn,
+        projectedReturn: projectedAtIntended.get(route.id) ?? 0,
         requiredInvestment: requiredInvestmentById.get(route.id) ?? null,
         intendedInvestment,
         noCapitalRequired: route.noCapitalRequired,
@@ -400,6 +436,32 @@ export function buildRouteResults(
     ? Math.min(...capitalSafeCandidates)
     : null;
 
+  /*
+   * Reachability, read off the whole pool rather than the filtered list.
+   *
+   * `bestProjectedReturn` is the most any route pays at the amount the user said they
+   * would invest — the honest ceiling. `investmentToReach` is the smallest stake that
+   * makes some route clear the target, which is the only actionable half of a "no":
+   * without it the answer is a shrug, and with it the answer is a button.
+   *
+   * Null there means more money would not help either, so the copy has to fall back to
+   * the other two dials the user owns — the amount asked for and the deadline.
+   */
+  const bestProjectedReturn = routes.length > 0
+    ? Math.max(...routes.map((route) => projectedAtIntended.get(route.id) ?? 0))
+    : 0;
+  const stakesThatReach = routes
+    .map((route) => requiredInvestmentById.get(route.id))
+    .filter((amount): amount is number => amount != null && Number.isFinite(amount) && amount > 0);
+  const goalReach: GoalReach = {
+    target: params.target,
+    bestProjectedReturn,
+    proximity: params.target > 0 ? Math.max(0, bestProjectedReturn / params.target) : 1,
+    reachable: params.target <= 0 || bestProjectedReturn >= params.target,
+    investmentToReach: stakesThatReach.length > 0 ? Math.min(...stakesThatReach) : null,
+    poolSize: routes.length,
+  };
+
   return {
     ranked,
     filtered,
@@ -409,11 +471,36 @@ export function buildRouteResults(
     unlockInvestmentFor,
     unlockCapitalSafeInvestment,
     moreCuts,
+    goalReach,
   };
 }
 
 // ── self-check ──────────────────────────────────────────────────────────────
 export function __selfCheck(): void {
+  // The honest-no signal. A pool that cannot reach the target must report unreachable
+  // with the gap measured, because the screen renders its verdict straight off this.
+  {
+    const params: RouteParams = {
+      target: 12_000, balance: 500, timeframe: 'month',
+    } as RouteParams;
+    const short: Route = {
+      id: 'short', category: 'Savings & Treasuries', emoji: '', description: '', riskLevel: 1,
+      probability: 99, expectedReturn: 20, platform: '', strategy: '', lossProfile: 'partial', meetsTarget: false,
+    };
+    const filters: RouteFilters = {
+      category: null, lossProfile: null, minimumProbability: 0, sort: 'score',
+      predictionTopic: null, maxDaysToResolve: null, groupByChance: false, keyword: '',
+    };
+    const { goalReach } = buildRouteResults([short], params, 500, filters);
+    console.assert(!goalReach.reachable, 'a pool that tops out at +$20 does not reach a +$12,000 goal');
+    console.assert(goalReach.proximity < 0.01, 'proximity reports how far short it falls');
+    console.assert(goalReach.poolSize === 1, 'poolSize counts what was judged, before relevance dropped anything');
+
+    const reaches: Route = { ...short, id: 'reaches', expectedReturn: 12_500, meetsTarget: true };
+    console.assert(buildRouteResults([reaches], params, 500, filters).goalReach.reachable, 'a route that clears the target reports reachable');
+    console.assert(buildRouteResults([], params, 500, filters).goalReach.poolSize === 0, 'an empty pool is not a verdict about the goal');
+  }
+
   {
     const base: Route = {
       id: 'x', category: 'Polymarket', emoji: '', description: '', riskLevel: 3, probability: 50,

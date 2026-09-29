@@ -16,6 +16,7 @@ import { Icon } from '@/components/ui/Icon';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, OnBrand, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { Haptic } from '@/lib/haptics';
 import { ACQUISITION_PLATFORMS } from '@/lib/preferences';
 import {
   excludedSearchCategoriesFor,
@@ -277,11 +278,13 @@ function QuizForm({
   const attachedLabel = goalAttached ? goalLabelShown : null;
 
   const toggleMarket = useCallback((market: string) => {
+    Haptic.select();
     setCategories((prev) => (prev.includes(market) ? prev.filter((item) => item !== market) : [...prev, market]));
   }, []);
 
   const submit = useCallback(() => {
     if (targetValue <= 0 || isSaving) return;
+    Haptic.press();
     Keyboard.dismiss();
     // Asked from the routes screen now, while the analyzing loader gives it a
     // natural pause to land in — not here, before anything has even happened.
@@ -324,12 +327,18 @@ function QuizForm({
             (searchGoalId ? `/(tabs)/routes?generate=1&goalId=${searchGoalId}` : '/(tabs)/routes?generate=1') as Href,
           ),
           // Never latch on "Finding routes…" — if the save fails, hand the button back.
-          onError: () => setIsSaving(false),
+          onError: () => {
+            Haptic.error();
+            setIsSaving(false);
+          },
         }
       );
     };
 
-    void run().catch(() => setIsSaving(false));
+    void run().catch(() => {
+      Haptic.error();
+      setIsSaving(false);
+    });
   }, [targetValue, isSaving, goalAttached, startingGoal, newGoalSeed, addGoalAsync, timeframe, saveAnswers, prefill?.riskTolerance, defaultRiskTolerance, categories, excludedCategories, preferredPlatforms, investCeiling, router]);
 
   return (
@@ -344,7 +353,7 @@ function QuizForm({
             keyboardDismissMode="on-drag"
             contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 24, paddingTop: 4, paddingBottom: 20, gap: 22 }}>
 
-            <Pressable onPress={() => router.back()} accessibilityRole="button" className="self-start active:opacity-60 py-1">
+            <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)' as Href))} accessibilityRole="button" className="self-start active:opacity-60 py-1">
               <ThemedText style={{ fontSize: 14, fontWeight: '600', color: theme.textSecondary }}>← Cancel</ThemedText>
             </Pressable>
 
@@ -434,6 +443,7 @@ function QuizForm({
                   <Pressable
                     key={amount}
                     onPress={() => {
+                      Haptic.select();
                       setTarget(String(amount));
                       setAmountTouched(true);
                       Keyboard.dismiss();

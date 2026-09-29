@@ -25,7 +25,7 @@ import { ThemedText } from '@/components/themed-text';
 import { AnalyzingLoader, BrandLoader } from '@/components/ui/loaders';
 import { KEYBOARD_AWARE_SCROLL_PROPS } from '@/constants/keyboard';
 import { Brand, OnBrand, Radius, Semantic, Shadow } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import { useSemanticText, useTheme } from '@/hooks/use-theme';
 import { requestAppRating } from '@/lib/app-rating';
 import { betOutcomeSide } from '@/lib/bet-monitor-match';
 import { scheduleWeeklyReminder } from '@/lib/notifications';
@@ -33,9 +33,10 @@ import { parseEntryPrice } from '@/lib/parse-bet-line';
 import { timeframeCalendarDays } from '@/api/client/playbook';
 import { investmentSliderMaximum } from '@/lib/quiz-profile';
 import { cancellationActionLabel, cancellationTargetFor } from '@/lib/cancel-links';
+import { spendingCutPosition } from '@/lib/spending-cut-position';
 import { openTradeDestination, preferredTradeDestination, tradeDestinationLabel } from '@/lib/route-actions';
 import { activeKeyword, buildRouteResults, groupRoutesByChance, predictionFacetsActive, resolveInvestmentAmount, routeMatchesKeyword, searchOutcome, shouldOfferCapitalSafe } from '@/lib/route-results';
-import type { RouteFilters as Filters } from '@/lib/route-results';
+import type { GoalReach, RouteFilters as Filters } from '@/lib/route-results';
 import { buildCardRewardRoutes } from '@/lib/card-reward-routes';
 import { buildSpendingCutRoutes } from '@/lib/spending-cut-routes';
 import { rescoreForStake } from '@/lib/stake-rescore';
@@ -55,8 +56,23 @@ const DEFAULT_FILTERS: Filters = {
 
 const NO_ROUTES: Route[] = [];
 
+/**
+ * What the app just wrote down, in the user's words. Shown before any handoff, because
+ * the alternative — write a position, switch to Safari, say nothing — is the single
+ * worst moment in the flow for someone whose whole worry is being scammed.
+ */
+interface Receipt {
+  routeId: string;
+  /** Label / value pairs, read top to bottom. */
+  lines: [string, string][];
+  /** The venue handoff, offered rather than performed. Null when there is nowhere to go. */
+  actionLabel: string | null;
+  onAction: (() => void) | null;
+}
+
 export default function RoutesScreen(): React.ReactElement {
   const theme = useTheme();
+  const semantic = useSemanticText();
   const router = useRouter();
   // The goal this search is for, handed over by the quiz. Historical batches carry
   // their own goalId instead.
@@ -66,7 +82,7 @@ export default function RoutesScreen(): React.ReactElement {
   const { setPreview } = useRoutePreview();
   const { preferences } = usePreferences();
   const { allGoals, confirmGoal } = useSavingsGoal();
-  const { trackBet } = useTrackedBets();
+  const { trackBet, isTracking: isTrackingBet } = useTrackedBets();
 
   const viewedBatch = batchId ? history.find((batch) => batch.id === batchId) ?? null : null;
   const latestBatch = history[0] ?? null;
@@ -93,8 +109,12 @@ export default function RoutesScreen(): React.ReactElement {
   // Memoised because the keyword-search pool below derives from it: a fresh array
   // every render would rebuild that pool every render.
   const generatedRoutes = useMemo(
-    () => (shouldFetch ? fetchedRoutes : viewedBatch?.routes ?? recentRoutes ?? latestBatch?.routes ?? []),
-    [shouldFetch, fetchedRoutes, viewedBatch?.routes, recentRoutes, latestBatch?.routes],
+    // A pull-to-refresh keeps the list it already has on screen until the new one
+    // arrives; only a fresh search starts from an empty, loading list.
+    () => (isGenerating || (manualRefresh && fetchedRoutes.length > 0)
+      ? fetchedRoutes
+      : viewedBatch?.routes ?? recentRoutes ?? latestBatch?.routes ?? []),
+    [isGenerating, manualRefresh, fetchedRoutes, viewedBatch?.routes, recentRoutes, latestBatch?.routes],
   );
   // Spending cuts are built here rather than fetched with the rest: they come from a
   // statement held on this device, so they never went to the server that generated the
@@ -121,6 +141,10 @@ export default function RoutesScreen(): React.ReactElement {
 
   const [trackingId, setTrackingId] = useState<string | null>(null);
   const [trackingAmount, setTrackingAmount] = useState('');
+  // What was just written, held until the user has read it. Nothing opens a trading
+  // venue on its own any more: the app takes an action, says what it recorded, and
+  // then offers the handoff as a separate tap.
+  const [receipt, setReceipt] = useState<Receipt | null>(null);
   // How much of a category the user says they will actually give up. Defaults to the
   // same share the card was priced at, so confirming without touching it is a no-op.
   const [cutPercent, setCutPercent] = useState(25);
@@ -133,25 +157,16 @@ export default function RoutesScreen(): React.ReactElement {
     scheduleWeeklyReminder();
   }, []);
 
-  // Asked while there's a natural pause to fill — the analyzing screen below —
-  // rather than the instant the quiz's submit button is tapped, before anything
-  // has actually happened yet. Guarded so it fires once per generation rather
-  // than on every render this screen stays in the loading state.
-  const ratedThisGeneration = useRef(false);
-  useEffect(() => {
-    if (shouldFetch && isLoading) {
-      if (!ratedThisGeneration.current) {
-        ratedThisGeneration.current = true;
-        void requestAppRating();
-      }
-    } else {
-      ratedThisGeneration.current = false;
-    }
-  }, [shouldFetch, isLoading]);
+  // Asked after a route has actually been added — the one moment the app has done
+  // something for this user — and never during the wait before it has answered a
+  // single question. Guarded so it fires once per session rather than per receipt.
+  const ratedThisSession = useRef(false);
 
   useEffect(() => {
     if (!isGenerating || isLoading || isFetching || !quizAnswers || fetchedRoutes.length === 0) return;
-    const generationKey = `${fetchedRoutes.length}-${fetchedRoutes[0].id}-${quizAnswers.target}-${quizAnswers.timeframe}`;
+    // The goal is part of the key: a second goal's search can return the same daily
+    // pool, and it still has to be saved as that goal's batch.
+    const generationKey = `${goalId ?? 'none'}-${fetchedRoutes.length}-${fetchedRoutes[0].id}-${quizAnswers.target}-${quizAnswers.timeframe}`;
     if (savedGeneration.current === generationKey) return;
     savedGeneration.current = generationKey;
     setRecentRoutes(fetchedRoutes);
@@ -231,6 +246,7 @@ export default function RoutesScreen(): React.ReactElement {
   );
   const ranked = results?.ranked ?? [];
   const filtered = results?.filtered ?? [];
+  const goalReach = results?.goalReach ?? null;
   const moreCuts = results?.moreCuts ?? NO_ROUTES;
   const isSearching = predictionSearch.isSearching || assetSearch.isSearching;
   // Matches before the filter chips narrow them: the gap between this and `filtered`
@@ -250,6 +266,19 @@ export default function RoutesScreen(): React.ReactElement {
   const capitalSafeUnlock = results && shouldOfferCapitalSafe(filters, filtered, results.unlockCapitalSafeInvestment)
     ? results.unlockCapitalSafeInvestment
     : null;
+  /*
+   * The goal itself does not add up — not a filter problem, not a coverage problem.
+   *
+   * Stated above the list rather than only in place of it, because a list of near-misses
+   * with no verdict on top leaves the user to work out "can I actually do this?" from
+   * thirty cards. Suppressed during a keyword search: the user named a market, and
+   * answering with a verdict on their goal is answering a question they did not ask.
+   */
+  const goalUnreachable = goalReach != null
+    && !goalReach.reachable
+    && goalReach.poolSize > 0
+    && keyword === ''
+    && !isLoading;
 
   async function handleRefresh(): Promise<void> {
     if (isHistorical || !sessionParams) return;
@@ -260,8 +289,23 @@ export default function RoutesScreen(): React.ReactElement {
         setRecentRoutes(refreshed);
         saveGeneratedRoutes(sessionParams, refreshed, sessionGoalId);
       }
+    } catch {
+      // The query's own error state renders the retry card; nothing to add here.
     } finally {
       setManualRefresh(false);
+    }
+  }
+
+  /**
+   * Hands the user the receipt for what was just written, and asks for a rating once
+   * the app has finally done something worth rating. Nothing navigates away on its
+   * own: `onAction` is a button they choose, not a side effect of confirming.
+   */
+  function showReceipt(next: Receipt): void {
+    setReceipt(next);
+    if (!ratedThisSession.current) {
+      ratedThisSession.current = true;
+      void requestAppRating();
     }
   }
 
@@ -274,36 +318,30 @@ export default function RoutesScreen(): React.ReactElement {
    */
   function confirmCut(route: Route, cut: NonNullable<Route['spendingCut']>): void {
     const subscription = cut.kind === 'subscription';
-    const monthly = subscription ? cut.monthlyAmount : (cut.monthlyAmount * cutPercent) / 100;
-    const months = Math.max(1, timeframeCalendarDays(sessionParams?.timeframe ?? 'month') / 30);
-    const saved = Math.round(monthly * months);
-    const openedAt = new Date().toISOString();
-
-    trackBet({
-      id: `${route.id}-${Date.now()}`,
+    trackBet(spendingCutPosition({
+      route,
+      cut,
+      cutPercent,
+      timeframe: sessionParams?.timeframe,
       goalId: sessionGoalId,
-      category: route.category,
-      emoji: route.emoji,
-      description: subscription
-        ? `Cancelled ${cut.merchant} — $${cut.monthlyAmount.toFixed(2)}/mo`
-        : `Spending ${cutPercent}% less on ${cut.merchant} — $${monthly.toFixed(0)}/mo`,
-      platform: route.platform,
-      strategy: route.strategy,
-      riskLevel: route.riskLevel,
-      probability: route.probability,
-      expectedReturn: saved,
-      amountWagered: 0,
-      status: 'active',
-      createdAt: openedAt,
-      profitGoal: sessionParams?.target || saved,
-    }, {
+      target: sessionParams?.target,
+    }), {
       onSuccess: () => {
         setTrackingId(null);
         setCutPercent(25);
         if (sessionGoalId) confirmGoal(sessionGoalId);
         // Only a subscription has somewhere to go. Cutting back on a category is a
         // promise to yourself, and opening a page for it would be theatre.
-        if (subscription) void openTradeDestination(route, 'cancel');
+        showReceipt({
+          routeId: route.id,
+          lines: [
+            [subscription ? 'Cancelling' : 'Cutting back on', route.description],
+            ['Counts toward', `+$${(sessionParams?.target ?? 0).toLocaleString()}`],
+            ['Staked', 'Nothing — this is money you keep'],
+          ],
+          actionLabel: subscription ? cutActionLabel(route) : null,
+          onAction: subscription ? () => { void openTradeDestination(route, 'cancel'); } : null,
+        });
       },
     });
   }
@@ -333,7 +371,16 @@ export default function RoutesScreen(): React.ReactElement {
       onSuccess: () => {
         setTrackingId(null);
         if (sessionGoalId) confirmGoal(sessionGoalId);
-        if (plan.kind === 'new-card') void openTradeDestination(route, 'apply');
+        showReceipt({
+          routeId: route.id,
+          lines: [
+            ['Added to your plan', route.description],
+            ['Expected to earn', `+$${route.expectedReturn.toLocaleString()} by your deadline`],
+            ['Staked', 'Nothing — these are rewards on spending you already do'],
+          ],
+          actionLabel: plan.kind === 'new-card' ? 'Open the application' : null,
+          onAction: plan.kind === 'new-card' ? () => { void openTradeDestination(route, 'apply'); } : null,
+        });
       },
     });
   }
@@ -348,7 +395,7 @@ export default function RoutesScreen(): React.ReactElement {
       return;
     }
     const amount = Number(trackingAmount);
-    if (!Number.isFinite(amount) || amount <= 0) return;
+    if (!Number.isFinite(amount) || amount <= 0 || isTrackingBet) return;
     const predictionMarket = /polymarket|prediction/i.test(`${route.category} ${route.platform}`);
     // The route's own exact price first: the line is rounded to the cent, and a position
     // opened at "98¢" prices its own P&L against a contract it never bought.
@@ -361,7 +408,10 @@ export default function RoutesScreen(): React.ReactElement {
     // prefilled from it, so an edited amount would otherwise store a payout for a
     // stake the user never took — inflating this position's return, the portfolio's
     // expected profit, and its weighted return.
-    const [atAmount = route] = rescoreForStake([route], referenceStake, amount, sessionParams?.target ?? 0);
+    // The listed route is already priced at its own stake, so that is the base the
+    // edited amount scales from — not the search's reference stake.
+    const listedStake = results?.selectedStake(route) ?? referenceStake;
+    const [atAmount = route] = rescoreForStake([route], listedStake, amount, sessionParams?.target ?? 0);
     trackBet({
       id: `${route.id}-${Date.now()}`,
       // The position works toward the goal this search was run for.
@@ -390,12 +440,24 @@ export default function RoutesScreen(): React.ReactElement {
         // Acquiring is the commitment: this is where a searched-for goal becomes a
         // goal the user actually has, and joins the Goals tab.
         if (sessionGoalId) confirmGoal(sessionGoalId);
-        void openTradeDestination(route, destination);
+        showReceipt({
+          routeId: route.id,
+          lines: [
+            ['Added to your plan', atAmount.description],
+            ['Staking', `$${amount.toLocaleString()}${route.line ? ` at ${route.line}` : ''}`],
+            ['If it works', `+$${Math.round(atAmount.expectedReturn).toLocaleString()}`],
+            ['If it does not', route.lossProfile === 'binary' ? `You lose the $${amount.toLocaleString()}. There is no middle outcome.` : 'You keep what the position is worth at the time.'],
+          ],
+          actionLabel: `Open ${tradeDestinationLabel(destination)}`,
+          onAction: () => { void openTradeDestination(route, destination); },
+        });
       },
     });
   }
 
-  if (shouldFetch && isLoading && !error) {
+  // The full-screen loader is for a new search. A refresh already has a list to show,
+  // and replacing it with the loader after a cold start read as the screen resetting.
+  if (isGenerating && isLoading && !error) {
     return <Screen><AnalyzingLoader /></Screen>;
   }
   if (quizLoading) {
@@ -460,6 +522,9 @@ export default function RoutesScreen(): React.ReactElement {
             router.push(`/route/${route.id}?stake=${results?.selectedStake(route) ?? referenceStake}&available=${displayedInvestment}`);
           }}
         />
+        {receipt?.routeId === route.id && (
+          <TrackReceipt receipt={receipt} onDone={() => setReceipt(null)} />
+        )}
         {trackingId === route.id && (
           <TrackRouteForm
             amount={trackingAmount}
@@ -530,7 +595,7 @@ export default function RoutesScreen(): React.ReactElement {
                     : `${activeFilterCount} filter${activeFilterCount === 1 ? '' : 's'} active`}
                 </ThemedText>
               </View>
-              <ThemedText style={{ fontSize: 13, fontWeight: '800', color: Brand[500] }}>
+              <ThemedText style={{ fontSize: 13, fontWeight: '800', color: semantic.brand }}>
                 {showFilters ? 'Done' : 'Edit'}
               </ThemedText>
             </Pressable>
@@ -546,8 +611,19 @@ export default function RoutesScreen(): React.ReactElement {
             ) : null}
           </>
         )}
-        {error && <RoutesError message={error} onRetry={refresh} />}
-        {capitalSafeUnlock != null && sessionParams ? (
+        {error && <RoutesError message={error} onRetry={() => void handleRefresh()} />}
+        {goalUnreachable && goalReach && sessionParams ? (
+          <GoalUnreachable
+            reach={goalReach}
+            when={timeframeLabel(sessionParams.timeframe)}
+            investing={displayedInvestment}
+            hasFilters={activeFilterCount > 0}
+            onRaiseInvestment={setInvestmentAndReset}
+            onClearFilters={() => setFiltersAndReset({ ...DEFAULT_FILTERS, keyword: filters.keyword })}
+            onChangeGoal={() => router.push('/quiz')}
+          />
+        ) : null}
+        {capitalSafeUnlock != null && sessionParams && !goalUnreachable ? (
           <CapitalSafeNudge
             target={sessionParams.target}
             amount={capitalSafeUnlock}
@@ -575,8 +651,13 @@ export default function RoutesScreen(): React.ReactElement {
           <MoreWaysToSave cuts={moreCuts} renderRoute={renderRoute} />
         ) : null}
         {visibleCount < filtered.length && (
-          <Pressable onPress={() => setVisibleCount((count) => count + 30)} className="items-center active:opacity-70" style={{ borderRadius: Radius.md, paddingVertical: 12, borderWidth: 1, borderColor: theme.border, backgroundColor: theme.backgroundElement }}>
-            <ThemedText style={{ fontSize: 13, fontWeight: '800', color: Brand[500] }}>Show 30 more · {filtered.length - visibleCount} remaining</ThemedText>
+          <Pressable
+            onPress={() => setVisibleCount((count) => count + 30)}
+            accessibilityRole="button"
+            accessibilityLabel={`Show 30 more routes. ${filtered.length - visibleCount} remaining.`}
+            className="items-center justify-center active:opacity-70"
+            style={{ borderRadius: Radius.md, minHeight: 48, borderWidth: 1, borderColor: theme.border, backgroundColor: theme.backgroundElement }}>
+            <ThemedText style={{ fontSize: 14, fontWeight: '800', color: semantic.brand }}>Show 30 more · {filtered.length - visibleCount} remaining</ThemedText>
           </Pressable>
         )}
         {outcome === 'searching' && filtered.length === 0 && (
@@ -587,7 +668,7 @@ export default function RoutesScreen(): React.ReactElement {
         {outcome === 'uncovered' && (
           <EmptyUncovered keyword={keyword} onClear={() => setFiltersAndReset({ ...filters, keyword: '' })} />
         )}
-        {(outcome === 'filtered-out' || (outcome === 'idle' && filtered.length === 0 && !isLoading && routes.length > 0)) && (
+        {!goalUnreachable && (outcome === 'filtered-out' || (outcome === 'idle' && filtered.length === 0 && !isLoading && routes.length > 0)) && (
           <EmptyFiltered
             filters={filters}
             unlockAmount={results?.unlockInvestmentFor(filters.minimumProbability) ?? null}
@@ -595,9 +676,173 @@ export default function RoutesScreen(): React.ReactElement {
             onClear={() => setFiltersAndReset(DEFAULT_FILTERS)}
           />
         )}
-        {routes.length > 0 && <ThemedText type="small" themeColor="textSecondary" className="text-center" style={{ opacity: 0.4 }}>{isHistorical ? 'Saved search · ' : ''}Pull down to refresh · AI-generated · Informational only</ThemedText>}
+        {routes.length > 0 && <RoutesDisclosure historical={isHistorical} />}
       </ScrollView>
     </Screen>
+  );
+}
+
+/**
+ * The verdict, when the answer is no.
+ *
+ * This is the state the product exists for. A goal that cannot be reached in the time
+ * given is the one answer nobody else will give honestly, and before this existed the
+ * screen fell through to the empty-filter card and rendered "No  routes" — the moment
+ * the whole app is built around, shipping as a string-interpolation bug.
+ *
+ * It says the number, says how close the best route gets, and then offers only dials
+ * the user actually owns: the amount, the filters, the goal itself. It never suggests
+ * a riskier route as the way to close the gap.
+ */
+function GoalUnreachable({ reach, when, investing, hasFilters, onRaiseInvestment, onClearFilters, onChangeGoal }: {
+  reach: GoalReach;
+  when: string;
+  investing: number;
+  hasFilters: boolean;
+  onRaiseInvestment: (amount: number) => void;
+  onClearFilters: () => void;
+  onChangeGoal: () => void;
+}): React.ReactElement {
+  const theme = useTheme();
+  const semantic = useSemanticText();
+  const percent = Math.round(reach.proximity * 100);
+  const closest = Math.round(reach.bestProjectedReturn);
+  const moreHelps = reach.investmentToReach != null && reach.investmentToReach > investing;
+
+  return (
+    <View
+      style={{
+        borderRadius: Radius.lg,
+        borderWidth: 1,
+        borderColor: Semantic.caution + '4D',
+        backgroundColor: Semantic.caution + '14',
+        paddingHorizontal: 16,
+        paddingVertical: 14,
+        gap: 10,
+      }}>
+      <ThemedText style={{ fontSize: 18, fontWeight: '700', color: theme.text, lineHeight: 25 }}>
+        {`Nothing reaches +$${reach.target.toLocaleString()} ${when}.`}
+      </ThemedText>
+      <ThemedText style={{ fontSize: 14, lineHeight: 21, color: theme.textSecondary }}>
+        {closest > 0
+          ? `The closest route gets you to +$${closest.toLocaleString()} — ${percent}% of it — at the $${investing.toLocaleString()} you're putting in.`
+          : `At the $${investing.toLocaleString()} you're putting in, nothing here makes progress on it.`}
+      </ThemedText>
+      <ThemedText style={{ fontSize: 14, lineHeight: 21, color: theme.textSecondary }}>
+        {moreHelps
+          ? `$${reach.investmentToReach!.toLocaleString()} is where the first route reaches it. Below that, the math does not get there — whatever the risk.`
+          : 'More money would not change it either. The honest options are a smaller number or a longer deadline.'}
+      </ThemedText>
+      <View className="flex-row flex-wrap" style={{ gap: 8, marginTop: 2 }}>
+        {moreHelps ? (
+          <Pressable
+            onPress={() => onRaiseInvestment(reach.investmentToReach!)}
+            accessibilityRole="button"
+            accessibilityHint="Sets what you are willing to invest to that amount and re-ranks the list"
+            className="active:opacity-85"
+            style={{ borderRadius: Radius.md, paddingHorizontal: 16, minHeight: 44, justifyContent: 'center', backgroundColor: Brand[500] }}>
+            <ThemedText style={{ fontSize: 14, fontWeight: '800', color: OnBrand }}>
+              Invest up to ${reach.investmentToReach!.toLocaleString()}
+            </ThemedText>
+          </Pressable>
+        ) : null}
+        <Pressable
+          onPress={onChangeGoal}
+          accessibilityRole="button"
+          className="active:opacity-70"
+          style={{ borderRadius: Radius.md, paddingHorizontal: 16, minHeight: 44, justifyContent: 'center', borderWidth: 1, borderColor: theme.borderControl }}>
+          <ThemedText style={{ fontSize: 14, fontWeight: '800', color: theme.text }}>Change the goal</ThemedText>
+        </Pressable>
+        {hasFilters ? (
+          <Pressable
+            onPress={onClearFilters}
+            accessibilityRole="button"
+            accessibilityHint="Clears the filters. It will not bring a goal-reaching route back."
+            className="active:opacity-70"
+            style={{ paddingHorizontal: 8, minHeight: 44, justifyContent: 'center' }}>
+            <ThemedText style={{ fontSize: 14, fontWeight: '700', color: semantic.brand }}>Clear filters</ThemedText>
+          </Pressable>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+/**
+ * What was just recorded, before anything opens. The app took an action with the
+ * user's money; this is it saying so, in the same words the card used, with the
+ * downside stated rather than implied. The handoff is a button here, not a side
+ * effect of confirming — see `Receipt`.
+ */
+function TrackReceipt({ receipt, onDone }: { receipt: Receipt; onDone: () => void }): React.ReactElement {
+  const theme = useTheme();
+
+  return (
+    <View
+      accessible
+      accessibilityRole="summary"
+      accessibilityLabel={`Added to your plan. ${receipt.lines.map(([label, value]) => `${label}: ${value}`).join('. ')}`}
+      style={{
+        borderRadius: Radius.lg,
+        borderWidth: 1,
+        borderColor: Semantic.positive + '3D',
+        backgroundColor: Semantic.positive + '12',
+        paddingHorizontal: 16,
+        paddingVertical: 14,
+        gap: 10,
+      }}>
+      <ThemedText style={{ fontSize: 15, fontWeight: '800', color: theme.text }}>Added to your plan</ThemedText>
+      <View style={{ gap: 6 }}>
+        {receipt.lines.map(([label, value]) => (
+          <View key={label} style={{ gap: 1 }}>
+            <ThemedText style={{ fontSize: 11, fontWeight: '800', color: theme.textSecondary, letterSpacing: 0.4 }}>
+              {label.toUpperCase()}
+            </ThemedText>
+            <ThemedText style={{ fontSize: 14, lineHeight: 20, color: theme.text }}>{value}</ThemedText>
+          </View>
+        ))}
+      </View>
+      <View className="flex-row" style={{ gap: 8, marginTop: 2 }}>
+        {receipt.actionLabel && receipt.onAction ? (
+          <Pressable
+            onPress={() => { receipt.onAction?.(); onDone(); }}
+            accessibilityRole="button"
+            accessibilityHint="Leaves Pathey and opens the venue in your browser"
+            className="active:opacity-85"
+            style={{ borderRadius: Radius.md, paddingHorizontal: 16, minHeight: 44, justifyContent: 'center', backgroundColor: Brand[500] }}>
+            <ThemedText style={{ fontSize: 14, fontWeight: '800', color: OnBrand }}>{receipt.actionLabel} →</ThemedText>
+          </Pressable>
+        ) : null}
+        <Pressable
+          onPress={onDone}
+          accessibilityRole="button"
+          className="active:opacity-70"
+          style={{ borderRadius: Radius.md, paddingHorizontal: 16, minHeight: 44, justifyContent: 'center', borderWidth: 1, borderColor: theme.borderControl }}>
+          <ThemedText style={{ fontSize: 14, fontWeight: '800', color: theme.text }}>Done</ThemedText>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+/**
+ * The line that closes the list. It was 40% opacity over secondary text — 1.7:1, the
+ * least legible thing in the app — carrying the one disclosure on the screen that
+ * ranks things. It reads at full strength now, and leads with what Pathey is rather
+ * than with "AI-generated", which is the half most likely to be misread as a warning
+ * about the numbers rather than a statement about how they were assembled.
+ */
+function RoutesDisclosure({ historical }: { historical: boolean }): React.ReactElement {
+  const theme = useTheme();
+  return (
+    <View style={{ alignItems: 'center', gap: 3, paddingTop: 4 }}>
+      <ThemedText style={{ fontSize: 13, fontWeight: '700', color: theme.textSecondary, textAlign: 'center' }}>
+        Not advice. Just the math.
+      </ThemedText>
+      <ThemedText style={{ fontSize: 12, lineHeight: 17, color: theme.textSecondary, textAlign: 'center' }}>
+        {`${historical ? 'Saved search. ' : 'Pull down to refresh. '}Not financial advice. Figures are estimates, assembled with AI from live market data.`}
+      </ThemedText>
+    </View>
   );
 }
 
@@ -639,9 +884,10 @@ function CapitalSafeNudge({ target, amount, onRaiseInvestment }: {
       <Pressable
         onPress={() => onRaiseInvestment(amount)}
         accessibilityRole="button"
-        className="self-start active:opacity-85"
-        style={{ borderRadius: Radius.md, paddingHorizontal: 14, paddingVertical: 9, backgroundColor: Brand[500] }}>
-        <ThemedText style={{ fontSize: 13, fontWeight: '800', color: OnBrand }}>
+        accessibilityHint="Sets what you are willing to invest to that amount and re-ranks the list"
+        className="self-start justify-center active:opacity-85"
+        style={{ borderRadius: Radius.md, paddingHorizontal: 16, minHeight: 44, backgroundColor: Brand[500] }}>
+        <ThemedText style={{ fontSize: 14, fontWeight: '800', color: OnBrand }}>
           Invest up to ${amount.toLocaleString()}
         </ThemedText>
       </Pressable>
@@ -656,6 +902,7 @@ function CapitalSafeNudge({ target, amount, onRaiseInvestment }: {
  */
 function ChanceGroupHeader({ label, routes }: { label: string; routes: Route[] }): React.ReactElement {
   const theme = useTheme();
+  const semantic = useSemanticText();
   const chances = routes.map((route) => route.probability);
   const low = Math.min(...chances);
   const high = Math.max(...chances);
@@ -663,14 +910,14 @@ function ChanceGroupHeader({ label, routes }: { label: string; routes: Route[] }
 
   return (
     <View className="flex-row items-center" style={{ gap: 8, paddingHorizontal: 4, paddingTop: 4 }}>
-      <ThemedText style={{ fontSize: 11, fontWeight: '900', color: Brand[500], letterSpacing: 0.9 }}>
+      <ThemedText style={{ fontSize: 11, fontWeight: '900', color: semantic.brand, letterSpacing: 0.9 }}>
         {label.toUpperCase()}
       </ThemedText>
       <ThemedText style={{ fontSize: 11, fontWeight: '700', color: theme.textSecondary, fontVariant: ['tabular-nums'] }}>
         {range}
       </ThemedText>
       <View style={{ flex: 1, height: 1, backgroundColor: theme.border }} />
-      <ThemedText style={{ fontSize: 11, color: theme.textTertiary, fontVariant: ['tabular-nums'] }}>
+      <ThemedText style={{ fontSize: 11, color: theme.textSecondary, fontVariant: ['tabular-nums'] }}>
         {routes.length} route{routes.length === 1 ? '' : 's'}
       </ThemedText>
     </View>
@@ -684,12 +931,12 @@ function Screen({ children }: React.PropsWithChildren): React.ReactElement {
 
 function EmptyRoutes({ hasSavedQuiz, onStart }: { hasSavedQuiz: boolean; onStart: () => void }): React.ReactElement {
   const theme = useTheme();
-  return <Screen><View className="flex-1 justify-center px-6"><View className="items-center gap-4 py-10 px-6" style={{ borderRadius: Radius.xl, backgroundColor: theme.backgroundElevated, borderWidth: 1, borderColor: theme.border, ...Shadow.card }}><Icon glyph="🎯" size={38} color={Brand[500]} strokeWidth={1.5} /><ThemedText style={{ fontSize: 22, fontWeight: '800', color: theme.text, textAlign: 'center' }}>Find prediction routes</ThemedText><ThemedText className="text-center" style={{ fontSize: 14, color: theme.textSecondary, lineHeight: 21, maxWidth: 300 }}>{hasSavedQuiz ? 'Use your saved goal and preferences to generate fresh routes.' : 'Set your goal and timeframe — we\'ll scan prediction markets and generate routes in one step.'}</ThemedText><Pressable onPress={onStart} className="self-stretch py-4 items-center active:opacity-85 mt-2" style={{ borderRadius: Radius.lg, backgroundColor: Brand[500], ...Shadow.card }}><ThemedText style={{ fontSize: 16, fontWeight: '800', color: OnBrand }}>{hasSavedQuiz ? 'Find routes from saved quiz →' : 'Set goal & search →'}</ThemedText></Pressable></View></View></Screen>;
+  return <Screen><View className="flex-1 justify-center px-6"><View className="items-center gap-4 py-10 px-6" style={{ borderRadius: Radius.xl, backgroundColor: theme.backgroundElevated, borderWidth: 1, borderColor: theme.border, ...Shadow.card }}><Icon glyph="🎯" size={38} color={Brand[500]} strokeWidth={1.5} /><ThemedText style={{ fontSize: 22, fontWeight: '800', color: theme.text, textAlign: 'center' }}>Price every route to your goal</ThemedText><ThemedText className="text-center" style={{ fontSize: 14, color: theme.textSecondary, lineHeight: 21, maxWidth: 300 }}>{hasSavedQuiz ? 'Use your saved goal and preferences to price a fresh set of routes.' : 'Set your number and your deadline. We price every route to it — savings, treasuries, funds, coins, card rewards, spending cuts and prediction markets — and rank them safest first.'}</ThemedText><Pressable onPress={onStart} className="self-stretch py-4 items-center active:opacity-85 mt-2" style={{ borderRadius: Radius.lg, backgroundColor: Brand[500], ...Shadow.card }}><ThemedText style={{ fontSize: 16, fontWeight: '800', color: OnBrand }}>{hasSavedQuiz ? 'Find routes from saved quiz →' : 'Set goal & search →'}</ThemedText></Pressable></View></View></Screen>;
 }
 
 function RoutesError({ message, onRetry }: { message: string; onRetry: () => void }): React.ReactElement {
   const theme = useTheme();
-  return <View className="items-center gap-2 py-10 px-6" style={{ borderRadius: Radius.lg, backgroundColor: Semantic.negative + '12', borderWidth: 1, borderColor: Semantic.negative + '30' }}><Icon glyph="⚠️" size={23} color={Semantic.negative} /><ThemedText style={{ fontSize: 14, fontWeight: '700', color: theme.text }}>Couldn&apos;t load routes</ThemedText><ThemedText className="text-center" style={{ fontSize: 13, color: theme.textSecondary }}>{message}</ThemedText><Pressable onPress={onRetry} className="active:opacity-70 mt-1" style={{ borderRadius: Radius.md, paddingHorizontal: 16, paddingVertical: 9, backgroundColor: Brand[500] }}><ThemedText style={{ fontSize: 13, fontWeight: '700', color: OnBrand }}>Try again</ThemedText></Pressable></View>;
+  return <View className="items-center gap-2 py-10 px-6" style={{ borderRadius: Radius.lg, backgroundColor: Semantic.negative + '12', borderWidth: 1, borderColor: Semantic.negative + '30' }}><Icon glyph="⚠️" size={23} color={Semantic.negative} /><ThemedText style={{ fontSize: 14, fontWeight: '700', color: theme.text }}>Couldn&apos;t load routes</ThemedText><ThemedText className="text-center" style={{ fontSize: 13, color: theme.textSecondary }}>{message}</ThemedText><Pressable onPress={onRetry} accessibilityRole="button" className="active:opacity-70 mt-1 justify-center" style={{ borderRadius: Radius.md, paddingHorizontal: 20, minHeight: 44, backgroundColor: Brand[500] }}><ThemedText style={{ fontSize: 14, fontWeight: '700', color: OnBrand }}>Try again</ThemedText></Pressable></View>;
 }
 
 /**
@@ -704,6 +951,7 @@ function RoutesError({ message, onRetry }: { message: string; onRetry: () => voi
  */
 function EmptyUncovered({ keyword, onClear }: { keyword: string; onClear: () => void }): React.ReactElement {
   const theme = useTheme();
+  const semantic = useSemanticText();
   return (
     <View className="items-center gap-2 py-10 px-6">
       <Icon glyph="🔍" size={25} color={theme.textSecondary} />
@@ -713,10 +961,14 @@ function EmptyUncovered({ keyword, onClear }: { keyword: string; onClear: () => 
         cover. Either no live market matches, or it&apos;s an asset we don&apos;t carry —
         we only route to things we can price honestly.
       </ThemedText>
-      <Pressable onPress={onClear} className="active:opacity-60 mt-1">
-        <ThemedText type="small" style={{ color: Brand[500], fontWeight: '700' }}>Clear search</ThemedText>
+      <Pressable
+        onPress={onClear}
+        accessibilityRole="button"
+        className="active:opacity-60 justify-center"
+        style={{ minHeight: 44, paddingHorizontal: 12 }}>
+        <ThemedText type="small" style={{ color: semantic.brand, fontWeight: '700' }}>Clear search</ThemedText>
       </Pressable>
-      <ThemedText type="small" style={{ color: theme.textTertiary, fontSize: 11, marginTop: 2 }}>
+      <ThemedText type="small" style={{ color: theme.textSecondary, fontSize: 11 }}>
         Try a team, a person, a ticker, or what a fund holds.
       </ThemedText>
     </View>
@@ -734,9 +986,18 @@ function EmptyFiltered({ filters, unlockAmount, onRaiseInvestment, onClear }: {
   onRaiseInvestment: (amount: number) => void;
   onClear: () => void;
 }): React.ReactElement {
+  const semantic = useSemanticText();
+  /*
+   * Every branch names the filter that emptied the list. Interpolating a possibly-null
+   * category straight into the string is what produced "No  routes" — a double space
+   * and no explanation — on the one screen whose job is to be legible when the answer
+   * is bad news.
+   */
   const title = filters.minimumProbability > 0
-    ? `No routes with ≥ ${filters.minimumProbability}% chance`
-    : `No ${filters.category ?? ''} routes`;
+    ? `No routes with a ${filters.minimumProbability}% chance or better`
+    : filters.category
+      ? `No ${filters.category.toLowerCase()} routes match your filters`
+      : 'Your filters are hiding every route';
   return (
     <View className="items-center gap-2 py-8 px-6">
       <ThemedText type="smallBold">{title}</ThemedText>
@@ -748,16 +1009,22 @@ function EmptyFiltered({ filters, unlockAmount, onRaiseInvestment, onClear }: {
           </ThemedText>
           <Pressable
             onPress={() => onRaiseInvestment(unlockAmount)}
-            className="active:opacity-85 mt-1"
-            style={{ borderRadius: Radius.md, paddingHorizontal: 16, paddingVertical: 9, backgroundColor: Brand[500] }}>
-            <ThemedText style={{ fontSize: 13, fontWeight: '800', color: OnBrand }}>
+            accessibilityRole="button"
+            accessibilityHint="Sets what you are willing to invest to that amount and re-ranks the list"
+            className="active:opacity-85 mt-1 justify-center"
+            style={{ borderRadius: Radius.md, paddingHorizontal: 16, minHeight: 44, backgroundColor: Brand[500] }}>
+            <ThemedText style={{ fontSize: 14, fontWeight: '800', color: OnBrand }}>
               Invest up to ${unlockAmount.toLocaleString()}
             </ThemedText>
           </Pressable>
         </>
       )}
-      <Pressable onPress={onClear} className="active:opacity-60">
-        <ThemedText type="small" style={{ color: Brand[500], fontWeight: '700' }}>Clear filters</ThemedText>
+      <Pressable
+        onPress={onClear}
+        accessibilityRole="button"
+        className="active:opacity-60 justify-center"
+        style={{ minHeight: 44, paddingHorizontal: 12 }}>
+        <ThemedText type="small" style={{ color: semantic.brand, fontWeight: '700' }}>Clear filters</ThemedText>
       </Pressable>
     </View>
   );

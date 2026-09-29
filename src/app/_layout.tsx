@@ -17,7 +17,7 @@ import { ClerkProvider } from '@clerk/clerk-expo';
 import { QueryClientProvider } from '@tanstack/react-query';
 import * as Notifications from 'expo-notifications';
 import * as SplashScreen from 'expo-splash-screen';
-import { Stack, router, usePathname, type Href } from 'expo-router';
+import { Stack, router, useRootNavigationState, usePathname, type Href } from 'expo-router';
 import { useEffect, useRef } from 'react';
 import { useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -37,8 +37,17 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ?? '';
 
-function useNotificationObserver() {
+/**
+ * Opens the screen a tapped notification points at. Waits for the root navigator:
+ * on a cold start from a notification the layout first renders nothing while fonts
+ * load, and a push before the Stack exists throws (and was silently caught). The
+ * launch response is cleared once handled, or every later launch replayed it.
+ */
+function NotificationObserver(): null {
+  const navigationReady = Boolean(useRootNavigationState()?.key);
+
   useEffect(() => {
+    if (!navigationReady) return;
     function redirect(notification: Notifications.Notification) {
       const url = notification.request.content.data?.url;
       if (typeof url === 'string') router.push(url as Href);
@@ -47,7 +56,9 @@ function useNotificationObserver() {
     Notifications.getLastNotificationResponseAsync()
       .then((response) => {
         const notification = response?.notification;
-        if (notification) redirect(notification);
+        if (!notification) return;
+        Notifications.clearLastNotificationResponse();
+        redirect(notification);
       })
       .catch(() => {});
 
@@ -55,7 +66,9 @@ function useNotificationObserver() {
       redirect(response.notification);
     });
     return () => subscription.remove();
-  }, []);
+  }, [navigationReady]);
+
+  return null;
 }
 
 /**
@@ -93,7 +106,6 @@ function GoalCelebrationGate(): null {
 export default function RootLayout(): React.ReactElement | null {
   useColorScheme(); // subscribe to color scheme changes
   const queryClient = getQueryClient();
-  useNotificationObserver();
 
   // Both faces ship with the bundle, so this resolves on the first frame after
   // load; holding the splash avoids a visible reflow of every line of text.
@@ -122,6 +134,7 @@ export default function RootLayout(): React.ReactElement | null {
             <QueryClientProvider client={queryClient}>
               <AppLockGate>
                 <Stack screenOptions={{ headerShown: false }} />
+                <NotificationObserver />
                 <GoalCelebrationGate />
                 <GoalHousekeeping />
                 <OfflineBanner />

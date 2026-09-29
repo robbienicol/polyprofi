@@ -2,7 +2,7 @@ import { View } from "react-native";
 
 import { ThemedText } from "@/components/themed-text";
 import { Radius, Semantic, Shadow } from "@/constants/theme";
-import { useTheme } from "@/hooks/use-theme";
+import { useSemanticText, useTheme } from "@/hooks/use-theme";
 import type { MarketComparison } from "@/lib/market-comparison";
 
 interface MarketComparisonCardProps {
@@ -13,6 +13,7 @@ export function MarketComparisonCard({
   comparison,
 }: MarketComparisonCardProps): React.ReactElement {
   const theme = useTheme();
+  const semantic = useSemanticText();
   const { betterPlatform, edgeCents } = comparison;
 
   return (
@@ -40,7 +41,7 @@ export function MarketComparisonCard({
               backgroundColor: Semantic.positive + "20",
             }}
           >
-            <ThemedText style={{ fontSize: 11, fontWeight: "900", color: Semantic.positive }}>
+            <ThemedText style={{ fontSize: 11, fontWeight: "900", color: semantic.positive }}>
               +{edgeCents}¢ ON {betterPlatform.toUpperCase()}
             </ThemedText>
           </View>
@@ -92,7 +93,7 @@ function PlatformRow({
         gap: 2,
       }}
     >
-      <ThemedText style={{ fontSize: 10, color: theme.textTertiary, fontWeight: "800" }}>
+      <ThemedText style={{ fontSize: 11, color: theme.textSecondary, fontWeight: "800" }}>
         {label.toUpperCase()}
       </ThemedText>
       <ThemedText

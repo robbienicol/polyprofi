@@ -5,8 +5,8 @@ import { PiggyBank } from 'lucide-react-native';
 
 import { Icon } from '@/components/ui/Icon';
 import { ThemedText } from '@/components/themed-text';
-import { Brand, Radius } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import { Radius } from '@/constants/theme';
+import { useSemanticText, useTheme } from '@/hooks/use-theme';
 import type { Route } from '@/types/routes';
 
 /**
@@ -22,6 +22,7 @@ export function MoreWaysToSave({
   renderRoute: (route: Route) => React.ReactElement | null;
 }): React.ReactElement | null {
   const theme = useTheme();
+  const semantic = useSemanticText();
   const [open, setOpen] = useState(false);
   if (cuts.length === 0) return null;
 
@@ -50,10 +51,10 @@ export function MoreWaysToSave({
             {cuts.length} more way{cuts.length === 1 ? '' : 's'} to save
           </ThemedText>
           <ThemedText style={{ fontSize: 11, color: theme.textSecondary, marginTop: 2 }}>
-            {`Up to $${together.toLocaleString()} more if you took all of them`}
+            {`$${together.toLocaleString()} more if you took every one of them`}
           </ThemedText>
         </View>
-        <ThemedText style={{ fontSize: 13, fontWeight: '800', color: Brand[500] }}>
+        <ThemedText style={{ fontSize: 14, fontWeight: '800', color: semantic.brand }}>
           {open ? 'Hide' : 'Show'}
         </ThemedText>
       </Pressable>

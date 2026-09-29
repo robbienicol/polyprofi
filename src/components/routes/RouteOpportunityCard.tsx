@@ -9,8 +9,8 @@ import {
 } from "@/components/molecules/RouteCard";
 import { Icon } from "@/components/ui/Icon";
 import { ThemedText } from "@/components/themed-text";
-import { Brand, Radius, Semantic, Shadow } from "@/constants/theme";
-import { useTheme } from "@/hooks/use-theme";
+import { Brand, Radius, RiskScale, Semantic, Shadow } from "@/constants/theme";
+import { useSemanticText, useTheme } from "@/hooks/use-theme";
 import {
   formatMarketLiquidity,
   liquidityLabel,
@@ -47,6 +47,7 @@ export function RouteOpportunityCard({
   deadlineDays,
 }: RouteOpportunityCardProps): React.ReactElement {
   const theme = useTheme();
+  const semantic = useSemanticText();
   const shownRisk = displayRiskLevel(route);
   const color = riskColor(shownRisk);
   const binary = route.lossProfile === "binary";
@@ -137,7 +138,7 @@ export function RouteOpportunityCard({
           ) : null}
         </View>
         <ThemedText
-          style={{ fontSize: 13, color: Brand[500], fontWeight: "700" }}
+          style={{ fontSize: 13, color: semantic.brand, fontWeight: "700" }}
         >
           {route.platform || route.category}
         </ThemedText>
@@ -150,7 +151,7 @@ export function RouteOpportunityCard({
       {question ? (
         <View style={{ gap: 6 }}>
           <ThemedText
-            style={{ fontSize: 13, fontWeight: "800", color: Brand[500], ...MONO }}
+            style={{ fontSize: 13, fontWeight: "800", color: semantic.brand, ...MONO }}
           >
             {`Buy ${routeDisplayTitle(route)}${traded ? ` · ${traded} traded` : ""}`}
           </ThemedText>
@@ -173,7 +174,7 @@ export function RouteOpportunityCard({
               fontSize: 19,
               lineHeight: 25,
               fontWeight: "900",
-              color: Brand[500],
+              color: semantic.brand,
               letterSpacing: -0.2,
               ...MONO,
             }}
@@ -206,7 +207,10 @@ export function RouteOpportunityCard({
           subLabel={
             returnPeriodDays != null ? `in ${formatMaturity(returnPeriodDays)}` : undefined
           }
-          valueColor={Semantic.positive}
+          // Ink, not green. `Semantic.positive` means a gain that happened; this is a
+          // projection, and colouring it as a win is the card telling the user it
+          // already worked.
+          valueColor={theme.text}
         />
         <Divider />
         {/* What goes in, said as the money it is. "Need to hit goal $20,000 / of $20,000
@@ -216,7 +220,7 @@ export function RouteOpportunityCard({
             value={`$${neededToHitGoal.toLocaleString()}`}
             label="Needed for goal"
             subLabel={`you set $${stake.toLocaleString()}`}
-            valueColor={Semantic.caution}
+            valueColor={semantic.caution}
           />
         ) : (
           <Metric
@@ -239,11 +243,15 @@ export function RouteOpportunityCard({
           term and issuer are what decide it — see Investment Facts below. */}
       {debt || marketQuality ? null : (
         <Section title="Risk Breakdown">
+          {/* The bar took Semantic.positive regardless of the value, so a 12% chance
+              drew a green bar — a semantic colour used as decoration, and the one
+              place on this screen where a hue contradicted the number beside it.
+              It follows the risk ramp now, which is what a chance actually maps to. */}
           <RiskRow
             label="Probability"
             value={formatProbability(route.probability)}
             percent={route.probability}
-            color={Semantic.positive}
+            color={RiskScale[Math.min(4, Math.max(0, Math.floor((100 - route.probability) / 20)))]}
           />
           <RiskRow
             label="Liquidity"
@@ -572,15 +580,19 @@ function Metric({
   valueColor?: string;
 }): React.ReactElement {
   const theme = useTheme();
+  const semantic = useSemanticText();
   return (
     <View
       className="flex-1 items-center"
       style={{ gap: 3, paddingHorizontal: 2 }}
     >
+      {/* minimumFontScale was 0.5, which let a 22pt figure render at 11pt — under the
+          iOS floor, under DISPLAY_MIN_SIZE, and still in the serif. Asking for larger
+          text made the one number the screen exists for smaller. */}
       <ThemedText
         numberOfLines={1}
         adjustsFontSizeToFit
-        minimumFontScale={0.5}
+        minimumFontScale={0.85}
         style={{
           fontSize: 22,
           lineHeight: 27,
@@ -611,7 +623,7 @@ function Metric({
           minimumFontScale={0.8}
           style={{
             fontSize: 11,
-            color: Brand[500],
+            color: semantic.brand,
             fontWeight: "700",
             textAlign: "center",
           }}
@@ -706,7 +718,7 @@ function Fact({
       }}
     >
       <ThemedText
-        style={{ fontSize: 10, color: theme.textTertiary, fontWeight: "800" }}
+        style={{ fontSize: 11, color: theme.textSecondary, fontWeight: "800" }}
       >
         {label.toUpperCase()}
       </ThemedText>
@@ -723,7 +735,7 @@ function Fact({
       </ThemedText>
       {subLabel && (
         <ThemedText
-          style={{ fontSize: 10, color: theme.textTertiary, marginTop: 2 }}
+          style={{ fontSize: 11, color: theme.textSecondary, marginTop: 2 }}
           numberOfLines={1}
         >
           {subLabel}

@@ -1,20 +1,6 @@
-import type { RawPick } from '@/types/picks';
-import {
-  fetchMarketContext,
-  formatMetaculusContext,
-  formatPolymarketContext,
-  formatPopularPolymarketContext,
-} from '@/api/client/market-data';
+import { fetchMarketContext } from '@/api/client/market-data';
 import { fetchPolymarketSnapshot } from '@/api/client/polymarket-market-data';
-import {
-  formatMetaculusEdges,
-  formatPolymarketTaggedEvents,
-  formatWhaleTrades,
-  whaleTradesToPicks,
-} from '@/api/client/polymarket-picks';
-import { fetchPolymarketPickBundle } from '@/api/client/polymarket-picks-client';
 import { playbookRoutes, targetBucket, timeframeCalendarDays } from '@/api/client/playbook';
-import { buildRouteGenerationPrompt } from '@/api/client/route-generation-prompt';
 import { getDailyPool, setDailyPool } from '@/api/client/storage';
 import { applySourcedDebtFacts } from '@/lib/factual-route-data';
 import { apiBaseUrl } from '@/lib/api-base-url';
@@ -23,7 +9,7 @@ import { buildPolymarketRoutes } from '@/lib/polymarket-routes';
 import { enforceRouteIntegrity, filterRoutesForQuiz } from '@/lib/quiz-profile';
 import { buildEtfRoutes } from '@/lib/etf-routes';
 import { isDebtRoute } from '@/lib/route-investment-metrics';
-import { isRecord, isRoute, parseJson, responseJson } from '@/lib/runtime-validation';
+import { isRecord, isRoute, responseJson } from '@/lib/runtime-validation';
 import { withTimeout } from '@/lib/with-timeout';
 import { buildSavingsAccountRoute, buildTreasuryRoutes } from '@/lib/savings-treasury-routes';
 import { sortByPatheyScore } from '@/lib/score';
@@ -31,14 +17,6 @@ import { stakeNeededForReturn } from '@/lib/stake-rescore';
 import type { Route, RouteParams } from '@/types/routes';
 
 const DAILY_POOL_VERSION = 'return-bucket-v3';
-const TIMEFRAME_LABELS: Record<RouteParams['timeframe'], string> = {
-  today: 'today (next 24 hours)',
-  week: 'this week (next 7 days)',
-  month: 'this month (next 30 days)',
-  '3months': 'the next 3 months',
-  '1year': 'the next 12 months',
-  '5years': 'the next 5 years',
-};
 // Ceilings on the two halves of a search. Nothing here is load-bearing on its own —
 // the deterministic builders alone produce a full result set — so a slow upstream
 // costs freshness, never the whole screen.
@@ -93,7 +71,9 @@ async function generateRoutes(params: RouteParams, getToken?: TokenProvider): Pr
     { context: [], universe: [] },
     'routes:polymarket-snapshot',
   );
-  const [marketContext, polymarketSnapshot, polymarketPicks] = await Promise.all([
+  // Everything here is live market data for the deterministic builders. The AI part
+  // is a shared daily slate fetched alongside it — no prompt is built on the device.
+  const [marketContext, polymarketSnapshot, aiRoutes] = await Promise.all([
     withTimeout(
       fetchMarketContext({ polymarket: polymarketSnapshotRequest.then((snapshot) => snapshot.context) }),
       MARKET_DATA_TIMEOUT_MS,
@@ -101,51 +81,30 @@ async function generateRoutes(params: RouteParams, getToken?: TokenProvider): Pr
       'routes:market-context',
     ),
     polymarketSnapshotRequest,
-    withTimeout(
-      fetchPolymarketPickBundle(),
-      MARKET_DATA_TIMEOUT_MS,
-      { taggedEvents: [], commentPicks: [], edges: [], whaleTrades: [] },
-      'routes:polymarket-picks',
-    ),
+    requestAiRoutes(params, fallbackMaturity, getToken),
   ]);
   const polymarketUniverse = polymarketSnapshot.universe;
-  const rawPicks: RawPick[] = [
-    ...polymarketPicks.commentPicks,
-    ...whaleTradesToPicks(polymarketPicks.whaleTrades),
-  ];
-  const prompt = buildRouteGenerationPrompt({
-    params,
-    timeframeLabel: TIMEFRAME_LABELS[timeframe],
-    returnPct,
-    blocks: {
-      picks: formatRawPicks(rawPicks),
-      polymarket: formatPolymarketContext(marketContext.polymarket),
-      popularPolymarket: formatPopularPolymarketContext(polymarketUniverse.slice(0, 40)),
-      metaculus: formatMetaculusContext(marketContext.metaculus),
-      taggedPolymarket: formatPolymarketTaggedEvents(polymarketPicks.taggedEvents),
-      metaculusEdges: formatMetaculusEdges(polymarketPicks.edges),
-      whaleTrades: formatWhaleTrades(polymarketPicks.whaleTrades),
-    },
-  });
-  const aiRoutes = await requestAiRoutes(prompt.system, prompt.user, fallbackMaturity, getToken);
   return {
     routes: mergeAndRankRoutes(aiRoutes, polymarketUniverse, marketContext, params, returnPct, fallbackMaturity),
     degraded: polymarketUniverse.length === 0,
   };
 }
 
-// AI generation now only SUPPLEMENTS Polymarket routes — the deterministic builders
+// The AI slate only SUPPLEMENTS Polymarket routes — the deterministic builders
 // (treasury / ETF / playbook) and the live Polymarket universe cover a full result set on
 // their own. So every failure here is non-fatal: log and return [], and let the merge
-// proceed. An empty or thin Polymarket feed must never blow up the whole search.
+// proceed.
+//
+// The slate is generated once a day on the server and shared by every user (see
+// /api/ai-routes), so this is a cached read, not a model call. It carries no money:
+// each contract is priced here at this search's amount.
 async function requestAiRoutes(
-  systemPrompt: string,
-  userPrompt: string,
+  params: RouteParams,
   fallbackMaturity: number,
   getToken?: TokenProvider,
 ): Promise<Route[]> {
   if (!getToken) {
-    console.warn('[routes:ai] no authenticated AI session — skipping AI Polymarket enrichment');
+    console.warn('[routes:ai] no authenticated session — skipping the AI slate');
     return [];
   }
   try {
@@ -154,9 +113,7 @@ async function requestAiRoutes(
     const abort = new AbortController();
     const abortTimer = setTimeout(() => abort.abort(), AI_TIMEOUT_MS);
     const response = await fetch(`${apiBaseUrl()}/api/ai-routes`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ systemPrompt, userPrompt }),
+      headers: { Authorization: `Bearer ${token}` },
       signal: abort.signal,
     }).finally(() => clearTimeout(abortTimer));
     if (!response.ok) {
@@ -164,19 +121,24 @@ async function requestAiRoutes(
       return [];
     }
     const payload = await responseJson(response);
-    const content = isRecord(payload) && typeof payload.content === 'string' ? payload.content : '';
-    const parsed = parseJson(extractJson(content));
-    const values = Array.isArray(parsed) ? parsed : isRecord(parsed) && Array.isArray(parsed.routes) ? parsed.routes : [];
-    const routes = values.filter(isRoute).map((route) => ({
-      ...route,
-      maturesInDays: route.maturesInDays && route.maturesInDays > 0 ? Math.round(route.maturesInDays) : fallbackMaturity,
-    }));
-    if (routes.length === 0) console.warn('[routes:ai] no valid Polymarket routes parsed — using deterministic + live routes only');
-    return routes;
+    const values: unknown[] = isRecord(payload) && Array.isArray(payload.routes) ? payload.routes : [];
+    return values.filter(isRoute).map((route) => priceSlateRoute(route, params, fallbackMaturity));
   } catch (error) {
     console.warn(`[routes:ai] ${error instanceof Error ? error.message : String(error)}`);
     return [];
   }
+}
+
+/** A binary contract bought at price p returns stake × (1/p − 1) if it resolves in your favour. */
+function priceSlateRoute(route: Route, params: RouteParams, fallbackMaturity: number): Route {
+  const price = route.probability / 100;
+  const expectedReturn = price > 0 && price < 1 ? Math.round(params.balance * (1 / price - 1)) : 0;
+  return {
+    ...route,
+    expectedReturn,
+    meetsTarget: expectedReturn >= params.target,
+    maturesInDays: route.maturesInDays && route.maturesInDays > 0 ? Math.round(route.maturesInDays) : fallbackMaturity,
+  };
 }
 
 function mergeAndRankRoutes(
@@ -212,22 +174,6 @@ function mergeAndRankRoutes(
     availableInvestment: balance,
     deadlineDays: fallbackMaturity,
   }));
-}
-
-function formatRawPicks(picks: RawPick[]): string {
-  if (picks.length === 0) return 'No picks fetched; use market data only.';
-  const qualityRank = { high: 0, medium: 1, low: 2 } as const;
-  return [...picks]
-    .sort((a, b) => qualityRank[a.sourceQuality] - qualityRank[b.sourceQuality])
-    .slice(0, 40)
-    .map((pick, index) => `[${index + 1}] (${pick.category}) ${pick.pick}\nReasoning: ${pick.reasoning}\nSource: ${pick.source} [${pick.sourceQuality}]`)
-    .join('\n\n');
-}
-
-function extractJson(text: string): string {
-  return text.match(/<routes>([\s\S]*?)<\/routes>/)?.[1]?.trim()
-    ?? text.match(/```json\n?([\s\S]*?)```/)?.[1]?.trim()
-    ?? text.slice(Math.max(0, text.indexOf('[')), text.lastIndexOf(']') + 1);
 }
 
 function routesCacheKey(params: RouteParams): string {

@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { TextInput, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { Brand, Radius } from '@/constants/theme';
+import { Brand, Radius, bodyFontFamily } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 interface InvestmentAmountControlProps {
@@ -65,13 +65,13 @@ export function InvestmentAmountControl({
       {/* Label and input share a row so the whole card is one compact strip
           instead of stacking to three lines. */}
       <View className="flex-row items-center justify-between" style={{ gap: 10 }}>
-        <ThemedText style={{ fontSize: 12, fontWeight: '700', color: theme.textSecondary, flexShrink: 1 }}>
+        <ThemedText style={{ fontSize: 14, fontWeight: '700', color: theme.text, flexShrink: 1 }}>
           Willing to invest
         </ThemedText>
         <View
           className="flex-row items-center"
           style={{ borderRadius: Radius.md, borderWidth: 1.5, borderColor: theme.borderStrong, backgroundColor: theme.background, paddingHorizontal: 10 }}>
-          <ThemedText style={{ fontSize: 17, fontWeight: '800', color: Brand[500], marginRight: 2 }}>$</ThemedText>
+          <ThemedText style={{ fontSize: 17, fontWeight: '800', color: theme.text, marginRight: 2 }}>$</ThemedText>
           <TextInput
             value={displayed > 0 ? displayed.toLocaleString('en-US') : ''}
             onChangeText={(text) => {
@@ -85,14 +85,17 @@ export function InvestmentAmountControl({
             selectTextOnFocus
             accessibilityLabel="Amount you are willing to invest, in dollars"
             placeholder="0"
-            placeholderTextColor={theme.textTertiary}
-            style={{ minWidth: 70, color: theme.text, fontSize: 17, fontWeight: '800', fontVariant: ['tabular-nums'], paddingVertical: 7, textAlign: 'right' }}
+            placeholderTextColor={theme.textSecondary}
+            // A TextInput never passes through ThemedText, so naming the family is the
+            // only way the custom face reaches it: fontWeight alone is ignored for
+            // custom fonts on native and silently falls back to the system font.
+            style={{ minWidth: 70, color: theme.text, fontSize: 17, fontFamily: bodyFontFamily('800'), fontVariant: ['tabular-nums'], minHeight: 44, textAlign: 'right' }}
           />
         </View>
       </View>
 
       <Slider
-        style={{ width: '100%', height: 26 }}
+        style={{ width: '100%', height: 44 }}
         minimumValue={step}
         maximumValue={trackMaximum}
         step={step}
@@ -101,9 +104,11 @@ export function InvestmentAmountControl({
         value={Math.min(Math.max(amount, step), trackMaximum)}
         onValueChange={(value) => setDrag({ from: amount, value: Math.round(value) })}
         onSlidingComplete={(value) => onAmountChange(Math.round(value))}
+        accessibilityRole="adjustable"
         accessibilityLabel="Amount you are willing to invest"
+        accessibilityValue={{ text: `$${displayed.toLocaleString('en-US')}` }}
         minimumTrackTintColor={Brand[500]}
-        maximumTrackTintColor={theme.backgroundSelected}
+        maximumTrackTintColor={theme.borderControl}
         thumbTintColor={Brand[500]}
       />
     </View>

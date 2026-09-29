@@ -1,6 +1,6 @@
 import { useAuth } from '@clerk/clerk-expo';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, Pressable, View } from 'react-native';
+import { ActivityIndicator, AppState, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { authenticateWithBiometrics, useBiometricLock } from '@/api/hooks/useBiometricLock';
@@ -67,9 +67,41 @@ export function AppLockGate({ children }: { children: React.ReactNode }): React.
     }
   }, [shouldLock, unlocked, attemptUnlock]);
 
-  if (isLoading) return <>{children}</>;
-  if (!shouldLock || unlocked) return <>{children}</>;
+  // The app stays mounted underneath the lock and the lock covers it, rather than
+  // replacing it. Swapping the children out unmounted the whole navigator, so an
+  // unlock after the grace period started over from the first screen and threw away
+  // a half-filled quiz or form, and a deep link that landed during a cold-start check
+  // was dropped. While the lock setting is still loading for a signed-in user, the
+  // cover is drawn blank so no content flashes before the lock can appear.
+  const locked = shouldLock && !unlocked;
+  const pending = isLoading && isSignedIn;
+  const covered = locked || pending;
 
+  return (
+    <View style={{ flex: 1 }}>
+      <View
+        style={{ flex: 1 }}
+        accessibilityElementsHidden={covered}
+        importantForAccessibility={covered ? 'no-hide-descendants' : 'auto'}>
+        {children}
+      </View>
+      {covered ? (
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.background }]}>
+          {locked ? <LockScreen authenticating={authenticating} onUnlock={attemptUnlock} /> : null}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function LockScreen({
+  authenticating,
+  onUnlock,
+}: {
+  authenticating: boolean;
+  onUnlock: () => void;
+}): React.ReactElement {
+  const theme = useTheme();
   return (
     <View className="flex-1" style={{ backgroundColor: theme.background }}>
       <SafeAreaView className="flex-1 items-center justify-center gap-8 px-8">
@@ -81,7 +113,7 @@ export function AppLockGate({ children }: { children: React.ReactNode }): React.
         </View>
 
         <Pressable
-          onPress={attemptUnlock}
+          onPress={onUnlock}
           disabled={authenticating}
           className="py-4 px-8 items-center active:opacity-80"
           style={{ borderRadius: Radius.lg, backgroundColor: Brand[500], opacity: authenticating ? 0.6 : 1, ...Shadow.card }}>

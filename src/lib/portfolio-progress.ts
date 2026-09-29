@@ -137,6 +137,18 @@ export function stockIdentity(bet: TrackedBet): {
   };
 }
 
+/**
+ * What a closed position actually made or lost. A resolved position leaves the
+ * active list, so without this a goal forgot every win the moment it settled:
+ * its progress fell back to zero and it could never be marked reached.
+ * A win pays the return recorded for its stake; a loss costs what was put in.
+ */
+export function realizedPnlFor(bet: TrackedBet): number {
+  if (bet.status === 'won') return Math.max(0, bet.expectedReturn);
+  if (bet.status === 'lost') return -(bet.costBasis ?? bet.amountWagered);
+  return 0;
+}
+
 export function calculatePortfolioProgress({
   active,
   fallbackBalance,

@@ -22,11 +22,11 @@ export default function GoalAchievedScreen(): React.ReactElement {
   const theme = useTheme();
   const router = useRouter();
   const { goalId } = useLocalSearchParams<{ goalId?: string }>();
-  const { goals, pendingCelebration, achievedCount, markCelebrated, isLoading } = useSavingsGoal();
+  const { allGoals, pendingCelebration, achievedCount, markCelebrated, isLoading } = useSavingsGoal();
   const [entrance] = useState(() => new Animated.Value(0));
   // The goal comes from the navigation that opened this screen, so claiming the
   // celebration below can't pull it out from under the confetti.
-  const goal = goals.find((candidate) => candidate.id === goalId) ?? pendingCelebration;
+  const goal = allGoals.find((candidate) => candidate.id === goalId) ?? pendingCelebration;
 
   useEffect(() => {
     Animated.spring(entrance, { toValue: 1, friction: 6, tension: 60, useNativeDriver: true }).start();

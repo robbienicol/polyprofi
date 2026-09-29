@@ -70,7 +70,7 @@ export default function EarlyAccessScreen(): React.ReactElement {
           You only need to do this once on this device.
         </ThemedText>
 
-        <AuthTextButton label="Sign out" onPress={() => void signOut()} />
+        <AuthTextButton label="Sign out" onPress={() => void signOut().then(() => router.replace('/sign-in' as Href))} />
       </View>
     </AuthScreen>
   );

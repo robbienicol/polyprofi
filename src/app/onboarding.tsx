@@ -23,6 +23,7 @@ import { ONBOARDING_SLIDES } from "@/components/onboarding/onboarding-data";
 import { useSpokenLine } from "@/components/onboarding/quiz-kit";
 import { ThemedText } from "@/components/themed-text";
 import { BrandMark } from "@/components/ui/BrandMark";
+import { Icon } from "@/components/ui/Icon";
 import { Brand, OnBrand, Radius, Shadow } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 
@@ -109,13 +110,20 @@ export default function OnboardingScreen(): React.ReactElement {
     return (
       <View className="flex-1" style={{ backgroundColor: theme.background }} />
     );
-  return <OnboardingCarousel initialName={profile.name} />;
+  return (
+    <OnboardingCarousel
+      initialName={profile.name}
+      initialAgeConfirmed={profile.ageConfirmed}
+    />
+  );
 }
 
 function OnboardingCarousel({
   initialName,
+  initialAgeConfirmed,
 }: {
   initialName: string;
+  initialAgeConfirmed: boolean;
 }): React.ReactElement {
   const theme = useTheme();
   const router = useRouter();
@@ -134,6 +142,7 @@ function OnboardingCarousel({
   // Held locally through the carousel and written on the way out, so a keystroke
   // is not a disk write.
   const [name, setName] = useState(initialName);
+  const [ageConfirmed, setAgeConfirmed] = useState(initialAgeConfirmed);
   // Width has to come from the hook, not module-level Dimensions: on web's static
   // render pass it is 0, which collapses every slide and breaks the interpolations.
   const { width, height } = useWindowDimensions();
@@ -146,18 +155,19 @@ function OnboardingCarousel({
   const slide = ONBOARDING_SLIDES[activeIndex];
   const isLast = activeIndex === SLIDE_COUNT - 1;
   const trimmedName = name.trim();
-  // The name is the only answer any slide is waiting on; everywhere else the
-  // button is purely informational.
-  const canAdvance = slide.kind !== "name" || trimmedName.length > 0;
+  // The name slide is the only one waiting on anything: a name, and the 18+
+  // confirmation. Everywhere else the button is purely informational.
+  const canAdvance =
+    slide.kind !== "name" || (trimmedName.length > 0 && ageConfirmed);
 
   const finish = useCallback(() => {
     // Consent was given on the first slide: its button says so directly above the
     // Terms and Privacy links, which is the standard "by continuing" agreement.
-    patchProfile({ name: trimmedName, consented: true });
+    patchProfile({ name: trimmedName, consented: true, ageConfirmed });
     completeOnboarding(undefined, {
       onSuccess: () => router.replace("/" as Href),
     });
-  }, [completeOnboarding, patchProfile, router, trimmedName]);
+  }, [ageConfirmed, completeOnboarding, patchProfile, router, trimmedName]);
 
   const goNext = useCallback(() => {
     if (isLast) {
@@ -368,6 +378,8 @@ function OnboardingCarousel({
                               value={name}
                               onChangeText={setName}
                               onSubmit={goNext}
+                              ageConfirmed={ageConfirmed}
+                              onToggleAge={() => setAgeConfirmed((v) => !v)}
                             />
                           ) : (
                             /* Scaling alone would still overflow, since layout is unaware of the
@@ -652,10 +664,14 @@ function NameSlide({
   value,
   onChangeText,
   onSubmit,
+  ageConfirmed,
+  onToggleAge,
 }: {
   value: string;
   onChangeText: (text: string) => void;
   onSubmit: () => void;
+  ageConfirmed: boolean;
+  onToggleAge: () => void;
 }): React.ReactElement {
   const theme = useTheme();
   const [focused, setFocused] = useState(false);
@@ -688,6 +704,38 @@ function NameSlide({
           paddingHorizontal: 18,
         }}
       />
+      {/* Sits with the name and the terms line under the button: the three things
+          agreed to before anything else is shown. Unticked by default — an
+          age check that starts ticked confirms nothing. */}
+      <Pressable
+        onPress={onToggleAge}
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked: ageConfirmed }}
+        accessibilityLabel="I'm 18 or older"
+        className="flex-row items-center active:opacity-70"
+        style={{ gap: 10, paddingVertical: 6 }}
+        hitSlop={6}
+      >
+        <View
+          style={{
+            width: 22,
+            height: 22,
+            borderRadius: Radius.sm,
+            borderWidth: 2,
+            borderColor: ageConfirmed ? Brand[500] : theme.borderStrong,
+            backgroundColor: ageConfirmed ? Brand[500] : "transparent",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          {ageConfirmed ? (
+            <Icon glyph="✓" size={12} color={OnBrand} strokeWidth={3} />
+          ) : null}
+        </View>
+        <ThemedText style={{ fontSize: 14, fontWeight: "600", color: theme.text }}>
+          I'm 18 or older
+        </ThemedText>
+      </Pressable>
     </View>
   );
 }

@@ -25,6 +25,7 @@
 
 import type { PageCopy } from '@/components/onboarding/quiz-kit';
 import { DEFAULT_MARKETS, type SurveyAnswers } from '@/lib/onboarding-profile';
+import { NON_US, residenceLabel } from '@/lib/us-states';
 
 export const PAGE_IDS = [
   'outcome',
@@ -38,6 +39,9 @@ export const PAGE_IDS = [
   // No "setting you up" pause here either: it filled bars while nothing happened.
   'capital',
   'horizon',
+  // Asked for the after-tax numbers: state tax on a gain runs from nothing to
+  // double digits, so it changes what a pick actually leaves them with.
+  'residence',
   // What routes to, and — folded in rather than a separate gated page — the
   // one real permission grant in the whole run. Bank connect used to be its
   // own page, reachable only by toggling "Cut spending" on above; now it is
@@ -111,6 +115,7 @@ export const CAN_CONTINUE: Record<PageId, (answers: SurveyAnswers) => boolean> =
   outcome: (a) => Boolean(a.outcome),
   capital: (a) => Boolean(a.amount),
   horizon: (a) => Boolean(a.horizon),
+  residence: (a) => Boolean(a.residenceState),
   // No market is a real answer: it means "show me everything".
   markets: () => true,
   // Every service starts added; nothing here is required to move on.
@@ -143,6 +148,13 @@ const AMOUNT_ACKS: Record<string, string> = {
   '$100,000+': 'At that size, protecting it matters more than chasing big wins. We will treat it that way.',
   [SKIP]: "No problem. We'll ask how much each time instead.",
 };
+
+/** Neutral on purpose: the tax treatment of a gain differs by state and by kind. */
+function residenceAck(code: string | null): string | null {
+  if (code === NON_US) return "Noted. We'll leave state tax out of the estimates.";
+  const state = residenceLabel(code);
+  return state ? `${state}. We'll factor its taxes into what you keep.` : null;
+}
 
 export function buildPageCopy(
   answers: SurveyAnswers,
@@ -178,8 +190,13 @@ export function buildPageCopy(
       title: "What's your timeframe?",
       helper: 'This decides how long a pick is allowed to take before it pays out.',
     },
-    platforms: {
+    residence: {
       ack: HORIZON_ACKS[answers.horizon ?? ''] ?? null,
+      title: 'Which state do\nyou live in?',
+      helper: 'Wherever you file taxes. Taxes decide what a gain is actually worth to you, so we use this to estimate what you keep.',
+    },
+    platforms: {
+      ack: residenceAck(answers.residenceState),
       title: 'Where do you want\nus to look?',
       helper: 'Link your bank and credit cards and your real spending counts alongside every pick. Below that are the apps a pick gets bought on — drop any and we stop routing you there.',
     },

@@ -6,7 +6,7 @@ import { fetchRouteCoachReply } from '@/api/client/insights';
 import { formatProbability } from '@/components/molecules/RouteCard';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, OnBrand, Radius, Shadow } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import { useSemanticText, useTheme } from '@/hooks/use-theme';
 import type { Route } from '@/types/routes';
 
 interface CoachMessage {
@@ -17,6 +17,7 @@ interface CoachMessage {
 export function RouteCoach({ route }: { route: Route }): React.ReactElement {
   const { getToken } = useAuth();
   const theme = useTheme();
+  const semantic = useSemanticText();
   const [question, setQuestion] = useState('');
   const [messages, setMessages] = useState<CoachMessage[]>([]);
   const [loading, setLoading] = useState(false);
@@ -37,7 +38,7 @@ export function RouteCoach({ route }: { route: Route }): React.ReactElement {
     <View style={{ backgroundColor: theme.backgroundElevated, borderRadius: Radius.xl, padding: 16, borderWidth: 1, borderColor: theme.border, gap: 12, ...Shadow.card }}>
       <View className="flex-row items-center justify-between">
         <ThemedText style={{ fontSize: 16, fontWeight: '800', color: theme.text }}>AI Coach</ThemedText>
-        <View style={{ borderRadius: Radius.pill, paddingHorizontal: 8, paddingVertical: 3, backgroundColor: Brand[500] + '18', borderWidth: 1, borderColor: Brand[500] + '44' }}><ThemedText style={{ fontSize: 10, fontWeight: '800', color: Brand[500] }}>BETA</ThemedText></View>
+        <View style={{ borderRadius: Radius.pill, paddingHorizontal: 8, paddingVertical: 3, backgroundColor: Brand[500] + '18', borderWidth: 1, borderColor: Brand[500] + '44' }}><ThemedText style={{ fontSize: 11, fontWeight: '800', color: semantic.brand }}>BETA</ThemedText></View>
       </View>
       <View style={{ borderRadius: Radius.lg, backgroundColor: theme.backgroundElement, borderWidth: 1, borderColor: theme.border, padding: 13 }}><ThemedText style={{ fontSize: 13, color: theme.textSecondary, lineHeight: 19 }}>{starter}</ThemedText></View>
       {messages.map((message, index) => {
