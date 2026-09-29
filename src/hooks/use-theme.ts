@@ -3,12 +3,29 @@
  * https://docs.expo.dev/guides/color-schemes/
  */
 
-import { Colors } from '@/constants/theme';
+import { Colors, RiskTextScale, SemanticText } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
-export function useTheme() {
+/** The resolved appearance. `unspecified` and null both mean the light one. */
+export function useScheme(): 'light' | 'dark' {
   const scheme = useColorScheme();
-  const theme = scheme === 'unspecified' ? 'light' : scheme;
+  return scheme === 'dark' ? 'dark' : 'light';
+}
 
-  return Colors[theme];
+export function useTheme() {
+  return Colors[useScheme()];
+}
+
+/**
+ * The semantic hues tuned to be read as words rather than seen as fills. Same
+ * meanings as `Semantic`, legible at body sizes on this appearance's surfaces.
+ * Color a bar or a badge with `Semantic`; color the text with this.
+ */
+export function useSemanticText(): Record<keyof typeof SemanticText.light, string> {
+  return SemanticText[useScheme()];
+}
+
+/** The risk ramp as ink, safe → risky, for this appearance. */
+export function useRiskTextScale(): readonly string[] {
+  return RiskTextScale[useScheme()];
 }

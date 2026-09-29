@@ -30,19 +30,57 @@ export function dailyVolatility(closes: number[], window = 90): number | null {
 }
 
 /**
- * P(close return over horizonTradingDays >= targetPct), zero-drift lognormal.
+ * P(close return over horizonTradingDays >= targetPct), lognormal.
  * horizonTradingDays: ~5/week, ~21/month, ~63/3mo, ~252/year (matches market-data.ts's offsets).
+ *
+ * annualDriftPct is an assumed annual return (compounded, in log space). Default 0 = the
+ * original zero-drift behavior ("how much does this wobble", no view on direction). Pass a
+ * modest, DISCLOSED value for assets with a genuine long-run tendency (e.g. a broad index
+ * fund) so their odds aren't understated. Keep it 0 for pure speculation.
  */
 export function probabilityOfTargetMove(
   dailyVol: number | null,
   targetPct: number,
-  horizonTradingDays: number
+  horizonTradingDays: number,
+  annualDriftPct = 0
 ): number | null {
   if (dailyVol == null || horizonTradingDays <= 0) return null;
   if (targetPct <= 0) return 100;
   if (dailyVol <= 0) return 0; // no volatility, can't make a positive move
   const sigmaT = dailyVol * Math.sqrt(horizonTradingDays);
-  const z = Math.log(1 + targetPct / 100) / sigmaT;
+  const driftT = Math.log(1 + annualDriftPct / 100) * (horizonTradingDays / 252);
+  const z = (Math.log(1 + targetPct / 100) - driftT) / sigmaT;
+  return Math.max(0, Math.min(100, (1 - normalCdf(z)) * 100));
+}
+
+/**
+ * Black-Scholes N(d2): the risk-neutral probability a call finishes in the money at
+ * expiry (strike vs. spot, not a "% move"). Same lognormal machinery as
+ * `probabilityOfTargetMove` above — z is the same standardized distance from strike
+ * to the drifted mean — but computed directly rather than delegated to it: that
+ * function's `targetPct <= 0 → 100%` shortcut is correct for its own "did this move
+ * at all" framing, but wrong here (an at-the-money strike is a coin flip, not a
+ * certainty). The other real difference is drift: the risk-free rate, not zero.
+ *
+ * That risk-free drift is deliberate and only valid here: Black-Scholes prices a
+ * derivative under the assumption a hedger earns the risk-free rate on the
+ * replicating position, not because the stock is "expected" to return the T-bill
+ * rate. It is the correct assumption for pricing a call's odds — see how it's used
+ * for `OTM options`/`Selling premium` in playbook.ts, not for a plain directional
+ * stock bet, which stays zero-drift via `probabilityOfTargetMove`.
+ */
+export function callProbabilityITM(
+  spot: number,
+  strike: number,
+  dailyVol: number | null,
+  horizonTradingDays: number,
+  riskFreeAnnualPct = 0
+): number | null {
+  if (dailyVol == null || horizonTradingDays <= 0 || spot <= 0 || strike <= 0) return null;
+  const sigmaT = dailyVol * Math.sqrt(horizonTradingDays);
+  const driftT = Math.log(1 + riskFreeAnnualPct / 100) * (horizonTradingDays / 252);
+  if (sigmaT <= 0) return Math.log(strike / spot) <= driftT ? 100 : 0; // no modeled vol: drift alone decides it
+  const z = (Math.log(strike / spot) - driftT) / sigmaT;
   return Math.max(0, Math.min(100, (1 - normalCdf(z)) * 100));
 }
 
@@ -66,4 +104,21 @@ export function __selfCheck(): void {
   console.assert(longHorizon > shortHorizon, 'more time → higher P(hit) for same target/vol');
 
   console.assert(probabilityOfTargetMove(null, 10, 21) === null, 'no vol data → null, not a fake number');
+
+  // positive drift raises P(hit) for a positive target; default stays zero-drift
+  const noDrift = probabilityOfTargetMove(0.01, 8, 252)!;
+  const withDrift = probabilityOfTargetMove(0.01, 8, 252, 8)!;
+  console.assert(withDrift > noDrift, 'assumed positive return raises P(hit)');
+  console.assert(probabilityOfTargetMove(0.01, 8, 252, 0) === noDrift, 'drift defaults to 0 (unchanged)');
+
+  // callProbabilityITM: a strike at spot is an even-money coin flip at zero risk-free rate
+  const atTheMoney = callProbabilityITM(100, 100, 0.02, 21, 0)!;
+  console.assert(Math.abs(atTheMoney - 50) < 1e-6, 'strike == spot, no drift → 50% ITM');
+  // a strike above spot is harder to clear than one at spot
+  const otm = callProbabilityITM(100, 110, 0.02, 21, 0)!;
+  console.assert(otm < atTheMoney, 'higher strike → lower P(ITM)');
+  // a higher risk-free rate raises P(ITM) for a fixed strike — it's the drift, not a forecast
+  const higherRate = callProbabilityITM(100, 110, 0.02, 21, 5)!;
+  console.assert(higherRate > otm, 'higher risk-free rate raises P(ITM) for the same strike');
+  console.assert(callProbabilityITM(100, 100, null, 21) === null, 'no vol data → null, not a fake number');
 }

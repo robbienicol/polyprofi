@@ -4,8 +4,40 @@ export interface PolymarketEntry {
   prices: number[];
   volumeM: number;
   liquidityM?: number;
+  spread?: number;
+  bestBid?: number;
+  bestAsk?: number;
+  oneDayPriceChange?: number;
+  oneWeekPriceChange?: number;
+  oneMonthPriceChange?: number;
   slug?: string;
   endDate?: string;
+  /** Polymarket tag slugs, bookkeeping tags already stripped. Absent when untagged. */
+  tagSlugs?: string[];
+  /** True once Polymarket has settled this market — prices are then final, not a live quote. */
+  closed?: boolean;
+  /** CLOB token per outcome, aligned with `outcomes`. Absent on older cached rows. */
+  clobTokenIds?: string[];
+}
+
+export interface KalshiEntry {
+  ticker: string;
+  eventTicker: string;
+  seriesTicker: string;
+  title: string;
+  yesSubTitle?: string;
+  noSubTitle?: string;
+  yesBid?: number;
+  yesAsk?: number;
+  noBid?: number;
+  noAsk?: number;
+  volume?: number;
+  volume24h?: number;
+  liquidity?: number;
+  closeTime?: string;
+  openTime?: string;
+  expectedExpirationTime?: string;
+  status: string;
 }
 
 export interface SportsGame {
@@ -16,6 +48,8 @@ export interface SportsGame {
   status: string;
   homeScore?: number;
   awayScore?: number;
+  /** ESPN's own phase: 'pre' | 'in' | 'post'. 'post' is the final-score signal. */
+  state?: string;
 }
 
 export interface StockQuote {
