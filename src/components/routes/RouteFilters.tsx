@@ -1,6 +1,6 @@
 import Slider from '@react-native-community/slider';
 import { SlidersHorizontal } from 'lucide-react-native';
-import { Pressable, ScrollView, Switch, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
 
 import { InvestmentAmountControl } from '@/components/routes/InvestmentAmountControl';
 import { Icon } from '@/components/ui/Icon';
@@ -160,8 +160,7 @@ export function RouteFilters({
   // user asks to go deep, so that is what reveals the facets.
   const showPredictionFacets = isPredictionCategory(filters.category);
   const anyPredictionFacetActive = filters.predictionTopic != null
-    || filters.maxDaysToResolve != null
-    || filters.groupByChance;
+    || filters.maxDaysToResolve != null;
 
   return (
     <View
@@ -268,21 +267,6 @@ export function RouteFilters({
               </FilterRow>
             </Section>
 
-            {/* A real UISwitch. The pill that rendered the words "On"/"Off" with
-                accessibilityRole="switch" bolted onto it was the clearest ported-from-
-                the-web tell on the screen, and it was 30pt tall. */}
-            <View className="flex-row items-center justify-between" style={{ gap: 10, minHeight: 44 }}>
-              <ThemedText style={{ fontSize: 14, fontWeight: '600', color: theme.text, flex: 1 }}>
-                Group by chance
-              </ThemedText>
-              <Switch
-                value={filters.groupByChance}
-                onValueChange={(next) => update({ groupByChance: next })}
-                accessibilityLabel="Group routes by chance of hitting the goal"
-                trackColor={{ true: Brand[500], false: theme.borderControl }}
-                ios_backgroundColor={theme.borderControl}
-              />
-            </View>
           </View>
         </>
       ) : null}

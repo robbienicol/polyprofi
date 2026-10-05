@@ -706,13 +706,13 @@ function GoalUnreachable({ reach, when, investing, hasFilters, onRaiseInvestment
       </ThemedText>
       <ThemedText style={{ fontSize: 14, lineHeight: 21, color: theme.textSecondary }}>
         {closest > 0
-          ? `The closest route gets you to +$${closest.toLocaleString()} — ${percent}% of it — at the $${investing.toLocaleString()} you're putting in.`
-          : `At the $${investing.toLocaleString()} you're putting in, nothing here makes progress on it.`}
+          ? `With $${investing.toLocaleString()} in, the best route makes about +$${closest.toLocaleString()}. That's ${percent}% of your goal.`
+          : `With $${investing.toLocaleString()} in, no route makes any progress on it.`}
       </ThemedText>
       <ThemedText style={{ fontSize: 14, lineHeight: 21, color: theme.textSecondary }}>
         {moreHelps
-          ? `$${reach.investmentToReach!.toLocaleString()} is where the first route reaches it. Below that, the math does not get there — whatever the risk.`
-          : 'More money would not change it either. The honest options are a smaller number or a longer deadline.'}
+          ? `To hit +$${reach.target.toLocaleString()}, you'd need to put in at least $${reach.investmentToReach!.toLocaleString()}.`
+          : 'Putting in more wouldn\'t fix it. Try a smaller goal or a longer deadline.'}
       </ThemedText>
       <View className="flex-row flex-wrap" style={{ gap: 8, marginTop: 2 }}>
         {moreHelps ? (
