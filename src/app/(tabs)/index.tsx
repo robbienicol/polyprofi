@@ -8,7 +8,7 @@ import { useGoalsProgress, type GoalProgress } from '@/api/hooks/useGoalProgress
 import { usePortfolioProgress } from '@/api/hooks/usePortfolioProgress';
 import { usePortfolioSeries } from '@/api/hooks/usePortfolioSeries';
 import { useDefaultSearch } from '@/api/hooks/useDefaultSearch';
-import { useMoney, usePreferences } from '@/api/hooks/usePreferences';
+import { useMoney } from '@/api/hooks/usePreferences';
 import { useQuizAnswers } from '@/api/hooks/useQuizAnswers';
 import type { PortfolioProgressPoint } from '@/api/client/storage';
 import { useSavedRoutes } from '@/api/hooks/useSavedRoutes';
@@ -19,16 +19,13 @@ import {
   PortfolioRange,
   rangeLabel,
 } from '@/components/molecules/PortfolioLineChart';
-import { OutcomeRangeBar } from '@/components/portfolio/PortfolioVisuals';
 import { MetricInfo } from '@/components/ui/MetricInfo';
 import { Icon } from '@/components/ui/Icon';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, OnBrand, Radius, Semantic, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { maturityWords, portfolioStats } from '@/lib/portfolio';
 import { describeSearch } from '@/lib/quiz-profile';
 import { cashFlowAdjustedChange } from '@/lib/portfolio-progress';
-import { outcomeRange } from '@/lib/portfolio-shape';
 import { goalProgressFraction, goalRemaining, isOpenEnded } from '@/lib/savings-goal';
 import type { SavingsGoal } from '@/types/bets';
 
@@ -56,7 +53,6 @@ export default function HomeScreen(): React.ReactElement {
   const router = useRouter();
   const { user } = useUser();
   const money = useMoney();
-  const { preferences } = usePreferences();
   const { bets } = useTrackedBets();
   const { history } = useSavedRoutes();
   const { quizAnswers, saveAnswers } = useQuizAnswers();
@@ -96,33 +92,7 @@ export default function HomeScreen(): React.ReactElement {
   );
   const shownGoals = openGoals.slice(0, 3);
 
-  // Expected value is a probability-weighted average over outcomes, not a price,
-  // so it is labelled and kept out of the headline: adding it to tracked value
-  // would make a modelled number read as money already in the account.
   const activeBets = useMemo(() => bets.filter((bet) => bet.status === 'active'), [bets]);
-  const stats = useMemo(
-    () => portfolioStats(bets, preferences.conservativeProjections),
-    [bets, preferences.conservativeProjections]
-  );
-  const expectedHorizon = useMemo(
-    () => activeBets.reduce((longest, bet) => Math.max(longest, bet.maturesInDays ?? 0), 0),
-    [activeBets]
-  );
-  // The spread the single expected figure hides. Same conservative setting as the
-  // expectation itself, so the two cannot describe different portfolios.
-  const outcomes = useMemo(
-    () => outcomeRange(bets, preferences.conservativeProjections),
-    [bets, preferences.conservativeProjections]
-  );
-  // Break-even only gets a line when it is actually on the bar. Once every position
-  // is deep enough in profit that the worst case still clears what was put in, the
-  // marker would sit off the left end and point at nothing.
-  const breakEvenPosition = outcomes.best > outcomes.worst
-    && outcomes.staked >= outcomes.worst
-    && outcomes.staked <= outcomes.best
-    ? (outcomes.staked - outcomes.worst) / (outcomes.best - outcomes.worst)
-    : null;
-
   // Now, as the header shows it. The chart ends on exactly this point.
   const livePoint = useMemo<PortfolioProgressPoint | null>(() => (
     progress.activeCount > 0
@@ -267,81 +237,6 @@ export default function HomeScreen(): React.ReactElement {
               />
             </View>
 
-            {/* Where this could end up. The expected figure alone said nothing about
-                the spread around it, which is the part that decides whether a plan is
-                one you can live with — so the average, the good day and the bad day
-                are shown together, on one axis, with break-even marked. */}
-            {activeBets.length > 0 ? (
-              <View
-                style={{ borderTopWidth: 1, borderTopColor: theme.border, paddingTop: 12, marginTop: 4, gap: 10 }}>
-                <View className="flex-row items-end justify-between" style={{ gap: 12 }}>
-                  <View className="flex-1">
-                    <View className="flex-row items-center" style={{ gap: 6 }}>
-                      <ThemedText style={{ fontSize: 11, fontWeight: '800', color: theme.textTertiary, letterSpacing: 0.35 }}>
-                        EXPECTED PAYOUT
-                      </ThemedText>
-                      <MetricInfo metric="expectedPayout" />
-                    </View>
-                    <ThemedText style={{ fontSize: 22, fontWeight: '800', color: theme.text, letterSpacing: -0.6, marginTop: 3, ...MONO }}>
-                      {money(outcomes.expected)}
-                    </ThemedText>
-                  </View>
-                  <View style={{ alignItems: 'flex-end' }}>
-                    <View className="flex-row items-center" style={{ gap: 6 }}>
-                      <ThemedText style={{ fontSize: 11, fontWeight: '800', color: theme.textTertiary, letterSpacing: 0.35 }}>
-                        EXPECTED PROFIT
-                      </ThemedText>
-                      <MetricInfo metric="expectedProfit" />
-                    </View>
-                    {/* Neutral, never green or red: this is a model average, so colouring
-                        it would read as money made or lost. */}
-                    <ThemedText style={{ fontSize: 15, fontWeight: '800', color: theme.text, letterSpacing: -0.3, marginTop: 4, ...MONO }}>
-                      {money(stats.totalEv, { signed: true })}
-                    </ThemedText>
-                    <ThemedText style={{ fontSize: 11, fontWeight: '700', color: theme.textSecondary, marginTop: 1, ...MONO }}>
-                      {stats.weightedReturnPct >= 0 ? '+' : '−'}{Math.abs(stats.weightedReturnPct).toFixed(1)}% on {money(stats.totalStaked, { decimals: 0 })}
-                    </ThemedText>
-                  </View>
-                </View>
-
-                <OutcomeRangeBar
-                  expectedPosition={outcomes.expectedPosition}
-                  breakEvenPosition={breakEvenPosition}
-                />
-
-                <View className="flex-row items-start justify-between" style={{ gap: 12 }}>
-                  <View>
-                    <ThemedText style={{ fontSize: 10.5, fontWeight: '800', color: theme.textTertiary, letterSpacing: 0.35 }}>
-                      WORST CASE
-                    </ThemedText>
-                    <ThemedText style={{ fontSize: 13, fontWeight: '800', color: theme.text, marginTop: 2, ...MONO }}>
-                      {money(outcomes.worst, { decimals: 0 })}
-                    </ThemedText>
-                  </View>
-                  <View className="flex-row items-center" style={{ gap: 6, paddingTop: 3 }}>
-                    <ThemedText style={{ fontSize: 10.5, fontWeight: '800', color: theme.textTertiary, letterSpacing: 0.35 }}>
-                      RANGE
-                    </ThemedText>
-                    <MetricInfo metric="outcomeRange" />
-                  </View>
-                  <View style={{ alignItems: 'flex-end' }}>
-                    <ThemedText style={{ fontSize: 10.5, fontWeight: '800', color: theme.textTertiary, letterSpacing: 0.35 }}>
-                      BEST CASE
-                    </ThemedText>
-                    <ThemedText style={{ fontSize: 13, fontWeight: '800', color: theme.text, marginTop: 2, ...MONO }}>
-                      {money(outcomes.best, { decimals: 0 })}
-                    </ThemedText>
-                  </View>
-                </View>
-
-                <ThemedText style={{ fontSize: 11, lineHeight: 15, color: theme.textTertiary }}>
-                  {expectedHorizon > 0
-                    ? `Modelled over ${maturityWords(expectedHorizon)}. No money has moved${breakEvenPosition != null ? '; the thin line is what you put in' : ''}.`
-                    : `Modelled from probability and risk. No money has moved${breakEvenPosition != null ? '; the thin line is what you put in' : ''}.`}
-                </ThemedText>
-              </View>
-            ) : null}
-
             <View
               className="flex-row items-center justify-between"
               style={{ borderTopWidth: 1, borderTopColor: theme.border, paddingTop: 12, marginTop: 4 }}>
@@ -357,33 +252,6 @@ export default function HomeScreen(): React.ReactElement {
               ) : null}
             </View>
           </View>
-
-          {/* Distance to the goals still running. Hidden with no open goals — the button
-              below is the whole answer then, and an empty rail would only be furniture. */}
-          {shownGoals.length > 0 ? (
-            <View style={{ gap: 10 }}>
-              <View className="flex-row items-center justify-between" style={{ paddingHorizontal: 2 }}>
-                <ThemedText style={{ fontSize: 11, fontWeight: '800', color: theme.textTertiary, letterSpacing: 0.35 }}>
-                  STILL TO GO
-                </ThemedText>
-                {openGoals.length > shownGoals.length ? (
-                  <Pressable onPress={() => router.push('/(tabs)/goals')} hitSlop={8} className="active:opacity-60">
-                    <ThemedText style={{ fontSize: 12, fontWeight: '800', color: Brand[500] }}>
-                      All {openGoals.length} goals →
-                    </ThemedText>
-                  </Pressable>
-                ) : null}
-              </View>
-              {shownGoals.map(({ goal, progress: goalProgress }) => (
-                <GoalTrack
-                  key={goal.id}
-                  goal={goal}
-                  progress={goalProgress}
-                  onPress={() => router.push(`/goal/${goal.id}` as Href)}
-                />
-              ))}
-            </View>
-          ) : null}
 
           {/* One job on this screen: go make money. Straight to results on the last
               search, else on what onboarding said — the quiz is optional, one row down. */}
@@ -403,7 +271,7 @@ export default function HomeScreen(): React.ReactElement {
             className="py-5 items-center active:opacity-85"
             style={{ borderRadius: Radius.xl, backgroundColor: Brand[500], ...Shadow.card }}>
             <ThemedText style={{ fontSize: 17, fontWeight: '900', color: OnBrand, letterSpacing: -0.2 }}>
-              Find routes →
+              Find quick routes →
             </ThemedText>
             <ThemedText style={{ fontSize: 11, fontWeight: '700', color: OnBrand, opacity: 0.7, marginTop: 3 }}>
               Ranked routes from live markets, in under a minute
@@ -440,6 +308,33 @@ export default function HomeScreen(): React.ReactElement {
                 Edit →
               </ThemedText>
             </Pressable>
+          ) : null}
+
+          {/* Distance to the goals still running. Hidden with no open goals — the button
+              below is the whole answer then, and an empty rail would only be furniture. */}
+          {shownGoals.length > 0 ? (
+            <View style={{ gap: 10 }}>
+              <View className="flex-row items-center justify-between" style={{ paddingHorizontal: 2 }}>
+                <ThemedText style={{ fontSize: 11, fontWeight: '800', color: theme.textTertiary, letterSpacing: 0.35 }}>
+                  STILL TO GO
+                </ThemedText>
+                {openGoals.length > shownGoals.length ? (
+                  <Pressable onPress={() => router.push('/(tabs)/goals')} hitSlop={8} className="active:opacity-60">
+                    <ThemedText style={{ fontSize: 12, fontWeight: '800', color: Brand[500] }}>
+                      All {openGoals.length} goals →
+                    </ThemedText>
+                  </Pressable>
+                ) : null}
+              </View>
+              {shownGoals.map(({ goal, progress: goalProgress }) => (
+                <GoalTrack
+                  key={goal.id}
+                  goal={goal}
+                  progress={goalProgress}
+                  onPress={() => router.push(`/goal/${goal.id}` as Href)}
+                />
+              ))}
+            </View>
           ) : null}
 
           {/* Only surfaced when a position actually needs a decision. */}

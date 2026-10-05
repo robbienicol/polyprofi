@@ -5,7 +5,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useSavingsGoal } from '@/api/hooks/useSavingsGoal';
 import { OnboardingGlow } from '@/components/onboarding/OnboardingPreviews';
-import { Icon } from '@/components/ui/Icon';
 import { ThemedText } from '@/components/themed-text';
 import { bodyFontFamily, Brand, displayFontFamily, OnBrand, Radius, Semantic, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -13,25 +12,19 @@ import { Haptic } from '@/lib/haptics';
 import { goalByLabel } from '@/lib/savings-goal';
 
 /**
- * Two ways to set a goal, and nothing pre-picked. The preset grid (headphones, a
+ * Name it and set the number, nothing pre-picked. The preset grid (headphones, a
  * surfboard, a car…) put six stranger's goals between the user and their own, and
- * its dollar figures were guesses. Now it is: name it and set the number, or skip
- * the finish line entirely.
+ * its dollar figures were guesses. There is no open-ended option any more: anyone
+ * who just wants to see routes gets them from "Find quick routes" on Home.
  */
-type Mode = 'target' | 'open';
-
 const TARGET_EMOJI = '🎯';
-const OPEN_EMOJI = '💸';
-/** What an unnamed open-ended goal is called on the Goals tab. */
-const OPEN_DEFAULT_LABEL = 'Custom goal';
 /** Widest amount the hero field shows without running off a small phone. */
 const MAX_DIGITS = 7;
 
 interface ChosenGoal {
   emoji: string;
   label: string;
-  /** Absent for the open-ended goal. */
-  targetAmount?: number;
+  targetAmount: number;
 }
 
 function groupingCommas(digits: string): number {
@@ -44,7 +37,6 @@ export default function GoalSetupScreen(): React.ReactElement {
   const { allGoals, hasAnyGoal, isLoading, addGoalAsync } = useSavingsGoal();
   const amountRef = useRef<TextInput>(null);
 
-  const [mode, setMode] = useState<Mode>('target');
   const [label, setLabel] = useState('');
   const [amount, setAmount] = useState('');
   const [labelFocused, setLabelFocused] = useState(false);
@@ -58,12 +50,9 @@ export default function GoalSetupScreen(): React.ReactElement {
   // loading, which would make every visit look like the first one. Drafts count.
   const isFirstGoal = !hasAnyGoal;
 
-  const chosen: ChosenGoal | null =
-    mode === 'open'
-      ? { emoji: OPEN_EMOJI, label: trimmedLabel || OPEN_DEFAULT_LABEL }
-      : trimmedLabel && amountValue > 0
-        ? { emoji: TARGET_EMOJI, label: trimmedLabel, targetAmount: amountValue }
-        : null;
+  const chosen: ChosenGoal | null = trimmedLabel && amountValue > 0
+    ? { emoji: TARGET_EMOJI, label: trimmedLabel, targetAmount: amountValue }
+    : null;
 
   // The goal is created here, on the tap, so it is on the Goals tab the moment
   // this screen closes — tapping "Add goal" and then finding nothing there read as
@@ -77,10 +66,9 @@ export default function GoalSetupScreen(): React.ReactElement {
     setSaveError(null);
 
     // Only a goal still in play: a reached goal, or a hidden draft, reused here would
-    // throw the new target away. The default open-ended name never matches, or a
-    // second "Custom goal" could never be created.
+    // throw the new target away.
     const live = allGoals.filter((goal) => !goal.draft && !goal.achievedAt);
-    const existing = chosen.label === OPEN_DEFAULT_LABEL ? null : goalByLabel(live, chosen.label);
+    const existing = goalByLabel(live, chosen.label);
     if (existing) {
       Haptic.success();
       router.replace(`/quiz?goalId=${existing.id}` as Href);
@@ -92,7 +80,7 @@ export default function GoalSetupScreen(): React.ReactElement {
       const { goal } = await addGoalAsync({
         label: chosen.label,
         emoji: chosen.emoji,
-        ...(chosen.targetAmount != null ? { targetAmount: chosen.targetAmount } : null),
+        targetAmount: chosen.targetAmount,
       });
       Haptic.success();
       router.replace(`/quiz?goalId=${goal.id}` as Href);
@@ -106,14 +94,11 @@ export default function GoalSetupScreen(): React.ReactElement {
   // Existing goals decide the copy, so don't paint until they're known.
   if (isLoading) return <View className="flex-1" style={{ backgroundColor: theme.background }} />;
 
-  const hint =
-    mode === 'open'
-      ? 'Routes ranked, earnings tracked'
-      : !trimmedLabel
-        ? 'Name your goal to continue'
-        : amountValue <= 0
-          ? 'Set how much to continue'
-          : null;
+  const hint = !trimmedLabel
+    ? 'Name your goal to continue'
+    : amountValue <= 0
+      ? 'Set how much to continue'
+      : null;
 
   return (
     <View className="flex-1" style={{ backgroundColor: theme.background }}>
@@ -144,43 +129,6 @@ export default function GoalSetupScreen(): React.ReactElement {
               </ThemedText>
             </View>
 
-            {/* The two ways in. A segmented switch rather than two cards, so the page
-                reads as one form with a toggle, not a menu to choose from. */}
-            <View
-              className="flex-row"
-              style={{ padding: 4, borderRadius: Radius.pill, backgroundColor: theme.backgroundSelected }}>
-              {(
-                [
-                  { value: 'target', label: 'Set a target' },
-                  { value: 'open', label: 'No finish line' },
-                ] as const
-              ).map((option) => {
-                const selected = mode === option.value;
-                return (
-                  <Pressable
-                    key={option.value}
-                    onPress={() => {
-                      if (mode !== option.value) Haptic.select();
-                      setMode(option.value);
-                    }}
-                    accessibilityRole="tab"
-                    accessibilityState={{ selected }}
-                    className="flex-1 items-center active:opacity-80"
-                    style={{
-                      paddingVertical: 10,
-                      borderRadius: Radius.pill,
-                      backgroundColor: selected ? theme.backgroundElevated : 'transparent',
-                      ...(selected ? Shadow.card : null),
-                    }}>
-                    <ThemedText
-                      style={{ fontSize: 14, fontWeight: '700', color: selected ? theme.text : theme.textSecondary }}>
-                      {option.label}
-                    </ThemedText>
-                  </Pressable>
-                );
-              })}
-            </View>
-
             <View
               style={{
                 borderRadius: Radius.xl,
@@ -191,7 +139,7 @@ export default function GoalSetupScreen(): React.ReactElement {
                 gap: 22,
                 ...Shadow.card,
               }}>
-              <Field label={mode === 'open' ? 'Call it (optional)' : "It's for"}>
+              <Field label="It's for">
                 <TextInput
                   value={label}
                   onChangeText={(text) => {
@@ -200,12 +148,12 @@ export default function GoalSetupScreen(): React.ReactElement {
                   }}
                   onFocus={() => setLabelFocused(true)}
                   onBlur={() => setLabelFocused(false)}
-                  onSubmitEditing={() => (mode === 'target' ? amountRef.current?.focus() : undefined)}
-                  placeholder={mode === 'open' ? OPEN_DEFAULT_LABEL : 'A new laptop'}
+                  onSubmitEditing={() => amountRef.current?.focus()}
+                  placeholder="A new laptop"
                   placeholderTextColor={theme.textTertiary}
                   maxLength={40}
                   autoCapitalize="sentences"
-                  returnKeyType={mode === 'target' ? 'next' : 'done'}
+                  returnKeyType="next"
                   accessibilityLabel="Goal name"
                   style={{
                     fontFamily: displayFontFamily('700'),
@@ -220,72 +168,52 @@ export default function GoalSetupScreen(): React.ReactElement {
                 />
               </Field>
 
-              {mode === 'target' ? (
-                <Field label="How much">
-                  <Pressable
-                    onPress={() => amountRef.current?.focus()}
-                    accessibilityRole="button"
-                    accessibilityLabel={amountValue > 0 ? `Amount, ${amountValue} dollars` : 'Set an amount'}
-                    className="flex-row items-end"
+              <Field label="How much">
+                <Pressable
+                  onPress={() => amountRef.current?.focus()}
+                  accessibilityRole="button"
+                  accessibilityLabel={amountValue > 0 ? `Amount, ${amountValue} dollars` : 'Set an amount'}
+                  className="flex-row items-end"
+                  style={{
+                    borderBottomWidth: 2,
+                    borderBottomColor: amountFocused ? Brand[500] : theme.borderStrong,
+                    paddingBottom: 2,
+                  }}>
+                  <ThemedText
                     style={{
-                      borderBottomWidth: 2,
-                      borderBottomColor: amountFocused ? Brand[500] : theme.borderStrong,
-                      paddingBottom: 2,
+                      fontFamily: bodyFontFamily('800'),
+                      fontSize: 30,
+                      lineHeight: 58,
+                      color: amountValue > 0 ? Brand[500] : theme.textTertiary,
+                      marginRight: 2,
                     }}>
-                    <ThemedText
-                      style={{
-                        fontFamily: bodyFontFamily('800'),
-                        fontSize: 30,
-                        lineHeight: 58,
-                        color: amountValue > 0 ? Brand[500] : theme.textTertiary,
-                        marginRight: 2,
-                      }}>
-                      $
-                    </ThemedText>
-                    <TextInput
-                      ref={amountRef}
-                      value={amountValue > 0 ? amountValue.toLocaleString() : ''}
-                      onChangeText={(text) => setAmount(text.replace(/[^0-9]/g, '').slice(0, MAX_DIGITS))}
-                      onFocus={() => setAmountFocused(true)}
-                      onBlur={() => setAmountFocused(false)}
-                      keyboardType="number-pad"
-                      inputMode="numeric"
-                      placeholder="0"
-                      placeholderTextColor={theme.textTertiary}
-                      style={{
-                        fontFamily: bodyFontFamily('800'),
-                        fontSize: 48,
-                        lineHeight: 58,
-                        color: Brand[500],
-                        fontVariant: ['tabular-nums'],
-                        padding: 0,
-                        // TextInput can't hug its text, so the tap target is the whole
-                        // row (the Pressable above) and the field just fills it.
-                        flex: 1,
-                        minWidth: Math.max(1, amount.length) * 30 + groupingCommas(amount) * 12 + 12,
-                      }}
-                    />
-                  </Pressable>
-                </Field>
-              ) : (
-                <View className="flex-row" style={{ gap: 12 }}>
-                  <View
-                    style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: Radius.md,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      backgroundColor: Brand[500] + '18',
-                    }}>
-                    <Icon glyph={OPEN_EMOJI} size={20} color={Brand[500]} strokeWidth={1.75} />
-                  </View>
-                  <ThemedText style={{ flex: 1, fontSize: 13.5, lineHeight: 20, color: theme.textSecondary }}>
-                    No target and no progress bar. Just the best routes for what you put in, and a running
-                    total of what they earned.
+                    $
                   </ThemedText>
-                </View>
-              )}
+                  <TextInput
+                    ref={amountRef}
+                    value={amountValue > 0 ? amountValue.toLocaleString() : ''}
+                    onChangeText={(text) => setAmount(text.replace(/[^0-9]/g, '').slice(0, MAX_DIGITS))}
+                    onFocus={() => setAmountFocused(true)}
+                    onBlur={() => setAmountFocused(false)}
+                    keyboardType="number-pad"
+                    inputMode="numeric"
+                    placeholder="0"
+                    placeholderTextColor={theme.textTertiary}
+                    style={{
+                      fontFamily: bodyFontFamily('800'),
+                      fontSize: 48,
+                      lineHeight: 58,
+                      color: Brand[500],
+                      fontVariant: ['tabular-nums'],
+                      padding: 0,
+                      // TextInput can't hug its text, so the tap target is the whole
+                      // row (the Pressable above) and the field just fills it.
+                      flex: 1,
+                      minWidth: Math.max(1, amount.length) * 30 + groupingCommas(amount) * 12 + 12,
+                    }}
+                  />
+                </Pressable>
+                </Field>
             </View>
           </ScrollView>
 
@@ -302,14 +230,14 @@ export default function GoalSetupScreen(): React.ReactElement {
             }}>
             {saveError ? (
               <ThemedText style={{ fontSize: 13, color: Semantic.negative, paddingHorizontal: 2 }}>{saveError}</ThemedText>
-            ) : chosen && mode === 'target' ? (
+            ) : chosen ? (
               <View className="flex-row items-center justify-between" style={{ paddingHorizontal: 2 }}>
                 <ThemedText numberOfLines={1} style={{ flex: 1, fontSize: 13, color: theme.textSecondary }}>
                   Saving for {chosen.label}
                 </ThemedText>
                 <ThemedText
                   style={{ fontFamily: bodyFontFamily('800'), fontSize: 15, color: Brand[500], fontVariant: ['tabular-nums'] }}>
-                  ${chosen.targetAmount?.toLocaleString()}
+                  ${chosen.targetAmount.toLocaleString()}
                 </ThemedText>
               </View>
             ) : hint ? (
