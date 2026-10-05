@@ -56,19 +56,28 @@ export function RouteSearchBar({
           backgroundColor: Brand[500] + '0F',
         }}>
         <Icon glyph="🔎" size={16} color={Brand[500]} />
-        <TextInput
-          value={value}
-          onChangeText={onChange}
-          placeholder="Search Tesla, gold, US Open…"
-          placeholderTextColor={theme.textSecondary}
-          autoCorrect={false}
-          autoCapitalize="none"
-          returnKeyType="search"
-          accessibilityLabel="Search all routes by keyword"
-          // A fixed height with no vertical padding: iOS centres single-line text itself,
-          // and padding inside a min-height pushed the placeholder below the field.
-          style={{ flex: 1, color: theme.text, fontSize: 15, fontFamily: bodyFontFamily('600'), height: 44, paddingVertical: 0 }}
-        />
+        {/* The placeholder is drawn here, not by TextInput: on iOS (RN 0.85) the native
+            placeholder rendered below the field's centre line and clipped, while typed
+            text sat correctly. */}
+        <View className="flex-1 justify-center" style={{ height: 44 }}>
+          {value.length === 0 ? (
+            <ThemedText
+              numberOfLines={1}
+              pointerEvents="none"
+              style={{ position: 'absolute', left: 0, right: 0, fontSize: 15, fontFamily: bodyFontFamily('600'), color: theme.textSecondary }}>
+              Search Tesla, gold, US Open…
+            </ThemedText>
+          ) : null}
+          <TextInput
+            value={value}
+            onChangeText={onChange}
+            autoCorrect={false}
+            autoCapitalize="none"
+            returnKeyType="search"
+            accessibilityLabel="Search all routes by keyword"
+            style={{ color: theme.text, fontSize: 15, fontFamily: bodyFontFamily('600'), height: 44, paddingVertical: 0 }}
+          />
+        </View>
         {value.length > 0 ? (
           <Pressable
             onPress={() => onChange('')}
