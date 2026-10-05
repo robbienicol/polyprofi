@@ -65,7 +65,9 @@ export function RouteSearchBar({
           autoCapitalize="none"
           returnKeyType="search"
           accessibilityLabel="Search all routes by keyword"
-          style={{ flex: 1, color: theme.text, fontSize: 15, fontFamily: bodyFontFamily('600'), minHeight: 44, paddingVertical: 8 }}
+          // A fixed height with no vertical padding: iOS centres single-line text itself,
+          // and padding inside a min-height pushed the placeholder below the field.
+          style={{ flex: 1, color: theme.text, fontSize: 15, fontFamily: bodyFontFamily('600'), height: 44, paddingVertical: 0 }}
         />
         {value.length > 0 ? (
           <Pressable

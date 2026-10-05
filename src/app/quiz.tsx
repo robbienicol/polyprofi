@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import React, { useCallback, useRef, useState } from 'react';
-import { Keyboard, KeyboardAvoidingView, Platform, Pressable, TextInput, View } from 'react-native';
+import { ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform, Pressable, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { timeframeCalendarDays } from '@/api/client/playbook';
@@ -414,8 +414,9 @@ function QuizForm({
               disabled={targetValue <= 0 || isSaving}
               accessibilityRole="button"
               accessibilityState={{ disabled: targetValue <= 0 || isSaving }}
-              className="py-4 items-center active:opacity-85"
-              style={{ borderRadius: Radius.lg, backgroundColor: Brand[500], opacity: targetValue > 0 && !isSaving ? 1 : 0.4, ...Shadow.card }}>
+              className="py-4 flex-row items-center justify-center active:opacity-85"
+              style={{ gap: 10, borderRadius: Radius.lg, backgroundColor: Brand[500], opacity: targetValue > 0 ? 1 : 0.4, ...Shadow.card }}>
+              {isSaving ? <ActivityIndicator size="small" color={OnBrand} /> : null}
               <ThemedText style={{ fontSize: 16, fontWeight: '900', color: OnBrand }}>
                 {isSaving ? 'Finding routes…' : targetValue <= 0 ? 'Enter an amount' : 'Find my routes →'}
               </ThemedText>

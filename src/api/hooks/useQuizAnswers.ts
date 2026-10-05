@@ -71,21 +71,22 @@ export function useQuizAnswers() {
   const { mutate: saveAnswers } = useMutation({
     mutationFn: async (answers: QuizAnswers): Promise<QuizAnswers> => {
       // The on-device write is the one that matters — it's what the routes screen
-      // reads. Backend sync is best effort: a flaky /api/quiz must not strand the
-      // caller (the quiz button waits on onSuccess to navigate, so a throw here
-      // used to leave it stuck on "Finding routes…" forever).
+      // reads. Backend sync is best effort and not awaited: the search button waits
+      // on onSuccess to navigate, and holding it for a network round trip left the
+      // tap looking dead for seconds (a throw here once stranded it for good).
       await setQuizAnswers(answers, signedIn ? userId : undefined);
       if (signedIn) {
-        try {
-          const response = await request({
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(answers),
+        void request({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(answers),
+        })
+          .then((response) => {
+            if (!response.ok) console.warn(`[quiz] sync failed (${response.status})`);
+          })
+          .catch((error: unknown) => {
+            console.warn(`[quiz] sync failed: ${error instanceof Error ? error.message : String(error)}`);
           });
-          if (!response.ok) console.warn(`[quiz] sync failed (${response.status})`);
-        } catch (error) {
-          console.warn(`[quiz] sync failed: ${error instanceof Error ? error.message : String(error)}`);
-        }
       }
       return answers;
     },
