@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useGoalsProgress, type GoalProgress } from '@/api/hooks/useGoalProgress';
 import { usePortfolioProgress } from '@/api/hooks/usePortfolioProgress';
 import { usePortfolioSeries } from '@/api/hooks/usePortfolioSeries';
+import { useDefaultSearch } from '@/api/hooks/useDefaultSearch';
 import { useMoney, usePreferences } from '@/api/hooks/usePreferences';
 import { useQuizAnswers } from '@/api/hooks/useQuizAnswers';
 import type { PortfolioProgressPoint } from '@/api/client/storage';
@@ -58,7 +59,9 @@ export default function HomeScreen(): React.ReactElement {
   const { preferences } = usePreferences();
   const { bets } = useTrackedBets();
   const { history } = useSavedRoutes();
-  const { quizAnswers } = useQuizAnswers();
+  const { quizAnswers, saveAnswers } = useQuizAnswers();
+  const { answers: defaultSearch } = useDefaultSearch();
+  const [isStartingSearch, setIsStartingSearch] = useState(false);
   const latestSearch = history[0] ?? null;
   // The quiz prefills from exactly this, in exactly this order, so what the row
   // below shows is what the form will open on.
@@ -382,10 +385,21 @@ export default function HomeScreen(): React.ReactElement {
             </View>
           ) : null}
 
-          {/* One job on this screen: go make money. The quiz is where the goal gets
-              picked, so this always starts there rather than re-running a stale search. */}
+          {/* One job on this screen: go make money. Straight to results on the last
+              search, else on what onboarding said — the quiz is optional, one row down. */}
           <Pressable
-            onPress={() => router.push('/quiz')}
+            onPress={() => {
+              if (!defaultSearch) {
+                router.push('/quiz');
+                return;
+              }
+              if (isStartingSearch) return;
+              setIsStartingSearch(true);
+              saveAnswers(defaultSearch, {
+                onSuccess: () => router.push('/(tabs)/routes?generate=1' as Href),
+                onSettled: () => setIsStartingSearch(false),
+              });
+            }}
             className="py-5 items-center active:opacity-85"
             style={{ borderRadius: Radius.xl, backgroundColor: Brand[500], ...Shadow.card }}>
             <ThemedText style={{ fontSize: 17, fontWeight: '900', color: OnBrand, letterSpacing: -0.2 }}>
