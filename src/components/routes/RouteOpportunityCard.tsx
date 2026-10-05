@@ -28,6 +28,7 @@ import {
   debtYieldLabel,
   isDebtRoute,
 } from "@/lib/route-investment-metrics";
+import { maturityWords } from "@/lib/portfolio";
 import type { Route } from "@/types/routes";
 
 const MONO = { fontVariant: ["tabular-nums" as const] };
@@ -40,6 +41,7 @@ interface RouteOpportunityCardProps {
   deadlineDays?: number | null;
 }
 
+
 export function RouteOpportunityCard({
   route,
   stake,
@@ -51,38 +53,18 @@ export function RouteOpportunityCard({
   const shownRisk = displayRiskLevel(route);
   const color = riskColor(shownRisk);
   const binary = route.lossProfile === "binary";
-  const returnPct = stake > 0 ? (route.expectedReturn / stake) * 100 : 0;
-  // The holding period this profit is earned over, so the return can say so. A T-bill
-  // showing "+$6 (0.6% return)" beside "3.87% yield" reads as broken arithmetic: one is
-  // the 56-day return, the other is annualised, and neither said which.
-  const returnPeriodDays = route.maturesInDays ?? deadlineDays ?? null;
-  const routeExpectedValue = expectedValue(route, stake);
-  const liquidity = liquidityLabel(route);
-  const marketQuality = route.marketQuality;
-  const liquidityPercent =
-    marketQuality?.executionScore ??
-    (liquidity === "High" ? 95 : liquidity === "Medium" ? 62 : 32);
   const debt = isDebtRoute(route);
-  // The fund fee is levied on the yield, so net is what the user actually earns.
-  const grossYieldPct = route.investmentFacts?.yieldPct;
-  const expenseRatioPct = route.investmentFacts?.expenseRatioPct;
-  const netYieldPct = grossYieldPct != null && expenseRatioPct != null
-    ? Math.max(0, grossYieldPct - expenseRatioPct)
-    : null;
-  // A bill or CD fixes its rate the moment you buy; a savings account or a bond fund
-  // does not. The distinction decides whether the quoted yield is a promise or a
-  // snapshot, so it is read off the yield's own label rather than guessed.
-  const rateFixed = /coupon-equivalent|contractual|locked|fixed/i.test(
-    route.investmentFacts?.yieldLabel ?? "",
-  );
-  const yieldIsEstimate = route.investmentFacts?.yieldIsEstimate === true
-    // Older saved batches carry the caveat in the label rather than the flag.
-    || /proxy|not a live/i.test(route.investmentFacts?.yieldLabel ?? "");
-  // A bill that pays out after the goal date is the wrong instrument however good
-  // the yield is, so the comparison is stated rather than left to the user.
-  const deadlineFit = deadlineFitLabel(route.maturesInDays, deadlineDays);
+  const returnPeriodDays = route.maturesInDays ?? deadlineDays ?? null;
   const question = /“([^”]+)”/.exec(route.description)?.[1] ?? null;
   const traded = /(\$[\d.,]+[KMB]?) traded/.exec(route.description)?.[1] ?? null;
+  const title = routeDisplayTitle(route);
+  // The description often just restates the title with a full stop; showing both
+  // was the first thing that made this screen read as a wall of text.
+  const description = route.description.replace(/\.$/, "").trim() === title.replace(/\.$/, "").trim()
+    ? null
+    : route.description;
+  const short = neededToHitGoal != null && neededToHitGoal > stake;
+  const worst = worstCase(route, stake, debt);
 
   return (
     <View
@@ -93,7 +75,7 @@ export function RouteOpportunityCard({
         borderWidth: 1,
         borderColor: theme.border,
         padding: 16,
-        gap: 14,
+        gap: 16,
         ...Shadow.card,
       }}
     >
@@ -124,117 +106,144 @@ export function RouteOpportunityCard({
             >
               <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
                 <Icon glyph="⏳" size={11} color={theme.textSecondary} strokeWidth={2.4} />
-                <ThemedText
-                  style={{
-                    fontSize: 11,
-                    color: theme.textSecondary,
-                    fontWeight: "800",
-                  }}
-                >
+                <ThemedText style={{ fontSize: 11, color: theme.textSecondary, fontWeight: "800" }}>
                   {formatMaturity(route.maturesInDays)}
                 </ThemedText>
               </View>
             </View>
           ) : null}
         </View>
-        <ThemedText
-          style={{ fontSize: 13, color: semantic.brand, fontWeight: "700" }}
-        >
+        <ThemedText numberOfLines={1} style={{ flexShrink: 1, fontSize: 13, color: semantic.brand, fontWeight: "700", marginLeft: 8 }}>
           {route.platform || route.category}
         </ThemedText>
       </View>
 
-      {/* No icon tile: route.emoji was a generic fallback glyph on most routes and
-          cost a 76pt column, squeezing the one thing that says what the bet is.
-          For a quoted market, the question is the headline and the side/price sits
-          above it; the description only restated the metrics below. */}
       {question ? (
         <View style={{ gap: 6 }}>
-          <ThemedText
-            style={{ fontSize: 13, fontWeight: "800", color: semantic.brand, ...MONO }}
-          >
-            {`Buy ${routeDisplayTitle(route)}${traded ? ` · ${traded} traded` : ""}`}
+          <ThemedText style={{ fontSize: 13, fontWeight: "800", color: semantic.brand, ...MONO }}>
+            {`Buy ${title}${traded ? ` · ${traded} traded` : ""}`}
           </ThemedText>
-          <ThemedText
-            style={{
-              fontSize: 20,
-              lineHeight: 26,
-              fontWeight: "800",
-              color: theme.text,
-              letterSpacing: -0.2,
-            }}
-          >
+          <ThemedText style={{ fontSize: 20, lineHeight: 26, fontWeight: "800", color: theme.text, letterSpacing: -0.2 }}>
             {question}
           </ThemedText>
         </View>
       ) : (
-        <View>
-          <ThemedText
-            style={{
-              fontSize: 19,
-              lineHeight: 25,
-              fontWeight: "900",
-              color: semantic.brand,
-              letterSpacing: -0.2,
-              ...MONO,
-            }}
-          >
-            {routeDisplayTitle(route)}
+        <View style={{ gap: 6 }}>
+          <ThemedText style={{ fontSize: 20, lineHeight: 26, fontWeight: "800", color: theme.text, letterSpacing: -0.2 }}>
+            {title}
           </ThemedText>
-          <ThemedText
-            style={{
-              fontSize: 13,
-              lineHeight: 18,
-              color: theme.textSecondary,
-              marginTop: 6,
-            }}
-          >
-            {route.description}
-          </ThemedText>
+          {description ? (
+            <ThemedText style={{ fontSize: 13, lineHeight: 18, color: theme.textSecondary }}>
+              {description}
+            </ThemedText>
+          ) : null}
         </View>
       )}
 
-      <View className="flex-row items-center">
+      {/* The whole trade in one line a first-timer can read: money in, money out,
+          and when. Everything else on the screen is detail behind this. */}
+      {route.noCapitalRequired ? null : (
+        <View
+          className="flex-row items-center"
+          style={{ borderRadius: Radius.lg, backgroundColor: theme.backgroundElement, padding: 14, gap: 10 }}
+        >
+          <View className="flex-1" style={{ gap: 2 }}>
+            <ThemedText style={{ fontSize: 11, fontWeight: "800", letterSpacing: 0.5, color: theme.textTertiary }}>
+              YOU PUT IN
+            </ThemedText>
+            <ThemedText numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85} style={{ fontSize: 22, lineHeight: 28, fontWeight: "900", color: theme.text, ...MONO }}>
+              ${stake.toLocaleString()}
+            </ThemedText>
+          </View>
+          <ThemedText style={{ fontSize: 20, color: theme.textTertiary }}>→</ThemedText>
+          <View className="flex-1 items-end" style={{ gap: 2 }}>
+            <ThemedText style={{ fontSize: 11, fontWeight: "800", letterSpacing: 0.5, color: theme.textTertiary }}>
+              {binary ? "IF IT WINS" : "YOU GET BACK"}
+            </ThemedText>
+            <ThemedText numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85} style={{ fontSize: 22, lineHeight: 28, fontWeight: "900", color: theme.text, ...MONO }}>
+              ${Math.round(stake + route.expectedReturn).toLocaleString()}
+            </ThemedText>
+            {returnPeriodDays != null ? (
+              <ThemedText style={{ fontSize: 11, fontWeight: "700", color: semantic.brand }}>
+                in {maturityWords(returnPeriodDays)}
+              </ThemedText>
+            ) : null}
+          </View>
+        </View>
+      )}
+
+      <View className="flex-row items-start">
         <Metric
           value={route.meetsTarget ? formatProbability(route.probability) : "No"}
-          label={route.meetsTarget ? "Chance of goal" : "Hits goal"}
+          label={route.meetsTarget ? "Chance it works" : "Hits goal"}
           valueColor={theme.text}
         />
         <Divider />
+        {/* Ink, not green: this is a projection, not a gain that happened. */}
         <Metric
           value={`+$${route.expectedReturn.toLocaleString()}`}
-          label={debt ? "Projected profit" : "Potential profit"}
-          subLabel={
-            returnPeriodDays != null ? `in ${formatMaturity(returnPeriodDays)}` : undefined
-          }
-          // Ink, not green. `Semantic.positive` means a gain that happened; this is a
-          // projection, and colouring it as a win is the card telling the user it
-          // already worked.
+          label="Profit"
           valueColor={theme.text}
         />
         <Divider />
-        {/* What goes in, said as the money it is. "Need to hit goal $20,000 / of $20,000
-            now" was two copies of one number under a label that read like a verdict. */}
-        {neededToHitGoal != null && neededToHitGoal > stake ? (
-          <Metric
-            value={`$${neededToHitGoal.toLocaleString()}`}
-            label="Needed for goal"
-            subLabel={`you set $${stake.toLocaleString()}`}
-            valueColor={semantic.caution}
-          />
-        ) : (
-          <Metric
-            value={`$${stake.toLocaleString()}`}
-            label="Puts in"
-            subLabel={`${returnPct.toFixed(returnPct >= 10 ? 0 : 1)}% return`}
-            valueColor={theme.text}
-          />
-        )}
+        <Metric value={worst.value} label="Worst case" subLabel={worst.note} valueColor={theme.text} />
       </View>
-      <ThemedText style={{ fontSize: 13, color: theme.textSecondary }}>
-        Based on historical data & live market prices
-      </ThemedText>
 
+      {short ? (
+        <ThemedText style={{ fontSize: 13, lineHeight: 18, fontWeight: "700", color: semantic.caution }}>
+          Needs ${neededToHitGoal.toLocaleString()} to hit your goal. You set ${stake.toLocaleString()}.
+        </ThemedText>
+      ) : null}
+
+      <View className="flex-row" style={{ gap: 10 }}>
+        <Icon glyph={binary ? "⚠️" : "🛡"} size={16} color={binary ? Semantic.negative : theme.textSecondary} />
+        <ThemedText style={{ flex: 1, fontSize: 13.5, lineHeight: 19, color: theme.textSecondary }}>
+          {riskInPlainWords(route, stake, debt)}
+        </ThemedText>
+      </View>
+    </View>
+  );
+}
+
+/**
+ * Everything behind the summary: the facts an experienced investor checks, kept on
+ * the screen but folded away, so the first read is the trade rather than its working.
+ */
+export function RouteDetails({
+  route,
+  stake,
+  deadlineDays,
+}: Omit<RouteOpportunityCardProps, "neededToHitGoal">): React.ReactElement {
+  const theme = useTheme();
+  const binary = route.lossProfile === "binary";
+  const routeExpectedValue = expectedValue(route, stake);
+  const liquidity = liquidityLabel(route);
+  const marketQuality = route.marketQuality;
+  const liquidityPercent =
+    marketQuality?.executionScore ??
+    (liquidity === "High" ? 95 : liquidity === "Medium" ? 62 : 32);
+  const debt = isDebtRoute(route);
+  // The fund fee is levied on the yield, so net is what the user actually earns.
+  const grossYieldPct = route.investmentFacts?.yieldPct;
+  const expenseRatioPct = route.investmentFacts?.expenseRatioPct;
+  const netYieldPct = grossYieldPct != null && expenseRatioPct != null
+    ? Math.max(0, grossYieldPct - expenseRatioPct)
+    : null;
+  // A bill or CD fixes its rate the moment you buy; a savings account or a bond fund
+  // does not. The distinction decides whether the quoted yield is a promise or a
+  // snapshot, so it is read off the yield's own label rather than guessed.
+  const rateFixed = /coupon-equivalent|contractual|locked|fixed/i.test(
+    route.investmentFacts?.yieldLabel ?? "",
+  );
+  const yieldIsEstimate = route.investmentFacts?.yieldIsEstimate === true
+    // Older saved batches carry the caveat in the label rather than the flag.
+    || /proxy|not a live/i.test(route.investmentFacts?.yieldLabel ?? "");
+  // A bill that pays out after the goal date is the wrong instrument however good
+  // the yield is, so the comparison is stated rather than left to the user.
+  const deadlineFit = deadlineFitLabel(route.maturesInDays, deadlineDays);
+
+  return (
+    <View style={{ gap: 12 }}>
       {/* Only the two measures with real backing. Volatility fell back to
           riskLevel × 20 whenever a market carried no price history, which restates the
           risk level rather than measuring volatility; correlation was a hardcoded
@@ -530,6 +539,31 @@ export function RouteOpportunityCard({
     </View>
   );
 }
+
+/** The bad outcome, as money, with a few words on when it happens. */
+function worstCase(route: Route, stake: number, debt: boolean): { value: string; note: string } {
+  if (route.noCapitalRequired) return { value: "$0", note: "no money in" };
+  if (route.lossProfile === "binary") return { value: `−$${Math.round(stake).toLocaleString()}`, note: "if it loses" };
+  if (debt) return route.maturesInDays
+    ? { value: "$0", note: "held to the end" }
+    : { value: "$0", note: "rate can drop" };
+  return { value: `−$${Math.round(downsideAtStake(route, stake)).toLocaleString()}`, note: "in a bad stretch" };
+}
+
+/** One sentence on what can go wrong, for someone who has never bought any of this. */
+function riskInPlainWords(route: Route, stake: number, debt: boolean): string {
+  if (route.noCapitalRequired) return "Nothing to lose: this uses no money, only a change in what you already do.";
+  if (route.lossProfile === "binary") {
+    return `All or nothing. If it goes the other way, the $${Math.round(stake).toLocaleString()} is gone.`;
+  }
+  if (debt) {
+    return route.maturesInDays
+      ? "About as safe as it gets. Hold it to the end and you get it all back, plus the interest."
+      : "Your money stays put and earns interest. The rate can move, but the money doesn't shrink.";
+  }
+  return "The value moves with the market. A bad stretch means it's worth less for a while, not that it's gone.";
+}
+
 
 /**
  * `accent` marks a section whose contents are a different kind of thing from the rest of

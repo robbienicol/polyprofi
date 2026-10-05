@@ -23,7 +23,9 @@ export function yieldInstrument(route: Pick<Route, 'id' | 'description'> & { inv
 /** A bill's term the way people say it: "3-month", not "13w". */
 export function termWords(days: number): { adjective: string; phrase: string } {
   const months = Math.round(days / 30.4);
-  if (days < 21) {
+  // The 6- and 8-week bills are sold under those names, and rounding 42 days to
+  // "1-month" put a month on the card beside a six-week maturity badge.
+  if (days < 21 || (days >= 35 && days < 60)) {
     const weeks = Math.max(1, Math.round(days / 7));
     return { adjective: `${weeks}-week`, phrase: weeks === 1 ? '1 week' : `${weeks} weeks` };
   }
@@ -102,7 +104,7 @@ export function __selfCheck(): void {
       === 'Buy a 3-month U.S. Treasury bill for $5,000. You get $5,052 back in 3 months.',
     'a bill says what it is, what it costs, what comes back and when',
   );
-  check(termWords(28).adjective === '1-month' && termWords(182).adjective === '6-month' && termWords(364).adjective === '1-year',
+  check(termWords(28).adjective === '1-month' && termWords(42).adjective === '6-week' && termWords(182).adjective === '6-month' && termWords(364).adjective === '1-year',
     'bill terms read in months, not weeks');
   check(
     plainYieldDescription({ instrument: 'hysa', stake: 1_000, profit: 10, days: null, yieldPct: 4.1 })

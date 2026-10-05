@@ -13,7 +13,7 @@ import { useTrackedBets } from "@/api/hooks/useTrackedBets";
 import { MarketComparisonCard } from "@/components/routes/MarketComparisonCard";
 import { RelatedRoutes } from "@/components/routes/RelatedRoutes";
 import { RouteCoach } from "@/components/routes/RouteCoach";
-import { RouteOpportunityCard } from "@/components/routes/RouteOpportunityCard";
+import { RouteDetails, RouteOpportunityCard } from "@/components/routes/RouteOpportunityCard";
 import { TrackRecordCard } from "@/components/routes/TrackRecordCard";
 import { ScoreMathCard } from "@/components/routes/ScoreMathCard";
 import { TrackRouteForm } from "@/components/routes/TrackRouteForm";
@@ -59,6 +59,7 @@ export default function RouteDetailScreen(): React.ReactElement {
   const [showAcquireForm, setShowAcquireForm] = useState(false);
   const [acquireAmount, setAcquireAmount] = useState("");
   const [cutPercent, setCutPercent] = useState(25);
+  const [showDetails, setShowDetails] = useState(false);
 
   // The list this row was tapped from first, then saved history. Route ids repeat
   // across searches that share a daily pool, so history alone can resolve to another
@@ -332,40 +333,6 @@ export default function RouteDetailScreen(): React.ReactElement {
             deadlineDays={goalDeadlineDays}
           />
 
-          {comparison ? <MarketComparisonCard comparison={comparison} /> : null}
-
-          {primaryTrackRecord ? (
-            <TrackRecordCard primary={primaryTrackRecord} venues={calibrations} />
-          ) : null}
-
-          {/* The score, and the arithmetic behind it. This is the screen where money
-              gets committed, so the weighting the number came from is shown here
-              rather than left on the results list. */}
-          <ScoreMathCard
-            scoreBreakdown={scoreBreakdown}
-            requiredInvestment={neededToHitGoal}
-            availableInvestment={availableInvestment}
-          />
-          <Pressable
-            onPress={() => router.push("/(tabs)/routes")}
-            accessibilityRole="button"
-            className="active:opacity-70"
-            hitSlop={6}
-          >
-            <ThemedText
-              style={{ fontSize: 11, lineHeight: 16, color: theme.textTertiary, textAlign: "center" }}
-            >
-              Scored on what you said matters:{" "}
-              {Math.round(scoreBreakdown.weights.reliability * 100)}% chance ·{" "}
-              {Math.round(scoreBreakdown.weights.principalProtection * 100)}% safety ·{" "}
-              {Math.round(scoreBreakdown.weights.capitalEfficiency * 100)}% capital ·{" "}
-              {Math.round(scoreBreakdown.weights.timeEfficiency * 100)}% time.{" "}
-              <ThemedText style={{ fontSize: 11, fontWeight: "800", color: Brand[500] }}>
-                Change it
-              </ThemedText>
-            </ThemedText>
-          </Pressable>
-
           <View
             style={{
               backgroundColor: theme.backgroundElement,
@@ -384,7 +351,7 @@ export default function RouteDetailScreen(): React.ReactElement {
                 marginBottom: 4,
               }}
             >
-              THE PLAN
+              HOW IT WORKS
             </ThemedText>
             <ThemedText
               style={{ fontSize: 13.5, color: theme.text, lineHeight: 20 }}
@@ -416,6 +383,76 @@ export default function RouteDetailScreen(): React.ReactElement {
               </ThemedText>
             ) : null}
           </View>
+
+          {/* Folded, not removed: the score's working, the yield sources and the market
+              depth are what an experienced investor checks, and noise to everyone else. */}
+          <Pressable
+            onPress={() => setShowDetails((open) => !open)}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: showDetails }}
+            className="flex-row items-center justify-between active:opacity-70"
+            style={{
+              borderRadius: Radius.lg,
+              borderWidth: 1,
+              borderColor: theme.border,
+              backgroundColor: theme.backgroundElement,
+              paddingHorizontal: 14,
+              paddingVertical: 14,
+            }}
+          >
+            <View style={{ flex: 1, gap: 2 }}>
+              <ThemedText style={{ fontSize: 14, fontWeight: "800", color: theme.text }}>
+                {showDetails ? "Hide the details" : "See the details"}
+              </ThemedText>
+              <ThemedText style={{ fontSize: 12, color: theme.textSecondary }}>
+                Score breakdown, rates, sources and the fine print
+              </ThemedText>
+            </View>
+            <ThemedText style={{ fontSize: 18, color: theme.textSecondary }}>
+              {showDetails ? "−" : "+"}
+            </ThemedText>
+          </Pressable>
+
+          {showDetails ? (
+            <>
+              <RouteDetails route={route} stake={stake} deadlineDays={goalDeadlineDays} />
+
+              {comparison ? <MarketComparisonCard comparison={comparison} /> : null}
+
+              {primaryTrackRecord ? (
+                <TrackRecordCard primary={primaryTrackRecord} venues={calibrations} />
+              ) : null}
+
+              {/* The score, and the arithmetic behind it. This is the screen where money
+                  gets committed, so the weighting the number came from is shown here
+                  rather than left on the results list. */}
+              <ScoreMathCard
+                scoreBreakdown={scoreBreakdown}
+                requiredInvestment={neededToHitGoal}
+                availableInvestment={availableInvestment}
+              />
+              <Pressable
+                onPress={() => router.push("/(tabs)/routes")}
+                accessibilityRole="button"
+                className="active:opacity-70"
+                hitSlop={6}
+              >
+                <ThemedText
+                  style={{ fontSize: 11, lineHeight: 16, color: theme.textTertiary, textAlign: "center" }}
+                >
+                  Scored on what you said matters:{" "}
+                  {Math.round(scoreBreakdown.weights.reliability * 100)}% chance ·{" "}
+                  {Math.round(scoreBreakdown.weights.principalProtection * 100)}% safety ·{" "}
+                  {Math.round(scoreBreakdown.weights.capitalEfficiency * 100)}% capital ·{" "}
+                  {Math.round(scoreBreakdown.weights.timeEfficiency * 100)}% time.{" "}
+                  <ThemedText style={{ fontSize: 11, fontWeight: "800", color: Brand[500] }}>
+                    Change it
+                  </ThemedText>
+                </ThemedText>
+              </Pressable>
+
+            </>
+          ) : null}
 
           <RouteCoach route={route} />
 
