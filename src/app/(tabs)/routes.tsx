@@ -15,7 +15,7 @@ import { useCardRewards } from '@/api/hooks/useCardRewards';
 import { useSpendingCuts } from '@/api/hooks/useSpendingCuts';
 import { useTrackedBets } from '@/api/hooks/useTrackedBets';
 import { MoreWaysToSave } from '@/components/routes/MoreWaysToSave';
-import { RouteFilters } from '@/components/routes/RouteFilters';
+import { RouteFilters, SortBar } from '@/components/routes/RouteFilters';
 import { RouteSearchBar } from '@/components/routes/RouteSearchBar';
 import { RoutesHeader } from '@/components/routes/RoutesHeader';
 import { TrackRouteForm } from '@/components/routes/TrackRouteForm';
@@ -229,7 +229,6 @@ export default function RoutesScreen(): React.ReactElement {
     filters.category !== null,
     filters.lossProfile !== null,
     filters.minimumProbability > 0,
-    filters.sort !== 'score',
     filters.predictionTopic !== null,
     filters.maxDaysToResolve != null,
     filters.groupByChance,
@@ -547,8 +546,8 @@ export default function RoutesScreen(): React.ReactElement {
       {/* Pinned above the scroll rather than a stickyHeaderIndices entry — this card
           is conditional on `goal`, and an index-based pin would silently point at
           the wrong child the moment another conditional block above it changes. */}
-      {goal && (
-        <View className="px-4 pt-6 pb-3">
+      <View className="px-4 pt-4 pb-2" style={{ gap: 12 }}>
+        {goal && (
           <RoutesHeader
             goal={goal}
             historical={isHistorical}
@@ -557,48 +556,28 @@ export default function RoutesScreen(): React.ReactElement {
             onNewSearch={() => router.push('/quiz')}
             onBackToLatest={() => router.replace('/(tabs)/routes')}
           />
-        </View>
-      )}
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerClassName={`px-4 pb-16 gap-3 ${goal ? 'pt-1' : 'pt-6'}`}
-        {...KEYBOARD_AWARE_SCROLL_PROPS}
-        refreshControl={<RefreshControl refreshing={(isFetching && !isLoading) || manualRefresh} onRefresh={handleRefresh} tintColor={Brand[500]} />}>
+        )}
         <RouteSearchBar
           value={filters.keyword}
           onChange={(nextKeyword) => setFiltersAndReset({ ...filters, keyword: nextKeyword })}
           isSearching={isSearching}
           pulledInCount={searchRoutes.length}
         />
+      </View>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerClassName="px-4 pb-16 pt-1 gap-3"
+        {...KEYBOARD_AWARE_SCROLL_PROPS}
+        refreshControl={<RefreshControl refreshing={(isFetching && !isLoading) || manualRefresh} onRefresh={handleRefresh} tintColor={Brand[500]} />}>
         {ranked.length > 0 && (
           <>
-            <Pressable
-              onPress={() => setShowFilters((open) => !open)}
-              accessibilityRole="button"
-              className="flex-row items-center justify-between active:opacity-70"
-              style={{
-                borderRadius: Radius.lg,
-                borderWidth: 1,
-                borderColor: activeFilterCount === 0 ? theme.border : Brand[500] + '3D',
-                backgroundColor: theme.backgroundElement,
-                paddingHorizontal: 14,
-                paddingVertical: 12,
-                gap: 10,
-              }}>
-              <View className="flex-1">
-                <ThemedText style={{ fontSize: 13, fontWeight: '800', color: theme.text }}>
-                  Filters
-                </ThemedText>
-                <ThemedText style={{ fontSize: 11, color: theme.textSecondary, marginTop: 2 }}>
-                  {activeFilterCount === 0
-                    ? 'How much to invest, asset class, chance and more'
-                    : `${activeFilterCount} filter${activeFilterCount === 1 ? '' : 's'} active`}
-                </ThemedText>
-              </View>
-              <ThemedText style={{ fontSize: 13, fontWeight: '800', color: semantic.brand }}>
-                {showFilters ? 'Done' : 'Edit'}
-              </ThemedText>
-            </Pressable>
+            <SortBar
+              sort={filters.sort}
+              onSortChange={(sort) => setFiltersAndReset({ ...filters, sort })}
+              filterCount={activeFilterCount}
+              filtersOpen={showFilters}
+              onToggleFilters={() => setShowFilters((open) => !open)}
+            />
             {showFilters ? (
               <RouteFilters
                 filters={filters}

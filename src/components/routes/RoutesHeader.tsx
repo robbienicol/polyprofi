@@ -2,7 +2,7 @@ import { Pressable, View } from 'react-native';
 
 import { Icon } from '@/components/ui/Icon';
 import { ThemedText } from '@/components/themed-text';
-import { Brand, OnBrand, Radius, Shadow } from '@/constants/theme';
+import { Brand, OnBrand, Radius } from '@/constants/theme';
 import { useSemanticText, useTheme } from '@/hooks/use-theme';
 
 interface GoalSummary {
@@ -23,10 +23,9 @@ interface RoutesHeaderProps {
 }
 
 /**
- * What this search is for — kept to just that one question now that "how much are
- * you willing to invest" lives in the Filters panel. Pinned above the scrolling
- * list — pinned above the ScrollView rather than inside it — so the goal it is
- * ranking against is never scrolled out of view.
+ * What this search is for, in one line: no card, so the list starts as high as it
+ * can. Pinned above the ScrollView rather than inside it, so the goal it is ranking
+ * against is never scrolled out of view.
  */
 export function RoutesHeader({
   goal,
@@ -38,41 +37,44 @@ export function RoutesHeader({
 }: RoutesHeaderProps): React.ReactElement {
   const theme = useTheme();
   const semantic = useSemanticText();
+  const eyebrow = historical ? 'SAVED SEARCH' : goal.label ? goal.label.toUpperCase() : null;
   return (
-    <View style={{ borderRadius: Radius.xl, backgroundColor: theme.backgroundElevated, borderWidth: 1, borderColor: theme.border, padding: 14, gap: 6, ...Shadow.card }}>
-      <View className="flex-row justify-between items-center" style={{ gap: 10 }}>
-        <View className="flex-row items-center flex-1" style={{ gap: 6 }}>
-          {goal.emoji ? <Icon glyph={goal.emoji} size={15} color={theme.textSecondary} /> : null}
-          <ThemedText numberOfLines={1} style={{ flex: 1, fontSize: 11, fontWeight: '700', color: semantic.brand, letterSpacing: 0.8 }}>
-            {(historical ? 'SAVED SEARCH' : 'YOUR ROUTES') + (goal.label ? ` · ${goal.label.toUpperCase()}` : '')}
+    <View style={{ gap: 2 }}>
+      {eyebrow ? (
+        <View className="flex-row items-center" style={{ gap: 6 }}>
+          {goal.emoji ? <Icon glyph={goal.emoji} size={13} color={semantic.brand} /> : null}
+          <ThemedText numberOfLines={1} style={{ flex: 1, fontSize: 11, fontWeight: '800', color: semantic.brand, letterSpacing: 0.8 }}>
+            {eyebrow}
+          </ThemedText>
+        </View>
+      ) : null}
+
+      <View className="flex-row items-center justify-between" style={{ gap: 10 }}>
+        <View className="flex-row items-baseline flex-1 flex-wrap" style={{ columnGap: 6 }}>
+          {/* No adjustsFontSizeToFit: at an accessibility text size it shrank the one
+              figure the screen exists for, so asking for bigger text made it smaller. */}
+          <ThemedText style={{ fontSize: 22, fontWeight: '800', color: theme.text, letterSpacing: -0.6, fontVariant: ['tabular-nums'] }}>
+            Make +${goal.target.toLocaleString()}
+          </ThemedText>
+          <ThemedText style={{ fontSize: 13, color: theme.textSecondary }}>
+            {goal.when} ·{' '}
+            <ThemedText style={{ fontSize: 13, fontWeight: '800', color: theme.textSecondary, fontVariant: ['tabular-nums'] }}>{routeCount}</ThemedText>
+            {' '}route{routeCount === 1 ? '' : 's'}
           </ThemedText>
         </View>
         {!historical && (
           <Pressable
             onPress={onNewSearch}
             accessibilityRole="button"
-            accessibilityLabel="Start a new goal"
-            accessibilityHint="Leaves this list and starts the goal quiz again"
-            className="active:opacity-75 justify-center"
-            style={{ borderRadius: Radius.pill, paddingHorizontal: 16, minHeight: 44, backgroundColor: Brand[500] }}>
-            <ThemedText style={{ fontSize: 13, fontWeight: '900', color: OnBrand }}>+ New goal</ThemedText>
+            accessibilityLabel="New search"
+            accessibilityHint="Leaves this list and opens the search form"
+            hitSlop={8}
+            className="flex-row items-center active:opacity-70"
+            style={{ gap: 4, borderRadius: Radius.pill, paddingHorizontal: 12, minHeight: 32, backgroundColor: Brand[500] }}>
+            <Icon glyph="✏️" size={13} color={OnBrand} />
+            <ThemedText style={{ fontSize: 13, fontWeight: '800', color: OnBrand }}>Edit</ThemedText>
           </Pressable>
         )}
-      </View>
-
-      <View className="flex-row items-baseline justify-between">
-        <View className="flex-row items-baseline gap-1.5">
-          {/* No adjustsFontSizeToFit: at an accessibility text size it shrank the one
-              figure the screen exists for, so asking for bigger text made it smaller. */}
-          <ThemedText numberOfLines={2} style={{ fontSize: 24, fontWeight: '800', color: theme.text, letterSpacing: -0.6, fontVariant: ['tabular-nums'] }}>
-            Make +${goal.target.toLocaleString()}
-          </ThemedText>
-          <ThemedText style={{ fontSize: 12, color: theme.textSecondary }}>{goal.when}</ThemedText>
-        </View>
-        <ThemedText style={{ fontSize: 12, color: theme.textSecondary }}>
-          <ThemedText style={{ fontSize: 12, fontWeight: '800', color: theme.textSecondary, fontVariant: ['tabular-nums'] }}>{routeCount}</ThemedText>
-          {' '}route{routeCount === 1 ? '' : 's'}
-        </ThemedText>
       </View>
 
       {batchLabel && <ThemedText style={{ fontSize: 12, color: theme.textSecondary }}>{batchLabel}</ThemedText>}

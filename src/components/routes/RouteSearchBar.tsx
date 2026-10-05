@@ -47,23 +47,25 @@ export function RouteSearchBar({
         className="flex-row items-center"
         style={{
           gap: 8,
-          paddingHorizontal: 12,
-          borderRadius: Radius.md,
+          paddingHorizontal: 14,
+          borderRadius: Radius.pill,
+          // Brand-edged even when idle: it is the most direct way to find a route,
+          // and a grey field read as part of the furniture.
           borderWidth: 1.5,
-          borderColor: active ? Brand[500] : theme.borderStrong,
-          backgroundColor: theme.backgroundElement,
+          borderColor: active ? Brand[500] : Brand[500] + '73',
+          backgroundColor: Brand[500] + '0F',
         }}>
-        <Icon glyph="🔎" size={17} color={theme.textSecondary} />
+        <Icon glyph="🔎" size={16} color={Brand[500]} />
         <TextInput
           value={value}
           onChangeText={onChange}
-          placeholder="Search anything — US Open, Tesla, gold, doge…"
+          placeholder="Search Tesla, gold, US Open…"
           placeholderTextColor={theme.textSecondary}
           autoCorrect={false}
           autoCapitalize="none"
           returnKeyType="search"
           accessibilityLabel="Search all routes by keyword"
-          style={{ flex: 1, color: theme.text, fontSize: 15, fontFamily: bodyFontFamily('600'), minHeight: 44, paddingVertical: 10 }}
+          style={{ flex: 1, color: theme.text, fontSize: 15, fontFamily: bodyFontFamily('600'), minHeight: 44, paddingVertical: 8 }}
         />
         {value.length > 0 ? (
           <Pressable
