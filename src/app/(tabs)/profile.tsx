@@ -397,6 +397,15 @@ export default function SettingsScreen(): React.ReactElement {
             </SettingsSection>
           ) : null}
 
+          <SettingsSection title="Learn">
+            <SettingsRow
+              icon="🧠"
+              label="Investing FAQ"
+              description="Diversifying, T-bills, ETFs, risk and more, in plain English"
+              onPress={() => router.push('/learn' as Href)}
+            />
+          </SettingsSection>
+
           {/* About */}
           <SettingsSection title="About">
             <SettingsRow icon="⭐️" label="Rate Pathey" chevron={false} onPress={() => void requestAppRating()} />
