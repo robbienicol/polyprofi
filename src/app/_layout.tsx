@@ -13,8 +13,8 @@ import {
   SourceSerif4_600SemiBold,
   SourceSerif4_700Bold,
 } from '@expo-google-fonts/source-serif-4';
-import { ClerkProvider } from '@clerk/clerk-expo';
-import { QueryClientProvider } from '@tanstack/react-query';
+import { ClerkProvider, useAuth } from '@clerk/clerk-expo';
+import { QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as Notifications from 'expo-notifications';
 import * as SplashScreen from 'expo-splash-screen';
 import { Stack, router, useRootNavigationState, usePathname, type Href } from 'expo-router';
@@ -29,6 +29,7 @@ import { AppLockGate } from '@/components/auth/AppLockGate';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { getQueryClient } from '@/api/query-client';
+import { pullUserData, setSyncSession } from '@/api/client/user-data-sync';
 import { clerkTokenCache } from '@/lib/clerk-cache';
 import { useGainAlerts } from '@/api/hooks/useGainAlerts';
 import { shouldPresentCelebration } from '@/lib/savings-goal';
@@ -85,6 +86,44 @@ function GoalHousekeeping(): null {
   return null;
 }
 
+/** React Query key of the hook that reads each synced blob, to refresh after a pull. */
+const SYNCED_QUERY_KEYS = {
+  bets: ['TRACKED_BETS'],
+  savedRoutes: ['SAVED_ROUTES'],
+  preferences: ['PREFERENCES'],
+  onboardingProfile: ['ONBOARDING_PROFILE'],
+  portfolioProgress: ['PORTFOLIO_PROGRESS'],
+} as const;
+
+/**
+ * Mirrors bets, saved routes, settings and history to the signed-in account.
+ * Runs once per sign-in and again on reconnect, which is when changes made
+ * offline finally reach the server.
+ */
+function UserDataSync(): null {
+  const { isLoaded, isSignedIn, userId, getToken } = useAuth();
+  const queryClient = useQueryClient();
+  const signedIn = isLoaded && !!isSignedIn && !!userId;
+
+  useEffect(() => {
+    if (isLoaded && !signedIn) setSyncSession(null);
+  }, [isLoaded, signedIn]);
+
+  useQuery({
+    queryKey: ['USER_DATA_SYNC', userId],
+    enabled: signedIn,
+    queryFn: async () => {
+      const changed = await pullUserData({ userId: userId!, getToken });
+      await Promise.all(changed.map((key) => queryClient.invalidateQueries({ queryKey: SYNCED_QUERY_KEYS[key] })));
+      return changed;
+    },
+    staleTime: Infinity,
+    refetchOnReconnect: 'always',
+  });
+
+  return null;
+}
+
 function GoalCelebrationGate(): null {
   const { pendingCelebration } = useSavingsGoal();
   const pathname = usePathname();
@@ -137,6 +176,7 @@ export default function RootLayout(): React.ReactElement | null {
                 <NotificationObserver />
                 <GoalCelebrationGate />
                 <GoalHousekeeping />
+                <UserDataSync />
                 <OfflineBanner />
               </AppLockGate>
             </QueryClientProvider>

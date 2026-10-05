@@ -82,7 +82,8 @@
     "seed:statement": "tsx scripts/seed-statement.ts",
     "typecheck": "tsc --noEmit --noUnusedLocals --noUnusedParameters",
     "build": "bash scripts/testflight.sh",
-    "build:calibration": "tsx scripts/build-calibration.ts"
+    "build:calibration": "tsx scripts/build-calibration.ts",
+    "db:migrate": "tsx --env-file=.env scripts/db-migrate.ts"
   },
   "private": true
 }

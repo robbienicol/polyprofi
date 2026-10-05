@@ -37,7 +37,7 @@ export default function PrivacyScreen(): React.ReactElement {
       <SafeAreaView className="flex-1" edges={['bottom']}>
         <ScrollView contentContainerClassName="px-5 py-6" showsVerticalScrollIndicator={false}>
           <ThemedText style={{ fontSize: 22, fontWeight: '800', color: theme.text }}>Privacy Policy</ThemedText>
-          <P>Last updated: 2026-08-10.</P>
+          <P>Last updated: 2026-10-05.</P>
 
           <H>What this covers</H>
           <P>
@@ -56,7 +56,9 @@ export default function PrivacyScreen(): React.ReactElement {
           </P>
           <P>
             • Goals and activity you enter: your profit target, timeframe, risk preference, and any
-            routes you save or mark as tracked. This is stored locally on your device, not on our servers.
+            routes you save or mark as tracked, your settings, and your portfolio history. These are stored
+            on your device and, when you're signed in, backed up to our database so they follow you to
+            other devices. Imported bank statements and the spending cuts found in them stay on your device.
           </P>
           <P>• Device diagnostics: basic crash/error info if the app encounters an unexpected error.</P>
 

@@ -9,6 +9,7 @@ import type { SpendingCut } from '@/lib/spending-cut-routes';
 import { sanitizePreferences, type Preferences } from '@/lib/preferences';
 import { migrateSavingsGoalState } from '@/lib/savings-goal';
 import { QuizAnswers, SavingsGoalState, TrackedBet } from '@/types/bets';
+import { noteLocalWrite, SYNCED_STORAGE_KEYS } from '@/api/client/user-data-sync';
 import { Route, SavedRoutesBatch } from '@/types/routes';
 import {
   isArrayOf,
@@ -32,20 +33,20 @@ const KEYS = {
   SUBSCRIBED: 'polyprofit:subscribed',
   QUIZ: 'polyprofit:quiz',
   QUIZ_OWNER: 'polyprofit:quizOwner',
-  BETS: 'polyprofit:bets',
+  BETS: SYNCED_STORAGE_KEYS.bets,
   ONBOARDING: 'polyprofit:onboardingComplete',
   EARLY_ACCESS: 'polyprofit:earlyAccessGranted',
-  SAVED_ROUTES: 'polyprofit:savedRoutes',
+  SAVED_ROUTES: SYNCED_STORAGE_KEYS.savedRoutes,
   DAILY_POOL: 'polyprofit:dailyPool',
-  PORTFOLIO_PROGRESS: 'polyprofit:portfolioProgress',
+  PORTFOLIO_PROGRESS: SYNCED_STORAGE_KEYS.portfolioProgress,
   SAVINGS_GOAL: 'polyprofit:savingsGoal',
   SAVINGS_GOAL_OWNER: 'polyprofit:savingsGoalOwner',
   SAVINGS_GOAL_UNSYNCED: 'polyprofit:savingsGoalUnsynced',
   SPORTS_MATCHES: 'polyprofit:sportsMatches',
   GENERIC_MATCHES: 'polyprofit:genericMatches',
   BIOMETRIC_LOCK: 'polyprofit:biometricLockEnabled',
-  PREFERENCES: 'polyprofit:preferences',
-  ONBOARDING_PROFILE: 'polyprofit:onboardingProfile',
+  PREFERENCES: SYNCED_STORAGE_KEYS.preferences,
+  ONBOARDING_PROFILE: SYNCED_STORAGE_KEYS.onboardingProfile,
   DEV_REPLAY_FUNNEL: 'polyprofit:devReplayFunnel',
   PROFILE_COMPLETE: 'polyprofit:profileComplete',
   PROFILE_COMPLETE_OWNER: 'polyprofit:profileCompleteOwner',
@@ -221,6 +222,7 @@ export async function getTrackedBets(): Promise<TrackedBet[]> {
 
 export async function saveTrackedBets(bets: TrackedBet[]): Promise<void> {
   await AsyncStorage.setItem(KEYS.BETS, JSON.stringify(bets));
+  await noteLocalWrite('bets');
 }
 
 export async function getPortfolioProgress(): Promise<PortfolioProgressPoint[]> {
@@ -254,6 +256,7 @@ export async function recordPortfolioProgress(
       : [...seeded, point];
   const bounded = next.slice(-2_000);
   await AsyncStorage.setItem(KEYS.PORTFOLIO_PROGRESS, serializePortfolioHistory(bounded));
+  await noteLocalWrite('portfolioProgress');
   return bounded;
 }
 
@@ -291,6 +294,7 @@ export async function getOnboardingProfile(): Promise<OnboardingProfile> {
 export async function updateOnboardingProfile(patch: Partial<OnboardingProfile>): Promise<OnboardingProfile> {
   const next = sanitizeOnboardingProfile({ ...(await getOnboardingProfile()), ...patch });
   await AsyncStorage.setItem(KEYS.ONBOARDING_PROFILE, JSON.stringify(next));
+  await noteLocalWrite('onboardingProfile');
   return next;
 }
 
@@ -328,6 +332,7 @@ export async function appendSavedRoutesBatch(batch: SavedRoutesBatch): Promise<v
   const history = await getSavedRoutesHistory();
   const next = [batch, ...history].slice(0, MAX_SAVED_BATCHES);
   await AsyncStorage.setItem(KEYS.SAVED_ROUTES, JSON.stringify(next));
+  await noteLocalWrite('savedRoutes');
 }
 
 export async function getBiometricLockEnabled(): Promise<boolean> {
@@ -380,6 +385,7 @@ export async function getPreferences(): Promise<Preferences> {
 export async function updatePreferences(patch: Partial<Preferences>): Promise<Preferences> {
   const next = sanitizePreferences({ ...(await getPreferences()), ...patch });
   await AsyncStorage.setItem(KEYS.PREFERENCES, JSON.stringify(next));
+  await noteLocalWrite('preferences');
   return next;
 }
 
