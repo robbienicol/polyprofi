@@ -87,6 +87,14 @@ export function RouteFilters({
 
       <Divider />
 
+      <Section label="Sort by">
+        <FilterRow>
+          {SORT_OPTIONS.map(({ label, value }) => (
+            <FilterChip key={value} label={label} active={filters.sort === value} onPress={() => update({ sort: value })} />
+          ))}
+        </FilterRow>
+      </Section>
+
       <Section label="Asset class">
         <FilterRow>
           <FilterChip label="All" active={filters.category === null} onPress={() => update({ category: null })} />
@@ -201,14 +209,6 @@ export function RouteFilters({
         <FilterRow>
           {LOSS_PROFILE_FILTERS.map(({ label, value, color }) => (
             <FilterChip key={value} label={label} active={filters.lossProfile === value} activeColor={color} activeTextColor={theme.text} onPress={() => update({ lossProfile: filters.lossProfile === value ? null : value })} />
-          ))}
-        </FilterRow>
-      </Section>
-
-      <Section label="Sort by">
-        <FilterRow>
-          {SORT_OPTIONS.map(({ label, value }) => (
-            <FilterChip key={value} label={label} active={filters.sort === value} onPress={() => update({ sort: value })} />
           ))}
         </FilterRow>
       </Section>
