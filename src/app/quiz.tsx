@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
-import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, TextInput, View } from 'react-native';
+import React, { useCallback, useRef, useState } from 'react';
+import { Keyboard, KeyboardAvoidingView, Platform, Pressable, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { timeframeCalendarDays } from '@/api/client/playbook';
@@ -17,7 +17,6 @@ import { ThemedText } from '@/components/themed-text';
 import { Brand, OnBrand, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { Haptic } from '@/lib/haptics';
-import { ACQUISITION_PLATFORMS } from '@/lib/preferences';
 import {
   excludedSearchCategoriesFor,
   riskToleranceFor,
@@ -28,17 +27,14 @@ import { buildRouteParams, referenceStakeFor, surveyAmountCeiling } from '@/lib/
 import { goalByLabel, goalRemaining, isOpenEnded } from '@/lib/savings-goal';
 import type { AcquisitionPlatform, QuizAnswers, SavingsGoal } from '@/types/bets';
 
-/**
- * `word` completes the sentence; `label` sits in the picker; `deadlineWord` names
- * an unnamed search's goal the way a person would ("$50 by tomorrow").
- */
+/** `label` sits in the one-row picker, so it has to stay short. */
 const TIMEFRAMES = [
-  { value: 'today', word: 'within 24 hours', label: 'Today', deadlineWord: 'by tomorrow' },
-  { value: 'week', word: 'within a week', label: 'This week', deadlineWord: 'this week' },
-  { value: 'month', word: 'within a month', label: 'This month', deadlineWord: 'this month' },
-  { value: '3months', word: 'within 3 months', label: '3 months', deadlineWord: 'in 3 months' },
-  { value: '1year', word: 'within a year', label: '1 year', deadlineWord: 'this year' },
-  { value: '5years', word: 'within 5 years', label: '5 years', deadlineWord: 'in 5 years' },
+  { value: 'today', label: '1 day' },
+  { value: 'week', label: '1 wk' },
+  { value: 'month', label: '1 mo' },
+  { value: '3months', label: '3 mo' },
+  { value: '1year', label: '1 yr' },
+  { value: '5years', label: '5 yr' },
 ] as const;
 
 /** Icon for a seeded goal that did not carry one of its own. */
@@ -68,71 +64,12 @@ function goalSeedFrom(label?: string, emoji?: string, target?: string): GoalSeed
   };
 }
 
-/**
- * `value` must stay in sync with QUIZ_TO_ROUTE_CATEGORIES in lib/quiz-profile —
- * it's the string the route filter matches on.
- *
- * Only classes something actually builds routes for belong here. Sports and Forex were
- * offered for a long time and nothing ever emitted a route in either: Forex has no
- * builder at all, and "Sports" mapped onto the whole Polymarket pool, so picking it
- * narrowed nothing. Sport is still reachable — as a topic facet on prediction markets,
- * where the routes genuinely are — but it is not an asset class of its own.
- */
-const MARKETS = [
-  // `word` goes into the sentence, which joins picks with "&" — so no entry may
-  // carry its own conjunction, or two markets read as "stocks & treasuries & crypto".
-  { value: 'Stocks', word: 'stocks', label: 'Stocks, ETFs & T-bills', emoji: '📈' },
-  { value: 'Crypto', word: 'crypto', label: 'Crypto', emoji: '₿' },
-  { value: 'Polymarket', word: 'prediction markets', label: 'Prediction markets', emoji: '🔮' },
-] as const;
-
-/** One tap to the amounts most people actually pick, when there is no goal to scale to. */
-const QUICK_AMOUNTS = [100, 500, 1_000, 5_000] as const;
-
-/** Rounds to something a person would say: 2,480 becomes 2,500, 17,300 becomes 17,000. */
-function roundAmount(value: number): number {
-  if (value <= 0) return 0;
-  const step = Math.max(10, 10 ** (Math.floor(Math.log10(value)) - 1));
-  return Math.round(value / step) * step;
-}
-
-/**
- * The four one-tap amounts, scaled to what they are actually working towards: a
- * $10,000 goal is not served by chips reading $100 to $5k, which is what everyone
- * saw before this — they were fixed, so on any real goal all four were wrong.
- * Quarter, half, the goal itself and double it, deduplicated in case rounding
- * collapses two of them together.
- */
-function quickAmountsFor(goalTarget: number): readonly number[] {
-  if (!(goalTarget > 0)) return QUICK_AMOUNTS;
-  const scaled = [0.25, 0.5, 1, 2]
-    .map((fraction) => roundAmount(goalTarget * fraction))
-    .filter((amount) => amount > 0);
-  const unique = [...new Set(scaled)];
-  return unique.length === 4 ? unique : QUICK_AMOUNTS;
-}
-
 /** Widest goal the hero number can show without running off a small phone. */
 const MAX_TARGET_DIGITS = 7;
-
-/**
- * Capital the user has on hand, offered as a ceiling. A different question from the goal
- * above and both are load-bearing: the goal is the profit wanted, this is the money
- * available to earn it, and the same $300 goal is a T-bill or a long shot depending
- * entirely on this number. Asked per search because it changes between searches — the
- * profile survey's answer is only the starting suggestion.
- */
-const INVEST_AMOUNTS = [500, 1_000, 5_000, 25_000, 100_000] as const;
 
 /** How many thousands separators toLocaleString will add to this many digits. */
 function groupingCommas(digits: string): number {
   return Math.max(0, Math.ceil(digits.length / 3) - 1);
-}
-
-/** Joins names the way a person would: "a", "a & b", "a, b & c". */
-function joinWords(words: readonly string[]): string {
-  if (words.length <= 1) return words[0] ?? '';
-  return `${words.slice(0, -1).join(', ')} & ${words[words.length - 1]}`;
 }
 
 export default function QuizScreen(): React.ReactElement {
@@ -256,10 +193,11 @@ function QuizForm({
   const goalLabelShown = startingGoal?.label ?? newGoalSeed?.label ?? null;
   // The amount is prefilled and set in the headline type, so it reads as a printed
   // figure rather than a field. The hint beside it says otherwise until it is used.
-  const [amountTouched, setAmountTouched] = useState(false);
   const [target, setTarget] = useState(String(startingTarget));
   const [timeframe, setTimeframe] = useState<QuizAnswers['timeframe']>(prefill?.timeframe ?? defaultTimeframe);
-  const [categories, setCategories] = useState<string[]>(prefill?.categories ?? preferredCategories);
+  // Not asked here any more: markets are a filter on the results screen, so the
+  // search keeps whatever the last one or onboarding picked.
+  const categories = prefill?.categories ?? preferredCategories;
   const [isSaving, setIsSaving] = useState(false);
   // Seeded from the last search, else from the signup survey, else blank. Blank is fine:
   // it falls back to the goal-derived stake, which is what the app did before this asked.
@@ -267,20 +205,9 @@ function QuizForm({
   const [investFocused, setInvestFocused] = useState(false);
 
   const targetValue = Number(target.replace(/[^0-9]/g, '')) || 0;
-  // Scaled to the goal the form opened on, not to whatever is currently typed —
-  // chips that moved as you tapped them would never let you tap the same one twice.
-  const quickAmounts = useMemo(() => quickAmountsFor(startingTarget), [startingTarget]);
   const investValue = Number(invest.replace(/[^0-9]/g, '')) || 0;
   const investCeiling = investValue || investmentCeiling;
-  const appWord = joinWords(
-    ACQUISITION_PLATFORMS.filter((platform) => preferredPlatforms.includes(platform.value)).map((p) => p.label),
-  );
   const attachedLabel = goalAttached ? goalLabelShown : null;
-
-  const toggleMarket = useCallback((market: string) => {
-    Haptic.select();
-    setCategories((prev) => (prev.includes(market) ? prev.filter((item) => item !== market) : [...prev, market]));
-  }, []);
 
   const submit = useCallback(() => {
     if (targetValue <= 0 || isSaving) return;
@@ -346,238 +273,142 @@ function QuizForm({
       <OnboardingGlow />
       <SafeAreaView className="flex-1">
         <KeyboardAvoidingView className="flex-1" behavior={Platform.select({ ios: 'padding', android: undefined })}>
-          <ScrollView
+          {/* One screen, no scroll: three answers and the button. Tapping the empty
+              space puts the keyboard away, since there is no scroll to drag it off. */}
+          <Pressable
+            accessible={false}
+            onPress={Keyboard.dismiss}
             className="flex-1"
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="on-drag"
-            contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 24, paddingTop: 4, paddingBottom: 20, gap: 22 }}>
-
+            style={{ paddingHorizontal: 24, paddingTop: 4, paddingBottom: 16 }}>
             <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)' as Href))} accessibilityRole="button" className="self-start active:opacity-60 py-1">
               <ThemedText style={{ fontSize: 14, fontWeight: '600', color: theme.textSecondary }}>← Cancel</ThemedText>
             </Pressable>
 
-            {/* The sentence: the amount is typed straight into it, the rest is written
-                by the two pickers below, so nothing on the page is hidden behind a mode. */}
-            <View>
-              <ThemedText style={{ fontSize: 24, lineHeight: 32, fontWeight: '600', color: theme.textSecondary }}>
-                I want to make
-              </ThemedText>
-
-              <View className="flex-row items-end" style={{ gap: 10 }}>
-              <Pressable
-                onPress={() => amountRef.current?.focus()}
-                accessibilityRole="button"
-                accessibilityLabel={`Amount, ${targetValue} dollars. Double tap to edit.`}
-                className="flex-row items-end self-start active:opacity-80"
-                style={{ marginTop: 2, marginBottom: 6, borderBottomWidth: 3, borderBottomColor: Brand[500], paddingBottom: 2 }}>
-                <ThemedText style={{ fontSize: 34, lineHeight: 66, fontWeight: '700', color: Brand[500] }}>$</ThemedText>
-                <TextInput
-                  ref={amountRef}
-                  value={targetValue > 0 ? targetValue.toLocaleString() : target}
-                  // Cap digits here rather than with maxLength, which would count the
-                  // grouping commas and swallow the last two digits of a 7-figure goal.
-                  onChangeText={(text) => setTarget(text.replace(/[^0-9]/g, '').slice(0, MAX_TARGET_DIGITS))}
-                  keyboardType="number-pad"
-                  inputMode="numeric"
-                  selectTextOnFocus
-                  placeholder="0"
-                  placeholderTextColor={Brand[500] + '55'}
-                  style={{
-                    color: Brand[500],
-                    fontSize: 56,
-                    lineHeight: 66,
-                    fontWeight: '800',
-                    fontVariant: ['tabular-nums'],
-                    padding: 0,
-                    // TextInput can't hug its text, so size it from the character count —
-                    // otherwise the underline runs on past the number. Digits are wide and
-                    // the grouping commas are narrow; the slack covers the widest digit in
-                    // the platform font, since a tight fit clips.
-                    width: Math.max(1, target.length) * 37 + groupingCommas(target) * 14 + 12,
-                  }}
-                  onFocus={() => setAmountTouched(true)}
-                />
-              </Pressable>
-              {!amountTouched ? (
+            <View className="flex-1 justify-center" style={{ gap: 32 }}>
+              <View>
+                <ThemedText style={{ fontSize: 24, lineHeight: 32, fontWeight: '600', color: theme.textSecondary }}>
+                  I want to make
+                </ThemedText>
                 <Pressable
                   onPress={() => amountRef.current?.focus()}
                   accessibilityRole="button"
-                  accessibilityLabel="Edit the amount"
-                  hitSlop={8}
-                  className="flex-row items-center active:opacity-60"
-                  style={{ marginBottom: 18, gap: 4 }}>
-                  <Icon glyph="✏️" size={13} color={theme.textTertiary} />
-                  <ThemedText style={{ fontSize: 12, fontWeight: '700', color: theme.textTertiary }}>
-                    tap to edit
-                  </ThemedText>
-                </Pressable>
-              ) : null}
-              </View>
-
-            </View>
-
-            {attachedLabel ? (
-              <View
-                className="flex-row items-center self-start"
-                style={{ gap: 8, paddingLeft: 12, paddingRight: 6, paddingVertical: 6, borderRadius: Radius.pill, backgroundColor: theme.backgroundSelected, marginTop: -10 }}>
-                <ThemedText style={{ fontSize: 13, fontWeight: '700', color: theme.textSecondary }}>
-                  Toward {attachedLabel}
-                </ThemedText>
-                <Pressable
-                  onPress={() => setGoalAttached(false)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Search without ${attachedLabel}`}
-                  hitSlop={8}
-                  className="active:opacity-60"
-                  style={{ width: 22, height: 22, borderRadius: 999, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.background }}>
-                  <Icon glyph="✕" size={12} color={theme.textSecondary} strokeWidth={2.5} />
-                </Pressable>
-              </View>
-            ) : null}
-
-            <View className="flex-row" style={{ gap: 8 }}>
-              {quickAmounts.map((amount) => {
-                const selected = targetValue === amount;
-                return (
-                  <Pressable
-                    key={amount}
-                    onPress={() => {
-                      Haptic.select();
-                      setTarget(String(amount));
-                      setAmountTouched(true);
-                      Keyboard.dismiss();
-                    }}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected }}
-                    className="flex-1 items-center active:opacity-70"
+                  accessibilityLabel={`Amount, ${targetValue} dollars. Double tap to edit.`}
+                  className="flex-row items-end self-start active:opacity-80"
+                  style={{ marginTop: 2, borderBottomWidth: 3, borderBottomColor: Brand[500], paddingBottom: 2 }}>
+                  <ThemedText style={{ fontSize: 34, lineHeight: 66, fontWeight: '700', color: Brand[500] }}>$</ThemedText>
+                  <TextInput
+                    ref={amountRef}
+                    value={targetValue > 0 ? targetValue.toLocaleString() : target}
+                    // Cap digits here rather than with maxLength, which would count the
+                    // grouping commas and swallow the last two digits of a 7-figure goal.
+                    onChangeText={(text) => setTarget(text.replace(/[^0-9]/g, '').slice(0, MAX_TARGET_DIGITS))}
+                    keyboardType="number-pad"
+                    inputMode="numeric"
+                    selectTextOnFocus
+                    placeholder="0"
+                    placeholderTextColor={Brand[500] + '55'}
                     style={{
-                      borderRadius: Radius.pill,
-                      paddingVertical: 10,
-                      borderWidth: 1.5,
-                      borderColor: selected ? Brand[500] : theme.border,
-                      backgroundColor: selected ? Brand[500] + '18' : theme.backgroundElement,
-                    }}>
-                    <ThemedText style={{ fontSize: 14, fontWeight: '800', color: selected ? Brand[500] : theme.textSecondary, fontVariant: ['tabular-nums'] }}>
-                      ${amount >= 1_000_000
-                        ? `${Number((amount / 1_000_000).toFixed(1))}m`
-                        : amount >= 1_000
-                          ? `${Number((amount / 1_000).toFixed(1))}k`
-                          : amount}
+                      color: Brand[500],
+                      fontSize: 56,
+                      lineHeight: 66,
+                      fontWeight: '800',
+                      fontVariant: ['tabular-nums'],
+                      padding: 0,
+                      // TextInput can't hug its text, so size it from the character count —
+                      // otherwise the underline runs on past the number. Digits are wide and
+                      // the grouping commas are narrow; the slack covers the widest digit in
+                      // the platform font, since a tight fit clips.
+                      width: Math.max(1, target.length) * 37 + groupingCommas(target) * 14 + 12,
+                    }}
+                  />
+                </Pressable>
+
+                {attachedLabel ? (
+                  <View
+                    className="flex-row items-center self-start"
+                    style={{ gap: 8, paddingLeft: 12, paddingRight: 6, paddingVertical: 6, borderRadius: Radius.pill, backgroundColor: theme.backgroundSelected, marginTop: 14 }}>
+                    <ThemedText style={{ fontSize: 13, fontWeight: '700', color: theme.textSecondary }}>
+                      Toward {attachedLabel}
                     </ThemedText>
-                  </Pressable>
-                );
-              })}
+                    <Pressable
+                      onPress={() => setGoalAttached(false)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Search without ${attachedLabel}`}
+                      hitSlop={8}
+                      className="active:opacity-60"
+                      style={{ width: 22, height: 22, borderRadius: 999, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.background }}>
+                      <Icon glyph="✕" size={12} color={theme.textSecondary} strokeWidth={2.5} />
+                    </Pressable>
+                  </View>
+                ) : null}
+              </View>
+
+              <Field label="Within">
+                <View
+                  className="flex-row"
+                  accessibilityRole="radiogroup"
+                  style={{ padding: 4, borderRadius: Radius.pill, backgroundColor: theme.backgroundSelected }}>
+                  {TIMEFRAMES.map((tf) => {
+                    const selected = timeframe === tf.value;
+                    return (
+                      <Pressable
+                        key={tf.value}
+                        onPress={() => {
+                          Keyboard.dismiss();
+                          if (!selected) Haptic.select();
+                          setTimeframe(tf.value);
+                        }}
+                        accessibilityRole="radio"
+                        accessibilityState={{ selected }}
+                        className="flex-1 items-center active:opacity-80"
+                        style={{
+                          paddingVertical: 10,
+                          borderRadius: Radius.pill,
+                          backgroundColor: selected ? theme.backgroundElevated : 'transparent',
+                          ...(selected ? Shadow.card : null),
+                        }}>
+                        <ThemedText
+                          style={{ fontSize: 13, fontWeight: '700', color: selected ? theme.text : theme.textSecondary }}>
+                          {tf.label}
+                        </ThemedText>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </Field>
+
+              <Field label="Investing up to">
+                <View
+                  className="flex-row items-center"
+                  style={{
+                    gap: 6,
+                    paddingHorizontal: 14,
+                    borderWidth: 1.5,
+                    borderRadius: Radius.md,
+                    borderColor: investFocused ? Brand[500] : theme.borderStrong,
+                    backgroundColor: theme.backgroundElement,
+                  }}>
+                  <ThemedText style={{ fontSize: 17, fontWeight: '800', color: Brand[500] }}>$</ThemedText>
+                  <TextInput
+                    value={investValue > 0 ? investValue.toLocaleString() : invest}
+                    onChangeText={(text) => setInvest(text.replace(/[^0-9]/g, '').slice(0, MAX_TARGET_DIGITS))}
+                    onFocus={() => setInvestFocused(true)}
+                    onBlur={() => setInvestFocused(false)}
+                    keyboardType="number-pad"
+                    inputMode="numeric"
+                    selectTextOnFocus
+                    returnKeyType="done"
+                    placeholder="Any amount"
+                    placeholderTextColor={theme.textTertiary}
+                    accessibilityLabel="Most you would invest, in dollars"
+                    style={{ flex: 1, color: theme.text, fontSize: 17, fontWeight: '700', fontVariant: ['tabular-nums'], paddingVertical: 14 }}
+                  />
+                </View>
+              </Field>
             </View>
+          </Pressable>
 
-            {/* Spare height goes here, so the pickers stay within thumb reach on a tall
-                phone and simply collapse to nothing on a short one. */}
-            <View style={{ flexGrow: 1, minHeight: 4 }} />
-
-            <SectionRule label="Your plan" />
-
-            <Group label="Willing to invest" hint="Your ceiling — a route never uses more">
-              <View
-                className="flex-row items-center"
-                style={{
-                  gap: 6,
-                  paddingHorizontal: 14,
-                  borderWidth: 1.5,
-                  borderRadius: Radius.md,
-                  borderColor: investFocused ? Brand[500] : theme.borderStrong,
-                  backgroundColor: theme.backgroundElement,
-                }}>
-                <ThemedText style={{ fontSize: 15, fontWeight: '800', color: Brand[500] }}>$</ThemedText>
-                <TextInput
-                  value={investValue > 0 ? investValue.toLocaleString() : invest}
-                  onChangeText={(text) => setInvest(text.replace(/[^0-9]/g, '').slice(0, MAX_TARGET_DIGITS))}
-                  onFocus={() => setInvestFocused(true)}
-                  onBlur={() => setInvestFocused(false)}
-                  keyboardType="number-pad"
-                  inputMode="numeric"
-                  selectTextOnFocus
-                  returnKeyType="done"
-                  placeholder="How much can you put in?"
-                  placeholderTextColor={theme.textTertiary}
-                  accessibilityLabel="Amount you are willing to invest, in dollars"
-                  style={{ flex: 1, color: theme.text, fontSize: 15, fontWeight: '700', fontVariant: ['tabular-nums'], paddingVertical: 13 }}
-                />
-              </View>
-              <View className="flex-row flex-wrap" style={{ gap: 8 }}>
-                {INVEST_AMOUNTS.map((amount) => (
-                  <Chip
-                    key={amount}
-                    label={`$${amount >= 1000 ? `${amount / 1000}k` : amount}`}
-                    selected={investValue === amount}
-                    role="radio"
-                    onPress={() => {
-                      Keyboard.dismiss();
-                      setInvest(String(amount));
-                    }}
-                  />
-                ))}
-              </View>
-            </Group>
-
-            <Group label="By when">
-              <View className="flex-row flex-wrap" style={{ gap: 8 }}>
-                {TIMEFRAMES.map((tf) => (
-                  <Chip
-                    key={tf.value}
-                    label={tf.label}
-                    selected={timeframe === tf.value}
-                    role="radio"
-                    onPress={() => {
-                      Keyboard.dismiss();
-                      setTimeframe(tf.value);
-                    }}
-                  />
-                ))}
-              </View>
-            </Group>
-
-            {/* Money questions above the rule, market questions below it. They were one
-                unbroken run of identical pills, which read as a single form: how much,
-                then what to put it on. They are different decisions and the rule says so. */}
-            <SectionRule label="Where we look" />
-
-            <Group label="Markets" hint="Leave blank for everything">
-              <View className="flex-row flex-wrap" style={{ gap: 8 }}>
-                <Chip
-                  label="Everything"
-                  selected={categories.length === 0}
-                  role="radio"
-                  onPress={() => {
-                    Keyboard.dismiss();
-                    setCategories([]);
-                  }}
-                />
-                {MARKETS.map((market) => (
-                  <Chip
-                    key={market.value}
-                    label={market.label}
-                    emoji={market.emoji}
-                    selected={categories.includes(market.value)}
-                    role="checkbox"
-                    onPress={() => {
-                      Keyboard.dismiss();
-                      toggleMarket(market.value);
-                    }}
-                  />
-                ))}
-              </View>
-            </Group>
-          </ScrollView>
-
-          {/* Sticky CTA */}
-          <View style={{ paddingHorizontal: 24, paddingTop: 12, paddingBottom: 8, borderTopWidth: 1, borderTopColor: theme.border, backgroundColor: theme.background }}>
-            <ThemedText numberOfLines={1} style={{ fontSize: 12, color: theme.textTertiary, marginBottom: 10, paddingHorizontal: 2 }}>
-              {targetValue <= 0
-                ? 'Enter an amount to continue'
-                : attachedLabel
-                  ? `Toward ${attachedLabel} · opens in ${appWord || 'your app'}`
-                  : `Ranked safest first · opens in ${appWord || 'your app'}`}
-            </ThemedText>
+          <View style={{ paddingHorizontal: 24, paddingTop: 12, paddingBottom: 8 }}>
             <Pressable
               onPress={submit}
               disabled={targetValue <= 0 || isSaving}
@@ -586,7 +417,7 @@ function QuizForm({
               className="py-4 items-center active:opacity-85"
               style={{ borderRadius: Radius.lg, backgroundColor: Brand[500], opacity: targetValue > 0 && !isSaving ? 1 : 0.4, ...Shadow.card }}>
               <ThemedText style={{ fontSize: 16, fontWeight: '900', color: OnBrand }}>
-                {isSaving ? 'Finding routes…' : 'Find my routes →'}
+                {isSaving ? 'Finding routes…' : targetValue <= 0 ? 'Enter an amount' : 'Find my routes →'}
               </ThemedText>
             </Pressable>
           </View>
@@ -596,74 +427,14 @@ function QuizForm({
   );
 }
 
-/**
- * A labelled divider between the two halves of the form. The money questions and the
- * market question are separate decisions, and running them together as one column of
- * identical pills made "how much" and "what on" read as a single ticket being filled in.
- */
-function SectionRule({ label }: { label: string }): React.ReactElement {
-  const theme = useTheme();
-  return (
-    <View className="flex-row items-center" style={{ gap: 10, marginTop: 2 }}>
-      <View style={{ flex: 1, height: 1, backgroundColor: theme.border }} />
-      <ThemedText style={{ fontSize: 10.5, fontWeight: '900', letterSpacing: 1, color: theme.textTertiary }}>
-        {label.toUpperCase()}
-      </ThemedText>
-      <View style={{ flex: 1, height: 1, backgroundColor: theme.border }} />
-    </View>
-  );
-}
-
-function Group({ label, hint, children }: React.PropsWithChildren<{ label: string; hint?: string }>): React.ReactElement {
+function Field({ label, children }: React.PropsWithChildren<{ label: string }>): React.ReactElement {
   const theme = useTheme();
   return (
     <View style={{ gap: 10 }}>
-      <View className="flex-row items-center" style={{ gap: 8 }}>
-        <ThemedText style={{ fontSize: 11, fontWeight: '800', letterSpacing: 0.9, color: theme.textTertiary }}>
-          {label.toUpperCase()}
-        </ThemedText>
-        {hint ? (
-          <ThemedText style={{ fontSize: 11, color: theme.textTertiary, opacity: 0.7 }}>{hint}</ThemedText>
-        ) : null}
-      </View>
+      <ThemedText style={{ fontSize: 11, fontWeight: '800', letterSpacing: 0.9, color: theme.textTertiary }}>
+        {label.toUpperCase()}
+      </ThemedText>
       {children}
     </View>
-  );
-}
-
-function Chip({
-  label,
-  emoji,
-  selected,
-  role,
-  onPress,
-}: {
-  label: string;
-  emoji?: string;
-  selected: boolean;
-  role: 'radio' | 'checkbox';
-  onPress: () => void;
-}): React.ReactElement {
-  const theme = useTheme();
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole={role}
-      accessibilityState={role === 'radio' ? { selected } : { checked: selected }}
-      className="flex-row items-center active:opacity-70"
-      style={{
-        gap: 6,
-        paddingHorizontal: 14,
-        paddingVertical: 11,
-        borderRadius: Radius.pill,
-        borderWidth: 1.5,
-        borderColor: selected ? Brand[500] : theme.border,
-        backgroundColor: selected ? Brand[500] + '18' : theme.backgroundElement,
-      }}>
-      {emoji ? <Icon glyph={emoji} size={15} color={selected ? Brand[500] : theme.textSecondary} /> : null}
-      <ThemedText style={{ fontSize: 14, fontWeight: '700', color: selected ? Brand[500] : theme.textSecondary }}>
-        {label}
-      </ThemedText>
-    </Pressable>
   );
 }
