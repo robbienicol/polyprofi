@@ -297,6 +297,35 @@ export function isWorthShowing(route: Route, stake: number, cashReturnRate: numb
   return true;
 }
 
+/**
+ * Drops a route when another of the same kind beats it on every axis that matters:
+ * needs no more money, pays back no later, and is no less likely to work. Ten T-bills
+ * all making the goal at 99% were listed side by side, and the one tying up $60,000
+ * for the same three months as one needing $30,000 had no reason to be there. A
+ * route that is quicker or more certain stays, since that is a real trade-off.
+ *
+ * Routes with no known stake or maturity are never compared: unknown is not worse.
+ */
+export function withoutDominated(routes: Route[], requiredInvestmentById: Map<string, number | null>): Route[] {
+  const comparable = (route: Route): { stake: number; days: number } | null => {
+    const stake = requiredInvestmentById.get(route.id);
+    if (route.noCapitalRequired || stake == null || route.maturesInDays == null) return null;
+    return { stake, days: route.maturesInDays };
+  };
+  return routes.filter((route) => {
+    const own = comparable(route);
+    if (!own) return true;
+    return !routes.some((other) => {
+      if (other.id === route.id || other.category !== route.category || other.lossProfile !== route.lossProfile) return false;
+      const theirs = comparable(other);
+      if (!theirs) return false;
+      const noWorse = theirs.stake <= own.stake && theirs.days <= own.days && other.probability >= route.probability;
+      const better = theirs.stake < own.stake || theirs.days < own.days || other.probability > route.probability;
+      return noWorse && better;
+    });
+  });
+}
+
 /** The best sourced cash yield in the pool, as a percent a year — the bar every risky route has to clear. */
 function cashYieldPct(routes: Route[]): number | null {
   const yields = routes
@@ -349,6 +378,7 @@ export function buildRouteResults(
         noCapitalRequired: route.noCapitalRequired,
       })
     );
+  const shownRoutes = keyword ? relevantRoutes : withoutDominated(relevantRoutes, requiredInvestmentById);
   // Spend only what a route needs to reach the target, never more than the user
   // is willing to invest.
   const selectedStake = (route: Route): number => {
@@ -360,7 +390,7 @@ export function buildRouteResults(
   const cashReturnRate = cashYield != null
     ? (cashYield / 100) * (timeframeCalendarDays(params.timeframe) / 365)
     : null;
-  const rescored = relevantRoutes
+  const rescored = shownRoutes
     .map((route) => rescoreForStake([route], referenceStake, selectedStake(route), target)[0])
     // A named search shows what was asked for, worth it or not; the card still says so.
     .filter((route) => keyword || isWorthShowing(route, selectedStake(route), cashReturnRate));

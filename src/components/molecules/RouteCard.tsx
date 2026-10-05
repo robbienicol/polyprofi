@@ -4,7 +4,7 @@ import { Pressable, View } from 'react-native';
 
 import { Icon } from '@/components/ui/Icon';
 import { ThemedText } from '@/components/themed-text';
-import { Brand, Colors, OnBrand, Radius, RiskScale, Shadow } from '@/constants/theme';
+import { Brand, CategoryScale, Colors, OnBrand, Radius, RiskScale, Shadow } from '@/constants/theme';
 import { useRiskTextScale, useTheme } from '@/hooks/use-theme';
 import { predictionTopic } from '@/lib/prediction-topics';
 import { scoreVerdictShort } from '@/lib/score';
@@ -14,6 +14,24 @@ const RISK_LABELS = ['Very safe', 'Safe', 'Moderate', 'Aggressive', 'Very aggres
 
 export const riskLabel = (level: number) => RISK_LABELS[level - 1] ?? 'Unknown';
 export const riskColor = (level: number) => RiskScale[level - 1] ?? Colors.light.textSecondary;
+
+/**
+ * How long until the money comes back, coded by speed rather than by good or bad:
+ * a quick route is not a better one, it just frees the money sooner. Category hues,
+ * not semantic ones, for the same reason.
+ */
+export function maturityColor(days: number): string {
+  if (days <= 30) return CategoryScale.slate;
+  if (days <= 180) return CategoryScale.haze;
+  return CategoryScale.stone;
+}
+
+export function shortMaturity(days: number): string {
+  if (days < 14) return `${Math.max(1, Math.round(days))}d`;
+  if (days < 60) return `${Math.round(days / 7)} wk`;
+  if (days < 365) return `${Math.round(days / 30)} mo`;
+  return `${Number((days / 365).toFixed(1))} yr`;
+}
 
 /**
  * The risk band to *show*, which can never read safer than the odds. A route's own
@@ -219,6 +237,14 @@ function RouteCardInner({ route, requiredInvestment, currentInvestment, score, o
                   {riskWord}
                 </ThemedText>
               </View>
+              {route.maturesInDays != null && route.maturesInDays > 0 ? (
+                <View className="flex-row items-center" style={{ gap: 4 }}>
+                  <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: maturityColor(route.maturesInDays) }} />
+                  <ThemedText style={{ fontSize: 11, fontWeight: '800', color: theme.textSecondary, ...MONO }}>
+                    {shortMaturity(route.maturesInDays)}
+                  </ThemedText>
+                </View>
+              ) : null}
               <ThemedText style={{ fontSize: 11, color: theme.textTertiary, flex: 1 }} numberOfLines={1}>
                 {displayLabel(route.platform)}
               </ThemedText>
