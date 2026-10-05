@@ -5,7 +5,7 @@ import { Pressable, ScrollView, Switch, View } from 'react-native';
 import { InvestmentAmountControl } from '@/components/routes/InvestmentAmountControl';
 import { Icon } from '@/components/ui/Icon';
 import { ThemedText } from '@/components/themed-text';
-import { Brand, CategoryScale, Radius, Shadow } from '@/constants/theme';
+import { Brand, CategoryScale, OnBrand, Radius, Shadow } from '@/constants/theme';
 import { useSemanticText, useTheme } from '@/hooks/use-theme';
 import { isPredictionCategory, PREDICTION_TOPICS } from '@/lib/prediction-topics';
 import type { RouteFilters as Filters, RouteSort } from '@/lib/route-results';
@@ -125,25 +125,37 @@ export function SortBar({
 
 interface RouteFiltersProps {
   filters: Filters;
-  categories: string[];
+  /** Every ranked route before filtering: the asset classes and the chance histogram. */
+  routes: Route[];
+  /** How many routes the current filters leave, for the live count. */
+  shownCount: number;
   onChange: (filters: Filters) => void;
   amount: number;
   investmentMaximum: number;
   onAmountChange: (amount: number) => void;
+  onDone: () => void;
 }
 
 export function RouteFilters({
   filters,
-  categories,
+  routes,
+  shownCount,
   onChange,
   amount,
   investmentMaximum,
   onAmountChange,
+  onDone,
 }: RouteFiltersProps): React.ReactElement {
   const theme = useTheme();
   const semantic = useSemanticText();
   const update = (patch: Partial<Filters>) => onChange({ ...filters, ...patch });
-  const assetClasses = [...new Set(categories)].sort(compareAssetClasses);
+  const assetClasses = [...new Set(routes.map((route) => route.category))].sort(compareAssetClasses);
+  // The histogram answers "what does this slider cost me?" for the rest of the
+  // filters as set, so it narrows with asset class and stake shape but not chance.
+  const chancePool = routes.filter((route) => (
+    (filters.category == null || route.category === filters.category)
+    && (filters.lossProfile == null || route.lossProfile === filters.lossProfile)
+  ));
   // The asset-class chip is the intent signal: selecting prediction markets is how a
   // user asks to go deep, so that is what reveals the facets.
   const showPredictionFacets = isPredictionCategory(filters.category);
@@ -188,8 +200,9 @@ export function RouteFilters({
             {filters.minimumProbability === 0 ? 'Any chance' : `${filters.minimumProbability}% or better`}
           </ThemedText>
         </View>
+        <ChanceHistogram routes={chancePool} threshold={filters.minimumProbability} />
         <Slider
-          style={{ width: '100%', height: 44 }}
+          style={{ width: '100%', height: 44, marginTop: -10 }}
           accessibilityRole="adjustable"
           accessibilityLabel="Minimum chance of hitting the goal"
           accessibilityValue={{ text: filters.minimumProbability === 0 ? 'Any chance' : `${filters.minimumProbability} percent or better` }}
@@ -283,6 +296,71 @@ export function RouteFilters({
           ))}
         </FilterRow>
       </Section>
+
+      {/* The live count: every change above lands here at once, so the cost of a
+          filter is visible before the panel is closed. */}
+      <View
+        className="flex-row items-center justify-between"
+        style={{ gap: 12, borderTopWidth: 1, borderTopColor: theme.border, paddingTop: 12 }}>
+        <ThemedText style={{ fontSize: 13, color: theme.textSecondary, flex: 1 }}>
+          <ThemedText style={{ fontSize: 13, fontWeight: '800', color: theme.text, fontVariant: ['tabular-nums'] }}>
+            {shownCount}
+          </ThemedText>
+          {' '}of {routes.length} routes
+        </ThemedText>
+        <Pressable
+          onPress={onDone}
+          accessibilityRole="button"
+          className="justify-center active:opacity-80"
+          style={{ minHeight: 40, paddingHorizontal: 16, borderRadius: Radius.pill, backgroundColor: Brand[500] }}>
+          <ThemedText style={{ fontSize: 14, fontWeight: '800', color: OnBrand }}>
+            {shownCount === 0 ? 'No routes' : `Show ${shownCount} route${shownCount === 1 ? '' : 's'}`}
+          </ThemedText>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+/** Routes counted into 5-point chance bins, matching the slider's step: 0–4 … 85–89, 90+. */
+const CHANCE_BINS = 19;
+const HISTOGRAM_HEIGHT = 36;
+
+/**
+ * How the routes spread across chance of hitting the goal, drawn right on top of the
+ * slider so dragging it visibly greys out the bars it cuts. Without it the slider was
+ * a blind number: nothing said whether 60% kept three routes or thirty.
+ */
+function ChanceHistogram({ routes, threshold }: { routes: Route[]; threshold: number }): React.ReactElement {
+  const theme = useTheme();
+  const counts = new Array<number>(CHANCE_BINS).fill(0);
+  for (const route of routes) {
+    const bin = Math.min(CHANCE_BINS - 1, Math.max(0, Math.floor(route.probability / 5)));
+    counts[bin] += 1;
+  }
+  const max = Math.max(1, ...counts);
+  return (
+    <View
+      className="flex-row items-end"
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      // Inset by roughly the slider thumb's radius, so bin 0 sits over 0% and the last
+      // bin over 90%.
+      style={{ height: HISTOGRAM_HEIGHT, gap: 2, paddingHorizontal: 10, marginTop: 4 }}>
+      {counts.map((count, bin) => (
+        <View
+          key={bin}
+          style={{
+            flex: 1,
+            height: count === 0 ? 2 : Math.max(4, (count / max) * HISTOGRAM_HEIGHT),
+            borderTopLeftRadius: 2,
+            borderTopRightRadius: 2,
+            backgroundColor: count === 0
+              ? theme.border
+              : bin * 5 >= threshold ? Brand[500] : theme.borderControl,
+          }}
+        />
+      ))}
     </View>
   );
 }

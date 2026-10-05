@@ -581,11 +581,13 @@ export default function RoutesScreen(): React.ReactElement {
             {showFilters ? (
               <RouteFilters
                 filters={filters}
-                categories={ranked.map((route) => route.category)}
+                routes={ranked}
+                shownCount={filtered.length}
                 onChange={setFiltersAndReset}
                 amount={displayedInvestment}
                 investmentMaximum={investmentMaximum}
                 onAmountChange={setInvestmentAndReset}
+                onDone={() => setShowFilters(false)}
               />
             ) : null}
           </>
