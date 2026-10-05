@@ -1,12 +1,13 @@
 import React, { useMemo, useState } from 'react';
 import { Pressable, View } from 'react-native';
 
-import { useMoney, usePreferences } from '@/api/hooks/usePreferences';
+import { useMoney } from '@/api/hooks/usePreferences';
 import {
   AllocationBar,
   AllocationDonut,
   buildAllocationRows,
   compactAssetClass,
+  OutcomeRangeBar,
 } from '@/components/portfolio/PortfolioVisuals';
 import { PortfolioLineChart, rangeLabel, type PortfolioRange } from '@/components/molecules/PortfolioLineChart';
 import { usePortfolioSeries } from '@/api/hooks/usePortfolioSeries';
@@ -18,6 +19,7 @@ import { MetricInfo } from '@/components/ui/MetricInfo';
 import { Brand, OnBrand, Radius, Semantic, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { maturityWords, portfolioStats } from '@/lib/portfolio';
+import { outcomeRange } from '@/lib/portfolio-shape';
 import type { MetricKey } from '@/lib/metric-glossary';
 import type { PositionValuation } from '@/lib/portfolio-progress';
 import type { TrackedBet } from '@/types/bets';
@@ -176,14 +178,23 @@ export function PortfolioOverview({
 }: PortfolioOverviewProps): React.ReactElement {
   const theme = useTheme();
   const money = useMoney();
-  const { preferences, update } = usePreferences();
-  const conservative = preferences.conservativeProjections;
+  // Every projection here is the plain model. The old "Conservative" switch zeroed
+  // stocks and crypto, which is a fourth scenario nobody could place; the downside,
+  // expected and upside figures below say what it was reaching for.
+  const conservative = false;
   const [metric, setMetric] = useState<AllocationMetric>('share');
   const [valueView, setValueView] = useState<ValueView>('now');
 
   const activeBets = useMemo(() => bets.filter((bet) => bet.status === 'active'), [bets]);
   const stats = useMemo(() => portfolioStats(bets, conservative), [bets, conservative]);
   const rows = useMemo(() => buildAllocationRows(bets, fallbackCash, conservative), [bets, conservative, fallbackCash]);
+  const outcomes = useMemo(() => outcomeRange(bets), [bets]);
+  // Break-even only gets a mark when it actually falls on the bar.
+  const breakEvenPosition = outcomes.best > outcomes.worst
+    && outcomes.staked >= outcomes.worst
+    && outcomes.staked <= outcomes.best
+    ? (outcomes.staked - outcomes.worst) / (outcomes.best - outcomes.worst)
+    : null;
 
   const staked = activeBets.reduce((sum, bet) => sum + bet.amountWagered, 0);
   // Falls back to the principal rather than to a modelled figure: before any price
@@ -340,31 +351,40 @@ export function PortfolioOverview({
                     ? 'Estimated from tracked yield and time held.'
                     : 'No live price yet — showing what you put in.'}
           </ThemedText>
-          <MetricInfo metric="conservativeMode" />
-          <Pressable
-            onPress={() => update({ conservativeProjections: !conservative })}
-            accessibilityRole="switch"
-            accessibilityState={{ checked: conservative }}
-            accessibilityLabel="Conservative projections"
-            className="active:opacity-70"
-            style={{
-              paddingHorizontal: 10,
-              paddingVertical: 6,
-              borderRadius: Radius.pill,
-              borderWidth: 1,
-              borderColor: conservative ? Semantic.caution + '66' : theme.border,
-              backgroundColor: conservative ? Semantic.caution + '18' : 'transparent',
-            }}>
-            <View className="flex-row items-center" style={{ gap: 5 }}>
-              {conservative ? <Icon glyph="🛡" size={12} color={Semantic.caution} /> : null}
-              <ThemedText
-                style={{ fontSize: 11, fontWeight: '800', color: conservative ? Semantic.caution : theme.textSecondary }}>
-                {conservative ? 'Conservative' : 'Conservative off'}
-              </ThemedText>
-            </View>
-          </Pressable>
         </View>
       </View>
+
+      {/* Three scenarios, one axis: the bad run, the average one and the good one,
+          each as what you'd be holding and what that is against what you put in. */}
+      {activeBets.length > 0 ? (
+        <View
+          style={{
+            borderRadius: Radius.xl,
+            backgroundColor: theme.backgroundElevated,
+            borderWidth: 1,
+            borderColor: theme.border,
+            padding: 16,
+            gap: 14,
+            ...Shadow.card,
+          }}>
+          <View className="flex-row items-center" style={{ gap: 6 }}>
+            <ThemedText style={{ fontSize: 11, fontWeight: '800', color: theme.textTertiary, letterSpacing: 0.5 }}>
+              WHERE THIS COULD END UP
+            </ThemedText>
+            <MetricInfo metric="outcomeRange" />
+          </View>
+          <View className="flex-row" style={{ gap: 8 }}>
+            <Scenario label="Downside" value={outcomes.worst} staked={outcomes.staked} />
+            <Scenario label="Expected" value={outcomes.expected} staked={outcomes.staked} align="center" />
+            <Scenario label="Upside" value={outcomes.best} staked={outcomes.staked} align="right" />
+          </View>
+          <OutcomeRangeBar expectedPosition={outcomes.expectedPosition} breakEvenPosition={breakEvenPosition} />
+          <ThemedText style={{ fontSize: 11, lineHeight: 15, color: theme.textTertiary }}>
+            {longestMaturity > 0 ? `By the time everything pays out, in about ${maturityWords(longestMaturity)}. ` : ''}
+            {breakEvenPosition != null ? 'The thin line is what you put in.' : 'No money has moved.'}
+          </ThemedText>
+        </View>
+      ) : null}
 
       {/* Headline metrics */}
       <View className="flex-row" style={{ gap: 12 }}>
@@ -384,7 +404,7 @@ export function PortfolioOverview({
               ? 'Nothing working yet'
               : `Average across outcomes · ${weightedReturn >= 0 ? '+' : '−'}${Math.abs(weightedReturn).toFixed(1)}%${
                 longestMaturity > 0 ? ` over ${maturityWords(longestMaturity)}` : ''
-              }${conservative ? ' · stocks & crypto at 0%' : ''}`
+              }`
           }
         />
         <MetricTile
@@ -666,6 +686,36 @@ function positionMeta(category: string, platform: string, probability: number): 
   const assetClass = compactAssetClass(category);
   const parts = assetClass.toLowerCase() === platform.toLowerCase() ? [platform] : [assetClass, platform];
   return [...parts, `${probability}% chance`].join(' · ');
+}
+
+/** One scenario: what you'd hold, and the gain or loss against what went in. */
+function Scenario({
+  label,
+  value,
+  staked,
+  align = 'left',
+}: {
+  label: string;
+  value: number;
+  staked: number;
+  align?: 'left' | 'center' | 'right';
+}): React.ReactElement {
+  const theme = useTheme();
+  const money = useMoney();
+  const change = value - staked;
+  const alignItems = align === 'left' ? 'flex-start' : align === 'center' ? 'center' : 'flex-end';
+  return (
+    <View className="flex-1" style={{ alignItems, gap: 2 }}>
+      <ThemedText style={{ fontSize: 11, fontWeight: '700', color: theme.textSecondary }}>{label}</ThemedText>
+      <ThemedText numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontSize: 18, fontWeight: '800', color: theme.text, ...MONO }}>
+        {money(value, { decimals: 0 })}
+      </ThemedText>
+      {/* Ink, never green or red: these are what-ifs, not money made or lost. */}
+      <ThemedText style={{ fontSize: 11, fontWeight: '700', color: theme.textTertiary, ...MONO }}>
+        {money(change, { decimals: 0, signed: true })}
+      </ThemedText>
+    </View>
+  );
 }
 
 function MetricTile({

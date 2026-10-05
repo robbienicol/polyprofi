@@ -33,12 +33,12 @@ export interface MetricExplainer {
 export const METRIC_EXPLAINERS = {
   expectedProfit: {
     title: 'Expected profit',
-    what: 'The average profit across every way your positions could turn out, with the likelier outcomes counting for more.',
-    why: 'It is the single number that weighs a big win you probably will not get against a small one you probably will. Comparing two plans by it tells you which is worth more on average.',
+    what: 'What your positions should make on average, with each one counted by its chance of working.',
+    why: 'It weighs a big win you probably will not get against a small one you probably will.',
     reading:
-      'A small negative number is not a loss and does not mean something has gone wrong — no money has moved. It means the odds and the payouts roughly cancel, which is ordinary. It is a forecast, not your balance.',
+      'An average, not a promise and not money in your account. Contracts that can go to zero count their possible loss, so they can pull it slightly below zero without anything going wrong.',
     workedOut:
-      'Each position: the chance it lands times what it pays, less the chance it does not times what it would cost you. Then all of them added up.',
+      'All-or-nothing contracts: chance it wins × what it pays, minus chance it loses × your stake. Everything else: chance it hits its target × the profit it aims for. Then added up.',
   },
   expectedPayout: {
     title: 'Expected payout',

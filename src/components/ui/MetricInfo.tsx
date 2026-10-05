@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Modal, Pressable, ScrollView, View } from 'react-native';
+import { Modal, Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Brand, OnBrand, Radius, Shadow } from '@/constants/theme';
@@ -79,6 +79,9 @@ export function MetricInfoSheet({
 }): React.ReactElement {
   const theme = useTheme();
   const explainer = explainerFor(metric);
+  // Sized to the screen, not a fixed 460pt: on a phone that cut the last passage
+  // off mid-sentence, so the explanation looked unfinished rather than scrollable.
+  const { height } = useWindowDimensions();
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -109,7 +112,7 @@ export function MetricInfoSheet({
             <View style={{ width: 38, height: 4, borderRadius: Radius.pill, backgroundColor: theme.borderStrong }} />
           </View>
 
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 16 }} style={{ maxHeight: 460 }}>
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 16 }} style={{ maxHeight: height * 0.72 }}>
             <ThemedText style={{ fontSize: 21, fontWeight: '800', color: theme.text, letterSpacing: -0.4 }}>
               {explainer.title}
             </ThemedText>

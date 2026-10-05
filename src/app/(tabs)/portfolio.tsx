@@ -5,7 +5,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useGoalsProgress } from '@/api/hooks/useGoalProgress';
 import { usePortfolioProgress } from '@/api/hooks/usePortfolioProgress';
-import { usePreferences } from '@/api/hooks/usePreferences';
 import { useSavedRoutes } from '@/api/hooks/useSavedRoutes';
 import { useSavingsGoal } from '@/api/hooks/useSavingsGoal';
 import { useTrackedBets } from '@/api/hooks/useTrackedBets';
@@ -31,7 +30,6 @@ export default function PortfolioScreen(): React.ReactElement {
   const { bets: allBets, resolveBet } = useTrackedBets();
   const { history } = useSavedRoutes();
   const { goals: allGoals } = useSavingsGoal();
-  const { preferences } = usePreferences();
 
   // Goals ticked on the Goals tab. Absent means the whole portfolio, which is what
   // this screen is for; a selection narrows every number on it to those goals.
@@ -154,7 +152,7 @@ export default function PortfolioScreen(): React.ReactElement {
           <MaturityTimelineCard bets={bets} goals={goals} />
           <CheapestPathCard
             bets={bets}
-            conservative={preferences.conservativeProjections}
+            conservative={false}
             remainingToGoal={outstanding > 0 ? outstanding : null}
           />
 
