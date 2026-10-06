@@ -37,7 +37,7 @@ export default function PrivacyScreen(): React.ReactElement {
       <SafeAreaView className="flex-1" edges={['bottom']}>
         <ScrollView contentContainerClassName="px-5 py-6" showsVerticalScrollIndicator={false}>
           <ThemedText style={{ fontSize: 22, fontWeight: '800', color: theme.text }}>Privacy Policy</ThemedText>
-          <P>Last updated: 2026-10-05.</P>
+          <P>Last updated: 2026-10-06.</P>
 
           <H>What this covers</H>
           <P>
@@ -72,15 +72,15 @@ export default function PrivacyScreen(): React.ReactElement {
           <H>How we use it</H>
           <P>
             To generate and rank the routes we show you, to remember your preferences, and to improve the
-            app. Your goal and survey inputs may be sent to our AI provider (OpenAI) to help generate
-            recommendations — this is used only to build your results, not to train models on your data
-            beyond what OpenAI&apos;s own API terms specify.
+            app. Your goal and survey inputs may be sent to our AI providers (OpenAI and Ollama) to help
+            generate recommendations — this is used only to build your results, not to train models on
+            your data beyond what each provider&apos;s own API terms specify.
           </P>
 
           <H>Who we share it with</H>
           <P>
-            Clerk (authentication), Neon (database hosting), and OpenAI (route generation) process data on
-            our behalf as service providers. We don&apos;t share your data with advertisers or data brokers.
+            Clerk (authentication), Neon (database hosting), and OpenAI and Ollama (AI route generation)
+            process data on our behalf as service providers. We don&apos;t share your data with advertisers or data brokers.
           </P>
 
           <H>Your controls</H>
