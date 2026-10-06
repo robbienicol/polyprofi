@@ -15,6 +15,7 @@ import {
   whaleTradesToPicks,
 } from '@/api/client/polymarket-picks';
 import { buildDailySlatePrompt, extractRoutesJson, formatRawPicks } from '@/api/client/route-generation-prompt';
+import { chatCompletion, isAiConfigured, type ChatResult } from '@/lib/ai-chat';
 import { isRecord, isRoute, parseJson, responseJson } from '@/lib/runtime-validation';
 import { authenticatedUserId } from '@/lib/server-auth';
 import type { Route } from '@/types/routes';
@@ -36,7 +37,7 @@ const sql = neon(process.env.NEON_DATABASE_URL!);
  */
 const CACHE_KEY = 'ai-route-slate-v1';
 const TTL_MS = 24 * 60 * 60 * 1000;
-const MODEL = 'gpt-4o';
+const OPENAI_MODEL = 'gpt-4o';
 const MAX_OUTPUT_TOKENS = 6_000;
 
 interface CacheRow {
@@ -71,8 +72,7 @@ export async function GET(request: Request): Promise<Response> {
 }
 
 async function generateSlate(origin: string): Promise<Route[] | null> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return null;
+  if (!isAiConfigured()) return null;
 
   const snapshot = await fetchPolymarketSnapshot().catch(() => ({ context: [], universe: [] }));
   // Without live prices there is nothing to validate an idea against; don't pay
@@ -95,38 +95,19 @@ async function generateSlate(origin: string): Promise<Route[] | null> {
   });
 
   try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: MODEL,
-        max_tokens: MAX_OUTPUT_TOKENS,
-        messages: [
-          { role: 'system', content: prompt.system },
-          { role: 'user', content: prompt.user },
-        ],
-      }),
+    const result = await chatCompletion({
+      tag: 'api:ai-routes',
+      openAiModel: OPENAI_MODEL,
+      maxTokens: MAX_OUTPUT_TOKENS,
+      accept: (content) => parseSlate(content).length > 0,
+      messages: [
+        { role: 'system', content: prompt.system },
+        { role: 'user', content: prompt.user },
+      ],
     });
-    if (!response.ok) {
-      console.warn(`[api:ai-routes] OpenAI error ${response.status}`);
-      return null;
-    }
-    const payload = await responseJson(response);
-    logUsage(payload);
-    const content = readAssistantContent(payload);
-    if (!content) return null;
-
-    const parsed = parseJson(extractRoutesJson(content));
-    const values: unknown[] = Array.isArray(parsed)
-      ? parsed
-      : isRecord(parsed) && Array.isArray(parsed.routes) ? parsed.routes : [];
-    // The slate carries no money: the device prices every route at the user's own
-    // amount. Placeholders here keep the shared Route shape valid.
-    const routes = values
-      .map((value) => (isRecord(value) ? { ...value, expectedReturn: 0, meetsTarget: false } : value))
-      .filter(isRoute)
-      .filter((route) => /polymarket/i.test(route.category) && Boolean(route.line))
-      .map((route, index) => ({ ...route, id: `ai-${route.id || index}` }));
+    if (!result) return null;
+    logUsage(result);
+    const routes = parseSlate(result.content);
     if (routes.length === 0) return null;
 
     await sql`
@@ -139,6 +120,21 @@ async function generateSlate(origin: string): Promise<Route[] | null> {
     console.warn(`[api:ai-routes] ${error instanceof Error ? error.message : String(error)}`);
     return null;
   }
+}
+
+/** The model's answer as valid Polymarket routes; empty when unusable. */
+function parseSlate(content: string): Route[] {
+  const parsed = parseJson(extractRoutesJson(content));
+  const values: unknown[] = Array.isArray(parsed)
+    ? parsed
+    : isRecord(parsed) && Array.isArray(parsed.routes) ? parsed.routes : [];
+  // The slate carries no money: the device prices every route at the user's own
+  // amount. Placeholders here keep the shared Route shape valid.
+  return values
+    .map((value) => (isRecord(value) ? { ...value, expectedReturn: 0, meetsTarget: false } : value))
+    .filter(isRoute)
+    .filter((route) => /polymarket/i.test(route.category) && Boolean(route.line))
+    .map((route, index) => ({ ...route, id: `ai-${route.id || index}` }));
 }
 
 /** The shared, already-cached crawl behind /api/polymarket-picks. */
@@ -155,16 +151,7 @@ async function fetchPickBundle(origin: string): Promise<PolymarketPickBundle> {
 }
 
 /** One line per generation, so real token spend shows up in the server logs. */
-function logUsage(payload: unknown): void {
-  const usage = isRecord(payload) && isRecord(payload.usage) ? payload.usage : null;
-  if (!usage) return;
-  console.log(`[api:ai-routes] ${MODEL} slate: ${String(usage.prompt_tokens)} in / ${String(usage.completion_tokens)} out`);
-}
-
-function readAssistantContent(value: unknown): string | null {
-  if (!isRecord(value) || !Array.isArray(value.choices)) return null;
-  const choice = value.choices[0];
-  return isRecord(choice) && isRecord(choice.message) && typeof choice.message.content === 'string'
-    ? choice.message.content
-    : null;
+function logUsage(result: ChatResult): void {
+  if (!result.usage) return;
+  console.log(`[api:ai-routes] ${result.provider}/${result.model} slate: ${result.usage.promptTokens} in / ${result.usage.completionTokens} out`);
 }
