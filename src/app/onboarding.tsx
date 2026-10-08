@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import {
   Animated,
   Easing,
+  Keyboard,
   KeyboardAvoidingView,
   LayoutChangeEvent,
   Platform,
@@ -20,6 +21,7 @@ import {
   renderOnboardingPreview,
 } from "@/components/onboarding/OnboardingPreviews";
 import { ONBOARDING_SLIDES } from "@/components/onboarding/onboarding-data";
+import { WelcomeHero } from "@/components/onboarding/WelcomeHero";
 import { useSpokenLine } from "@/components/onboarding/quiz-kit";
 import { ThemedText } from "@/components/themed-text";
 import { BrandMark } from "@/components/ui/BrandMark";
@@ -138,6 +140,7 @@ function OnboardingCarousel({
   // deterministic on both platforms, and it is what the quiz screen already does.
   const [position] = useState(() => new Animated.Value(0));
   const [activeIndex, setActiveIndex] = useState(0);
+  const [started, setStarted] = useState(false);
   const [listHeight, setListHeight] = useState(0);
   // Held locally through the carousel and written on the way out, so a keystroke
   // is not a disk write.
@@ -170,6 +173,9 @@ function OnboardingCarousel({
   }, [ageConfirmed, completeOnboarding, patchProfile, router, trimmedName]);
 
   const goNext = useCallback(() => {
+    // The name field keeps focus when its slide moves off screen, so the keyboard
+    // stayed up over the next slide.
+    Keyboard.dismiss();
     if (isLast) {
       finish();
       return;
@@ -178,6 +184,7 @@ function OnboardingCarousel({
   }, [finish, isLast]);
 
   const goBack = useCallback(() => {
+    Keyboard.dismiss();
     setActiveIndex((current) => Math.max(0, current - 1));
   }, []);
 
@@ -193,6 +200,8 @@ function OnboardingCarousel({
   const onListLayout = useCallback((event: LayoutChangeEvent) => {
     setListHeight(event.nativeEvent.layout.height);
   }, []);
+
+  if (!started) return <WelcomeHero onStart={() => setStarted(true)} />;
 
   return (
     <View className="flex-1" style={{ backgroundColor: theme.background }}>
