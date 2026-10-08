@@ -305,11 +305,17 @@ export function isWorthShowing(route: Route, stake: number, cashReturnRate: numb
  * route that is quicker or more certain stays, since that is a real trade-off.
  *
  * Routes with no known stake or maturity are never compared: unknown is not worse.
+ * Nor are stock and crypto routes: they are priced to need the full stake and run
+ * to the deadline by construction, so stake and days always tie and probability
+ * alone decided — which cut 29 funds down to one. Their real differences (how far
+ * they swing, what they hold) are not on these axes.
  */
+const VOLATILITY_PRICED = /^(etf|crypto)-/;
+
 export function withoutDominated(routes: Route[], requiredInvestmentById: Map<string, number | null>): Route[] {
   const comparable = (route: Route): { stake: number; days: number } | null => {
     const stake = requiredInvestmentById.get(route.id);
-    if (route.noCapitalRequired || stake == null || route.maturesInDays == null) return null;
+    if (route.noCapitalRequired || stake == null || route.maturesInDays == null || VOLATILITY_PRICED.test(route.id)) return null;
     return { stake, days: route.maturesInDays };
   };
   return routes.filter((route) => {
