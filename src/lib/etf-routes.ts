@@ -137,6 +137,8 @@ export function buildEtfRoutes({
         maturesInDays: deadlineDays,
         lossProfile: 'partial',
         meetsTarget: realistic,
+        dailyVolatility: quote.dailyVol ?? undefined,
+        annualDriftPct: driftPct,
         investmentFacts: {
           expenseRatioPct: etf.expenseRatioPct,
           ...(etf.issuer ? { issuer: etf.issuer } : null),

@@ -16,7 +16,7 @@ import { useSpendingCuts } from '@/api/hooks/useSpendingCuts';
 import { useTrackedBets } from '@/api/hooks/useTrackedBets';
 import { InvestmentAmountControl } from '@/components/routes/InvestmentAmountControl';
 import { MoreWaysToSave } from '@/components/routes/MoreWaysToSave';
-import { RouteFilters, SortBar } from '@/components/routes/RouteFilters';
+import { PortalBar, RouteFilters, SortBar } from '@/components/routes/RouteFilters';
 import { RouteSearchBar } from '@/components/routes/RouteSearchBar';
 import { RoutesHeader } from '@/components/routes/RoutesHeader';
 import { TrackRouteForm } from '@/components/routes/TrackRouteForm';
@@ -50,6 +50,7 @@ const DEFAULT_FILTERS: Filters = {
   minimumProbability: 0,
   sort: 'score',
   predictionTopic: null,
+  predictionSubtopic: null,
   maxDaysToResolve: null,
   groupByChance: false,
   keyword: '',
@@ -151,6 +152,8 @@ export default function RoutesScreen(): React.ReactElement {
   const [cutPercent, setCutPercent] = useState(25);
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [investment, setInvestment] = useState<number | null>(null);
+  // Most the user is OK losing in a bad case. Null: the whole amount they'd invest.
+  const [maxLoss, setMaxLoss] = useState<number | null>(null);
   const [visibleCount, setVisibleCount] = useState(30);
   const savedGeneration = useRef<string | null>(null);
 
@@ -183,6 +186,12 @@ export default function RoutesScreen(): React.ReactElement {
   const investmentDefault = sessionParams?.investmentCeiling ?? referenceStake;
   const displayedInvestment = resolveInvestmentAmount(investment, investmentDefault);
   const investmentMaximum = investmentSliderMaximum(referenceStake, sessionParams?.investmentCeiling);
+
+  const displayedMaxLoss = Math.min(maxLoss ?? displayedInvestment, displayedInvestment);
+  function setMaxLossAndReset(amount: number): void {
+    setMaxLoss(Math.max(1, Math.round(amount)));
+    setVisibleCount(30);
+  }
 
   function setInvestmentAndReset(amount: number): void {
     setInvestment(Math.max(0, Math.round(amount)));
@@ -234,15 +243,23 @@ export default function RoutesScreen(): React.ReactElement {
     filters.maxDaysToResolve != null,
     filters.groupByChance,
   ].filter(Boolean).length;
+  // The Filters button counts only what lives behind it: asset class, topic and league
+  // are on the list itself now.
+  const panelFilterCount = [
+    filters.lossProfile !== null,
+    filters.minimumProbability > 0,
+    filters.maxDaysToResolve != null,
+    filters.groupByChance,
+  ].filter(Boolean).length;
 
   // Memoised: this rescores, scores and ranks the entire pool, and it used to run on
   // every render — including every event the investment slider fires while being
   // dragged, which is what made that slider feel unresponsive.
   const results = useMemo(
     () => (sessionParams
-      ? buildRouteResults(searchPool, sessionParams, displayedInvestment, filters, scoreWeights)
+      ? buildRouteResults(searchPool, sessionParams, displayedInvestment, filters, scoreWeights, displayedMaxLoss)
       : null),
-    [searchPool, sessionParams, displayedInvestment, filters, scoreWeights],
+    [searchPool, sessionParams, displayedInvestment, filters, scoreWeights, displayedMaxLoss],
   );
   const ranked = results?.ranked ?? [];
   const filtered = results?.filtered ?? [];
@@ -501,7 +518,8 @@ export default function RoutesScreen(): React.ReactElement {
           route={route}
           requiredInvestment={results?.requiredInvestmentById.get(route.id)}
           currentInvestment={results?.selectedStake(route)}
-          score={results?.scoreById.get(route.id)?.score ?? null}
+          odds={results?.oddsById.get(route.id) ?? null}
+          target={sessionParams?.target ?? null}
           onTrack={trackingId === null ? () => {
             setTrackingId(route.id);
             setCutPercent(25);
@@ -574,13 +592,23 @@ export default function RoutesScreen(): React.ReactElement {
           <>
             {/* On the list, not behind Filters: the amount is what people reach for
                 to see which bets fit their budget, so it is always one drag away. */}
-            <View style={{ borderRadius: Radius.xl, backgroundColor: theme.backgroundElevated, borderWidth: 1, borderColor: theme.border, paddingHorizontal: 14, paddingVertical: 10, ...Shadow.card }}>
+            <View style={{ borderRadius: Radius.xl, backgroundColor: theme.backgroundElevated, borderWidth: 1, borderColor: theme.border, paddingHorizontal: 14, paddingVertical: 10, gap: 4, ...Shadow.card }}>
               <InvestmentAmountControl amount={displayedInvestment} maximum={investmentMaximum} onAmountChange={setInvestmentAndReset} />
+              {/* Every route is sized so its bad case stays under this. A bet that would
+                  need more is shrunk to fit, and says how far that gets you. */}
+              <InvestmentAmountControl
+                amount={displayedMaxLoss}
+                maximum={displayedInvestment}
+                onAmountChange={(amount) => setMaxLossAndReset(Math.min(amount, displayedInvestment))}
+                label="Max I'd lose"
+                spokenLabel="Most you are OK losing"
+              />
             </View>
+            <PortalBar routes={ranked} filters={filters} onChange={setFiltersAndReset} />
             <SortBar
               sort={filters.sort}
               onSortChange={(sort) => setFiltersAndReset({ ...filters, sort })}
-              filterCount={activeFilterCount}
+              filterCount={panelFilterCount}
               filtersOpen={showFilters}
               onToggleFilters={() => setShowFilters((open) => !open)}
             />

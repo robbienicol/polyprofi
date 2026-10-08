@@ -39,6 +39,7 @@ import { __selfCheck as checkKalshiMarketMatch } from '@/lib/kalshi-market-match
 import { __selfCheck as checkSportsMarketMatch } from '@/lib/sports-market-match';
 import { __selfCheck as checkStakeRescore } from '@/lib/stake-rescore';
 import { __selfCheck as checkVolatilityProbability } from '@/lib/volatility-probability';
+import { __selfCheck as checkGoalOdds } from '@/lib/goal-odds';
 
 const checks = [
   ['playbook', checkPlaybook],
@@ -82,6 +83,7 @@ const checks = [
   ['kalshi market match', checkKalshiMarketMatch],
   ['stake rescore', checkStakeRescore],
   ['volatility probability', checkVolatilityProbability],
+  ['goal odds', checkGoalOdds],
 ] as const;
 
 for (const [name, check] of checks) {

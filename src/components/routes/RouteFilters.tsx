@@ -6,7 +6,7 @@ import { Icon } from '@/components/ui/Icon';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, CategoryScale, OnBrand, Radius, Shadow } from '@/constants/theme';
 import { useSemanticText, useTheme } from '@/hooks/use-theme';
-import { isPredictionCategory, PREDICTION_TOPICS } from '@/lib/prediction-topics';
+import { isPredictionCategory, PREDICTION_SUBTOPICS, PREDICTION_TOPICS } from '@/lib/prediction-topics';
 import type { RouteFilters as Filters, RouteSort } from '@/lib/route-results';
 import type { Route } from '@/types/routes';
 
@@ -38,8 +38,7 @@ const RESOLUTION_WINDOWS: readonly { label: string; days: number }[] = [
 const SORT_OPTIONS: { label: string; value: RouteSort }[] = [
   // "Default order" named nothing, so the top card could not be trusted as the top
   // card. This says what the ranking is actually ordered by.
-  { label: 'Best fit', value: 'score' },
-  { label: 'Best chance', value: 'chance' },
+  { label: 'Best odds', value: 'score' },
   { label: 'Biggest return', value: 'payout' },
   { label: 'Best value', value: 'value' },
 ];
@@ -122,6 +121,74 @@ export function SortBar({
   );
 }
 
+/**
+ * Portals: one asset class at a time, and inside prediction markets one topic and one
+ * league at a time. Ranking an NFL game against a German table-tennis match helps no
+ * one — the edge in a prediction market is what you know, so the list should only
+ * hold what you know. Lives on the list, not in Filters, because it is the first
+ * choice people make, not a refinement.
+ */
+export function PortalBar({
+  routes,
+  filters,
+  onChange,
+}: {
+  routes: Route[];
+  filters: Filters;
+  onChange: (filters: Filters) => void;
+}): React.ReactElement {
+  const update = (patch: Partial<Filters>) => onChange({ ...filters, ...patch });
+  const assetClasses = [...new Set(routes.map((route) => route.category))].sort(compareAssetClasses);
+  const inPrediction = isPredictionCategory(filters.category);
+  const predictionRoutes = routes.filter((route) => isPredictionCategory(route.category));
+  const topics = PREDICTION_TOPICS.filter((topic) => predictionRoutes.some((route) => route.predictionTopic === topic.value));
+  const leagues = PREDICTION_SUBTOPICS.filter((sub) =>
+    sub.topic === filters.predictionTopic && predictionRoutes.some((route) => route.predictionSubtopic === sub.value));
+
+  return (
+    <View style={{ gap: 8 }}>
+      <FilterRow>
+        <FilterChip label="All" active={filters.category === null} onPress={() => update({ category: null, predictionTopic: null, predictionSubtopic: null })} />
+        {assetClasses.map((category) => (
+          <FilterChip
+            key={category}
+            label={assetClassLabel(category)}
+            active={filters.category === category}
+            onPress={() => update({ category, predictionTopic: null, predictionSubtopic: null })}
+          />
+        ))}
+      </FilterRow>
+      {inPrediction && topics.length > 0 ? (
+        <FilterRow>
+          <FilterChip label="All topics" active={filters.predictionTopic === null} onPress={() => update({ predictionTopic: null, predictionSubtopic: null })} />
+          {topics.map((topic) => (
+            <FilterChip
+              key={topic.value}
+              label={topic.label}
+              glyph={topic.emoji}
+              active={filters.predictionTopic === topic.value}
+              onPress={() => update({ predictionTopic: topic.value, predictionSubtopic: null })}
+            />
+          ))}
+        </FilterRow>
+      ) : null}
+      {inPrediction && leagues.length > 0 ? (
+        <FilterRow>
+          <FilterChip label="All leagues" active={!filters.predictionSubtopic} onPress={() => update({ predictionSubtopic: null })} />
+          {leagues.map((league) => (
+            <FilterChip
+              key={league.value}
+              label={league.label}
+              active={filters.predictionSubtopic === league.value}
+              onPress={() => update({ predictionSubtopic: league.value })}
+            />
+          ))}
+        </FilterRow>
+      ) : null}
+    </View>
+  );
+}
+
 interface RouteFiltersProps {
   filters: Filters;
   /** Every ranked route before filtering: the asset classes and the chance histogram. */
@@ -142,7 +209,6 @@ export function RouteFilters({
   const theme = useTheme();
   const semantic = useSemanticText();
   const update = (patch: Partial<Filters>) => onChange({ ...filters, ...patch });
-  const assetClasses = [...new Set(routes.map((route) => route.category))].sort(compareAssetClasses);
   // The histogram answers "what does this slider cost me?" for the rest of the
   // filters as set, so it narrows with asset class and stake shape but not chance.
   const chancePool = routes.filter((route) => (
@@ -152,8 +218,7 @@ export function RouteFilters({
   // The asset-class chip is the intent signal: selecting prediction markets is how a
   // user asks to go deep, so that is what reveals the facets.
   const showPredictionFacets = isPredictionCategory(filters.category);
-  const anyPredictionFacetActive = filters.predictionTopic != null
-    || filters.maxDaysToResolve != null;
+  const anyPredictionFacetActive = filters.maxDaysToResolve != null;
 
   return (
     <View
@@ -166,20 +231,6 @@ export function RouteFilters({
         gap: 14,
         ...Shadow.card,
       }}>
-      <Section label="Asset class">
-        <FilterRow>
-          <FilterChip label="All" active={filters.category === null} onPress={() => update({ category: null })} />
-          {assetClasses.map((category) => (
-            <FilterChip
-              key={category}
-              label={assetClassLabel(category)}
-              active={filters.category === category}
-              onPress={() => update({ category })}
-            />
-          ))}
-        </FilterRow>
-      </Section>
-
       <Section label="Chance of hitting goal">
         <View className="flex-row justify-between items-center">
           {/* One colour, and it is ink. The brand was used here to mean "high enough",
@@ -218,7 +269,7 @@ export function RouteFilters({
               </ThemedText>
               {anyPredictionFacetActive ? (
                 <Pressable
-                  onPress={() => update({ predictionTopic: null, maxDaysToResolve: null, groupByChance: false })}
+                  onPress={() => update({ maxDaysToResolve: null, groupByChance: false })}
                   accessibilityRole="button"
                   accessibilityLabel="Reset the prediction-market filters"
                   className="active:opacity-60 justify-center"
@@ -227,21 +278,6 @@ export function RouteFilters({
                 </Pressable>
               ) : null}
             </View>
-
-            <Section label="Topic">
-              <FilterRow>
-                <FilterChip label="All" active={filters.predictionTopic === null} onPress={() => update({ predictionTopic: null })} />
-                {PREDICTION_TOPICS.map((topic) => (
-                  <FilterChip
-                    key={topic.value}
-                    label={topic.label}
-                    glyph={topic.emoji}
-                    active={filters.predictionTopic === topic.value}
-                    onPress={() => update({ predictionTopic: filters.predictionTopic === topic.value ? null : topic.value })}
-                  />
-                ))}
-              </FilterRow>
-            </Section>
 
             <Section label="Resolves">
               <FilterRow>

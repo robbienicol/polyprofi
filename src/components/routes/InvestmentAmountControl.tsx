@@ -15,6 +15,10 @@ interface InvestmentAmountControlProps {
    */
   maximum: number;
   onAmountChange: (amount: number) => void;
+  /** Row label. The same control also sets the most the user is OK losing. */
+  label?: string;
+  /** What a screen reader calls the amount, e.g. "Amount you are willing to invest". */
+  spokenLabel?: string;
 }
 
 /**
@@ -41,6 +45,8 @@ export function InvestmentAmountControl({
   amount,
   maximum,
   onAmountChange,
+  label = 'Invest up to',
+  spokenLabel = 'Amount you are willing to invest',
 }: InvestmentAmountControlProps): React.ReactElement {
   const theme = useTheme();
   const step = stepFor(maximum);
@@ -65,7 +71,7 @@ export function InvestmentAmountControl({
           instead of stacking to three lines. */}
       <View className="flex-row items-center justify-between" style={{ gap: 10 }}>
         <ThemedText style={{ fontSize: 14, fontWeight: '700', color: theme.text, flexShrink: 1 }}>
-          Willing to invest
+          {label}
         </ThemedText>
         <View
           className="flex-row items-center"
@@ -82,7 +88,7 @@ export function InvestmentAmountControl({
             inputMode="numeric"
             returnKeyType="done"
             selectTextOnFocus
-            accessibilityLabel="Amount you are willing to invest, in dollars"
+            accessibilityLabel={`${spokenLabel}, in dollars`}
             placeholder="0"
             placeholderTextColor={theme.textSecondary}
             // A TextInput never passes through ThemedText, so naming the family is the
@@ -104,7 +110,7 @@ export function InvestmentAmountControl({
         onValueChange={(value) => setDrag({ from: amount, value: Math.round(value) })}
         onSlidingComplete={(value) => onAmountChange(Math.round(value))}
         accessibilityRole="adjustable"
-        accessibilityLabel="Amount you are willing to invest"
+        accessibilityLabel={spokenLabel}
         accessibilityValue={{ text: `$${displayed.toLocaleString('en-US')}` }}
         minimumTrackTintColor={Brand[500]}
         maximumTrackTintColor={theme.borderControl}

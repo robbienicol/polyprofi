@@ -129,6 +129,12 @@ export interface Route {
     /** The full-year gain, for context next to the deadline figure. */
     annualGainUsd: number;
   };
+  /**
+   * The live option position behind an "Options" route (@/lib/options-routes). Options
+   * trade in whole contracts, so the stake is `lotCost` × a whole number, never an
+   * arbitrary amount — @/lib/stake-rescore reads this rather than scaling a rate.
+   */
+  optionPosition?: OptionPosition;
   expertSentiment?: ExpertSentiment;
   investmentFacts?: RouteInvestmentFacts;
   marketQuality?: MarketQualityFacts;
@@ -144,6 +150,48 @@ export interface Route {
    * topic, so filters must treat undefined as "unknown" rather than "no match".
    */
   predictionTopic?: string;
+  /** League inside a topic ('nfl', 'cfb', ...), from the same tags. Never guessed. */
+  predictionSubtopic?: string;
+  /**
+   * Daily stdev of log returns and the assumed annual return, on stock and crypto
+   * routes. Kept so the odds and the 1-in-20 bad case can be recomputed at any stake
+   * — the probability alone was fixed at the reference stake. See @/lib/goal-odds.
+   */
+  dailyVolatility?: number;
+  annualDriftPct?: number;
+}
+
+export type OptionStrategy = 'long-call' | 'long-put' | 'bull-call-spread' | 'cash-secured-put' | 'covered-call';
+
+export interface OptionLeg {
+  action: 'buy' | 'sell';
+  type: 'call' | 'put' | 'shares';
+  /** Strike for an option leg; the share price for a shares leg. */
+  strike: number;
+  /** Per-share price paid (ask) or received (bid). */
+  price: number;
+}
+
+export interface OptionPosition {
+  strategy: OptionStrategy;
+  underlying: string;
+  /** Underlying price in the snapshot the legs were priced from. */
+  underlyingPrice: number;
+  /** ISO expiry date. */
+  expiry: string;
+  legs: OptionLeg[];
+  /** Capital one lot ties up: premium paid, or collateral / shares held. */
+  lotCost: number;
+  /** Profit per $1 of lotCost when the winning level is reached at expiry. */
+  winReturnRate: number;
+  /** Underlying price at expiry at or beyond which the full win is paid. */
+  winLevel: number;
+  /** 'above' for bullish and premium-selling strategies, 'below' for a put. */
+  winDirection: 'above' | 'below';
+  /** Most one lot can lose, in dollars. */
+  maxLoss: number;
+  /** CBOE snapshot time. */
+  quotedAt: string;
 }
 
 interface RouteInvestmentFacts {

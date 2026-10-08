@@ -122,6 +122,43 @@ export function topicForTags(slugs: readonly string[]): string | null {
   return null;
 }
 
+/**
+ * Leagues inside Sports. Someone who knows the NFL cold and nothing about German
+ * table tennis gets no edge from seeing the two ranked side by side — their edge is
+ * what they know — so each league is its own portal. Order is priority: college
+ * football tags often ride with `football`, so the specific league is matched first.
+ */
+export interface PredictionSubtopic {
+  value: string;
+  label: string;
+  topic: string;
+  slugs: readonly string[];
+}
+
+export const PREDICTION_SUBTOPICS: readonly PredictionSubtopic[] = [
+  { value: 'cfb', label: 'College football', topic: 'sports', slugs: ['cfb', 'college-football', 'ncaaf'] },
+  { value: 'nfl', label: 'NFL', topic: 'sports', slugs: ['nfl'] },
+  { value: 'cbb', label: 'College basketball', topic: 'sports', slugs: ['college-basketball', 'ncaab', 'march-madness'] },
+  { value: 'nba', label: 'NBA', topic: 'sports', slugs: ['nba'] },
+  { value: 'wnba', label: 'WNBA', topic: 'sports', slugs: ['wnba'] },
+  { value: 'mlb', label: 'MLB', topic: 'sports', slugs: ['mlb', 'baseball'] },
+  { value: 'nhl', label: 'NHL', topic: 'sports', slugs: ['nhl', 'hockey'] },
+  { value: 'soccer', label: 'Soccer', topic: 'sports', slugs: ['soccer', 'epl', 'uefa', 'champions-league', 'la-liga', 'serie-a', 'bundesliga', 'mls'] },
+  { value: 'tennis', label: 'Tennis', topic: 'sports', slugs: ['tennis'] },
+  { value: 'golf', label: 'Golf', topic: 'sports', slugs: ['golf', 'pga'] },
+  { value: 'fighting', label: 'UFC & boxing', topic: 'sports', slugs: ['ufc', 'mma', 'boxing'] },
+  { value: 'f1', label: 'F1', topic: 'sports', slugs: ['formula1', 'f1'] },
+  { value: 'esports', label: 'Esports', topic: 'sports', slugs: ['esports', 'dota-2', 'csgo', 'lol', 'valorant'] },
+];
+
+/** The league for a market's tags within a topic, or null when none matched. */
+export function subtopicForTags(slugs: readonly string[], topic: string | null): string | null {
+  if (!topic) return null;
+  const meaningful = new Set(meaningfulTagSlugs(slugs));
+  const match = PREDICTION_SUBTOPICS.find((sub) => sub.topic === topic && sub.slugs.some((slug) => meaningful.has(slug)));
+  return match?.value ?? null;
+}
+
 export function predictionTopic(value: string | null | undefined): PredictionTopic | null {
   return PREDICTION_TOPICS.find((topic) => topic.value === value) ?? null;
 }

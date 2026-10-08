@@ -15,7 +15,7 @@ import { useTheme } from '@/hooks/use-theme';
  */
 const HOOKS: { icon: LucideIcon; title: string; body: string }[] = [
   { icon: Route, title: 'Every way to your goal', body: 'Cut spending, save, invest or bet. All checked at once.' },
-  { icon: Gauge, title: 'One score for each', body: '0 to 100. Chance, risk, cash needed and time, in one number.' },
+  { icon: Gauge, title: 'Real odds for each', body: 'Your chance of hitting the goal, and what you could lose.' },
   { icon: MessageCircle, title: 'Plain-English help', body: 'Ask about any pick, any hour. No stupid questions.' },
 ];
 

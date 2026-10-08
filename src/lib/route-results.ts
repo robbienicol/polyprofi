@@ -3,12 +3,12 @@ import { isPredictionCategory } from '@/lib/prediction-topics';
 import {
   DEFAULT_SCORE_WEIGHTS,
   goalEffectivenessScore,
-  sortByPatheyScore,
   type GoalScoreBreakdown,
   type GoalScoreContext,
   type ScoreWeights,
 } from '@/lib/score';
 import { applyCutShortlist, isSpendingCut, shortlistCuts } from '@/lib/cut-shortlist';
+import { compareGoalOdds, goalOdds, type GoalOdds } from '@/lib/goal-odds';
 import { downsideAtStake, expectedValue } from '@/lib/route-expected-value';
 import { isDebtRoute } from '@/lib/route-investment-metrics';
 import { rescoreForStake, stakeNeededForReturn } from '@/lib/stake-rescore';
@@ -26,6 +26,8 @@ export interface RouteFilters {
    * prediction asset class is selected, since no other route carries a topic.
    */
   predictionTopic: string | null;
+  /** League inside the topic ('nfl', 'cfb', ...). Only meaningful with a topic set. */
+  predictionSubtopic?: string | null;
   /** Longest acceptable time to resolution, in days. Null means any. */
   maxDaysToResolve: number | null;
   /** Sections the list by probability band instead of showing one flat ranking. */
@@ -43,6 +45,11 @@ export interface RouteResults {
   filtered: Route[];
   requiredInvestmentById: Map<string, number | null>;
   scoreById: Map<string, GoalScoreBreakdown>;
+  /**
+   * Per route: the stake sized to the user's loss cap, the chance of reaching the goal
+   * at that stake, and the bad case. What the list is ranked on. See @/lib/goal-odds.
+   */
+  oddsById: Map<string, GoalOdds>;
   selectedStake: (route: Route) => number;
   /**
    * Smallest amount the user would have to be willing to invest for a route at or above
@@ -348,6 +355,8 @@ export function buildRouteResults(
   filters: RouteFilters,
   /** The user's own weighting of the four score components. See `@/lib/score`. */
   weights: ScoreWeights = DEFAULT_SCORE_WEIGHTS,
+  /** Most the user is OK losing in a bad case. Null: up to the whole amount. */
+  maxLoss: number | null = null,
 ): RouteResults {
   const referenceStake = params.balance || 1;
   const target = params.target || 1;
@@ -385,9 +394,24 @@ export function buildRouteResults(
       })
     );
   const shownRoutes = keyword ? relevantRoutes : withoutDominated(relevantRoutes, requiredInvestmentById);
-  // Spend only what a route needs to reach the target, never more than the user
-  // is willing to invest.
+  const deadlineDays = timeframeCalendarDays(params.timeframe);
+  const oddsById = new Map(
+    shownRoutes.map((route) => [
+      route.id,
+      goalOdds(route, {
+        target,
+        budget: intendedInvestment,
+        maxLoss,
+        deadlineDays,
+        requiredStake: requiredInvestmentById.get(route.id) ?? null,
+      }),
+    ] as const)
+  );
+  // Spend only what a route needs to reach the target, never more than the user is
+  // willing to invest, and never more than the loss cap allows.
   const selectedStake = (route: Route): number => {
+    const odds = oddsById.get(route.id);
+    if (odds) return odds.stake;
     const requiredInvestment = requiredInvestmentById.get(route.id);
     return Math.min(requiredInvestment ?? intendedInvestment, intendedInvestment);
   };
@@ -397,7 +421,15 @@ export function buildRouteResults(
     ? (cashYield / 100) * (timeframeCalendarDays(params.timeframe) / 365)
     : null;
   const rescored = shownRoutes
-    .map((route) => rescoreForStake([route], referenceStake, selectedStake(route), target)[0])
+    .map((route) => {
+      const atStake = rescoreForStake([route], referenceStake, selectedStake(route), target)[0];
+      // A fund's odds depend on the stake, so the card shows the odds at the size it
+      // was given, and what it pays if it works is the goal itself.
+      const odds = oddsById.get(route.id);
+      return route.dailyVolatility != null && odds
+        ? { ...atStake, probability: odds.chance, expectedReturn: odds.profitIfItWorks, meetsTarget: odds.hitsGoal }
+        : atStake;
+    })
     // A named search shows what was asked for, worth it or not; the card still says so.
     .filter((route) => keyword || isWorthShowing(route, selectedStake(route), cashReturnRate));
   const scoreContext = (route: Route): GoalScoreContext => ({
@@ -409,7 +441,12 @@ export function buildRouteResults(
   const scoreById = new Map(
     rescored.map((route) => [route.id, goalEffectivenessScore(route, scoreContext(route), weights)] as const)
   );
-  const ranked = sortByPatheyScore(rescored, scoreContext, weights);
+  // Ranked by chance of reaching the goal at a stake inside the loss cap — the one
+  // number a user can check. The weighted score stays available to the detail screen.
+  const ranked = rescored
+    .map((route) => ({ route, odds: oddsById.get(route.id)! }))
+    .sort(compareGoalOdds)
+    .map(({ route }) => route);
 
   let filtered = ranked;
   if (filters.category) filtered = filtered.filter((route) => route.category === filters.category);
@@ -423,6 +460,9 @@ export function buildRouteResults(
     // topic the user asked for — so it drops out while a topic filter is active.
     if (filters.predictionTopic) {
       filtered = filtered.filter((route) => route.predictionTopic === filters.predictionTopic);
+      if (filters.predictionSubtopic) {
+        filtered = filtered.filter((route) => route.predictionSubtopic === filters.predictionSubtopic);
+      }
     }
     if (filters.maxDaysToResolve != null) {
       const limit = filters.maxDaysToResolve;
@@ -503,6 +543,7 @@ export function buildRouteResults(
     filtered,
     requiredInvestmentById,
     scoreById,
+    oddsById,
     selectedStake,
     unlockInvestmentFor,
     unlockCapitalSafeInvestment,

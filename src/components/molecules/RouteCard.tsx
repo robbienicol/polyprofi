@@ -7,7 +7,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Brand, CategoryScale, Colors, OnBrand, Radius, RiskScale, Shadow } from '@/constants/theme';
 import { useRiskTextScale, useTheme } from '@/hooks/use-theme';
 import { predictionTopic } from '@/lib/prediction-topics';
-import { scoreVerdictShort } from '@/lib/score';
+import type { GoalOdds } from '@/lib/goal-odds';
 import { Route } from '@/types/routes';
 
 const RISK_LABELS = ['Very safe', 'Safe', 'Moderate', 'Aggressive', 'Very aggressive'] as const;
@@ -71,11 +71,12 @@ interface RouteCardProps {
   requiredInvestment?: number | null;
   currentInvestment?: number | null;
   /**
-   * The route's score out of 100 under the user's own weighting. Omitted where there
-   * is no goal to score against — a score with no context behind it is a number
-   * pretending to mean something.
+   * Chance of reaching the goal at a stake inside the user's loss cap, with that stake
+   * and its bad case. Omitted where there is no goal — odds of nothing mean nothing.
    */
-  score?: number | null;
+  odds?: GoalOdds | null;
+  /** The goal's profit, for the words around the odds. */
+  target?: number | null;
   onTrack?: () => void;
   onPress?: () => void;
 }
@@ -115,10 +116,20 @@ function routeIcon(route: Route): LucideIcon | undefined {
  * numbers in. Authored rather than left to RN, which otherwise concatenates every
  * string in layout order and announces a route as fourteen unlabelled fragments.
  */
-function cardAccessibilityLabel({ route, riskWord, score, probabilityLabel, probabilityValue, stake }: {
+/** What "bad case" means for this route, in words a first-timer reads once. */
+function badCaseNote(odds: GoalOdds): string {
+  switch (odds.badCaseKind) {
+    case 'all': return 'all of it';
+    case 'stop': return 'at the stop';
+    case 'tail': return '1-in-20 bad stretch';
+    case 'none': return 'nothing at risk';
+  }
+}
+
+function cardAccessibilityLabel({ route, riskWord, odds, probabilityLabel, probabilityValue, stake }: {
   route: Route;
   riskWord: string;
-  score: number | null | undefined;
+  odds: GoalOdds | null | undefined;
   probabilityLabel: string;
   probabilityValue: string;
   stake: { label: string; value: string } | null;
@@ -126,7 +137,7 @@ function cardAccessibilityLabel({ route, riskWord, score, probabilityLabel, prob
   const parts = [
     `${displayLabel(route.category)} on ${displayLabel(route.platform)}`,
     `${riskWord} risk`,
-    score != null ? `Scores ${score} out of 100, ${scoreVerdictShort(score).toLowerCase()}` : null,
+    odds && odds.badCase > 0 ? `Bad case, ${badCaseNote(odds)}: lose $${formatMoney(odds.badCase)}` : null,
     route.line,
     route.description,
     `${probabilityLabel}: ${probabilityValue}`,
@@ -148,7 +159,7 @@ function cardAccessibilityLabel({ route, riskWord, score, probabilityLabel, prob
  * the meter and the profit figure stay in ink. A column of bands down the list is the
  * ramp, made scannable — and it never says "good", only "how much can go wrong".
  */
-function RouteCardInner({ route, requiredInvestment, currentInvestment, score, onTrack, onPress }: RouteCardProps) {
+function RouteCardInner({ route, requiredInvestment, currentInvestment, odds, target, onTrack, onPress }: RouteCardProps) {
   const theme = useTheme();
   const riskInk = useRiskTextScale();
   const riskLevel = displayRiskLevel(route);
@@ -162,11 +173,22 @@ function RouteCardInner({ route, requiredInvestment, currentInvestment, score, o
     : null;
   // The topic comes from the market's own tags; shown when present, never guessed.
   const topic = predictionTopic(route.predictionTopic);
-  const probabilityLabel = route.meetsTarget ? 'Chance of hitting goal' : 'Current amount hits goal';
-  const probabilityValue = route.meetsTarget ? formatProbability(route.probability) : 'No';
-  const probabilityWidth = route.meetsTarget ? Math.min(route.probability, 100) : 0;
+  const goalWords = target ? `$${formatMoney(target)}` : 'your goal';
+  // Short of the goal at this size, it still has odds of paying what it can — hiding
+  // them left a card that said only "No".
+  const probabilityLabel = odds
+    ? odds.hitsGoal ? `Chance you hit ${goalWords}` : `Chance it pays $${formatMoney(odds.profitIfItWorks)}`
+    : route.meetsTarget ? 'Chance of hitting goal' : 'Current amount hits goal';
+  const probabilityValue = odds
+    ? formatProbability(odds.hitsGoal ? odds.chance : route.probability)
+    : route.meetsTarget ? formatProbability(route.probability) : 'No';
+  const probabilityWidth = odds
+    ? Math.min(odds.hitsGoal ? odds.chance : route.probability, 100)
+    : route.meetsTarget ? Math.min(route.probability, 100) : 0;
 
-  const stake = route.noCapitalRequired
+  const stake = odds
+    ? { label: 'STAKE', value: odds.stake > 0 ? `$${formatMoney(odds.stake)}` : 'No money' }
+    : route.noCapitalRequired
     ? { label: 'USES', value: 'No money' }
     : needsMoreToHitGoal
       ? { label: 'TO HIT GOAL', value: `$${formatMoney(requiredInvestment!)}` }
@@ -197,8 +219,8 @@ function RouteCardInner({ route, requiredInvestment, currentInvestment, score, o
         onPress={onPress}
         accessible
         accessibilityRole={onPress ? 'button' : undefined}
-        accessibilityLabel={cardAccessibilityLabel({ route, riskWord, score, probabilityLabel, probabilityValue, stake })}
-        accessibilityHint={onPress ? 'Opens the working behind this score, the risk and the exit plan' : undefined}
+        accessibilityLabel={cardAccessibilityLabel({ route, riskWord, odds, probabilityLabel, probabilityValue, stake })}
+        accessibilityHint={onPress ? 'Opens where the odds come from, the risk and the exit plan' : undefined}
         className={onPress ? 'active:opacity-90' : undefined}
         style={{ gap: 12 }}>
         {/* Header: what it is, how risky, and how well it fits the goal */}
@@ -250,27 +272,13 @@ function RouteCardInner({ route, requiredInvestment, currentInvestment, score, o
               </ThemedText>
             </View>
           </View>
-          {score != null ? (
-            <View style={{ alignItems: 'flex-end', gap: 2 }}>
-              <View
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'baseline',
-                  gap: 2,
-                  paddingHorizontal: 8,
-                  paddingVertical: 3,
-                  borderRadius: Radius.pill,
-                  backgroundColor: theme.backgroundSelected,
-                }}>
-                <ThemedText style={{ fontSize: 13, fontWeight: '900', color: theme.text, ...MONO }}>
-                  {score}
-                </ThemedText>
-                <ThemedText style={{ fontSize: 11, fontWeight: '800', color: theme.textSecondary, letterSpacing: 0.3 }}>
-                  /100
-                </ThemedText>
-              </View>
+          {odds ? (
+            <View style={{ alignItems: 'flex-end', gap: 1 }}>
+              <ThemedText style={{ fontSize: 22, fontWeight: '900', color: odds.hitsGoal ? theme.text : theme.textTertiary, letterSpacing: -0.6, ...MONO }}>
+                {odds.hitsGoal ? formatProbability(odds.chance) : `$${formatMoney(odds.profitIfItWorks)}`}
+              </ThemedText>
               <ThemedText style={{ fontSize: 11, fontWeight: '700', color: theme.textSecondary }}>
-                {scoreVerdictShort(score)}
+                {odds.hitsGoal ? `to hit ${goalWords}` : `of ${goalWords}`}
               </ThemedText>
             </View>
           ) : null}
@@ -309,10 +317,10 @@ function RouteCardInner({ route, requiredInvestment, currentInvestment, score, o
           style={{ gap: 16, borderTopWidth: 1, borderTopColor: theme.border, paddingTop: 12 }}>
           <View className="flex-1">
             <ThemedText style={{ fontSize: 11, fontWeight: '800', color: theme.textSecondary, letterSpacing: 0.4 }}>
-              {route.meetsTarget ? 'POTENTIAL PROFIT' : 'PROFIT · BELOW GOAL'}
+              {odds ? 'IF IT WORKS' : route.meetsTarget ? 'POTENTIAL PROFIT' : 'PROFIT · BELOW GOAL'}
             </ThemedText>
-            <ThemedText style={{ fontSize: 26, fontWeight: '800', color: theme.text, letterSpacing: -0.6, marginTop: 1, ...MONO }}>
-              +${formatMoney(route.expectedReturn)}
+            <ThemedText style={{ fontSize: 22, fontWeight: '800', color: theme.text, letterSpacing: -0.6, marginTop: 1, ...MONO }}>
+              +${formatMoney(odds ? odds.profitIfItWorks : route.expectedReturn)}
             </ThemedText>
           </View>
           {stake ? (
@@ -323,6 +331,17 @@ function RouteCardInner({ route, requiredInvestment, currentInvestment, score, o
               <ThemedText style={{ fontSize: 16, fontWeight: '800', color: theme.text, marginTop: 2, ...MONO }}>
                 {stake.value}
               </ThemedText>
+            </View>
+          ) : null}
+          {odds && odds.stake > 0 ? (
+            <View style={{ paddingBottom: 3, alignItems: 'flex-end' }}>
+              <ThemedText style={{ fontSize: 11, fontWeight: '800', color: theme.textSecondary, letterSpacing: 0.4 }}>
+                BAD CASE
+              </ThemedText>
+              <ThemedText style={{ fontSize: 16, fontWeight: '800', color: odds.badCase > 0 ? theme.text : theme.textSecondary, marginTop: 2, ...MONO }}>
+                {odds.badCase > 0 ? `−$${formatMoney(odds.badCase)}` : '$0'}
+              </ThemedText>
+              <ThemedText style={{ fontSize: 10, color: theme.textTertiary }}>{badCaseNote(odds)}</ThemedText>
             </View>
           ) : null}
         </View>

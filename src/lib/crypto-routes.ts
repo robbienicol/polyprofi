@@ -85,6 +85,8 @@ export function buildCryptoRoutes({
         maturesInDays: deadlineDays,
         lossProfile: 'partial',
         meetsTarget: probability >= 50,
+        dailyVolatility: quote.dailyVol ?? undefined,
+        annualDriftPct: 0,
         investmentFacts: {
           projectionBasis: `P(move ≥ +${targetPct.toFixed(1)}% in ${horizonTradingDays} trading days) from ~90-day realized volatility, zero assumed drift`,
           liquidity: 'Trades 24/7 on major exchanges',
