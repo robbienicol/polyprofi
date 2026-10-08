@@ -1,8 +1,8 @@
 import { forwardRef, useState } from 'react';
-import { Pressable, TextInput, View, type TextInputProps } from 'react-native';
+import { Pressable, StyleSheet, TextInput, View, type TextInputProps } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { Brand, Radius } from '@/constants/theme';
+import { Brand, Radius, bodyFontFamily } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 interface AuthTextInputProps extends TextInputProps {
@@ -26,6 +26,10 @@ export const AuthTextInput = forwardRef<TextInput, AuthTextInputProps>(function 
   const theme = useTheme();
   const [focused, setFocused] = useState(false);
   const [revealed, setRevealed] = useState(false);
+  // Callers override size and weight (the 6-digit code field), so the face and the
+  // field height follow whatever they pass rather than the defaults.
+  const override = StyleSheet.flatten(style) ?? {};
+  const fontSize = override.fontSize ?? 16;
 
   const handleFocus = (e: FocusArg): void => {
     setFocused(true);
@@ -78,10 +82,15 @@ export const AuthTextInput = forwardRef<TextInput, AuthTextInputProps>(function 
             borderColor: focused ? Brand[500] : theme.borderStrong,
             backgroundColor: theme.backgroundElement,
             color: theme.text,
-            fontSize: 16,
-            fontWeight: '600',
-            paddingVertical: 15,
+            fontSize,
+            // A TextInput never passes through ThemedText, so the custom face must be
+            // named here. A fixed height with no vertical padding keeps iOS from
+            // pushing the text below the field's bottom edge.
+            fontFamily: bodyFontFamily(override.fontWeight ?? '600'),
+            height: Math.max(54, Math.round(fontSize * 2)),
+            paddingVertical: 0,
             paddingHorizontal: 16,
+            textAlignVertical: 'center',
           },
           style,
         ]}

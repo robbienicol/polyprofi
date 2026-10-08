@@ -120,6 +120,9 @@ export async function pullUserData(active: SyncSession): Promise<SyncedKey[]> {
     await AsyncStorage.multiRemove(SYNCED_KEYS.flatMap((key) => [SYNCED_STORAGE_KEYS[key], dirtyKey(key)]));
     changed.push(...SYNCED_KEYS);
   }
+  // Claimed before the network read, not after: when the read failed the device was
+  // never claimed, so the next account to sign in inherited this one's positions.
+  await AsyncStorage.setItem(OWNER_KEY, active.userId);
 
   const response = await request(active);
   if (!response.ok) throw new Error(`Failed to load user data (${response.status})`);
@@ -143,6 +146,5 @@ export async function pullUserData(active: SyncSession): Promise<SyncedKey[]> {
     if (local != null && parseJson(local) != null) await pushKey(key);
   }
 
-  await AsyncStorage.setItem(OWNER_KEY, active.userId);
   return [...new Set(changed)];
 }

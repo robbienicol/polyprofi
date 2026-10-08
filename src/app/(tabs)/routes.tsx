@@ -14,6 +14,7 @@ import { useSavingsGoal } from '@/api/hooks/useSavingsGoal';
 import { useCardRewards } from '@/api/hooks/useCardRewards';
 import { useSpendingCuts } from '@/api/hooks/useSpendingCuts';
 import { useTrackedBets } from '@/api/hooks/useTrackedBets';
+import { InvestmentAmountControl } from '@/components/routes/InvestmentAmountControl';
 import { MoreWaysToSave } from '@/components/routes/MoreWaysToSave';
 import { RouteFilters, SortBar } from '@/components/routes/RouteFilters';
 import { RouteSearchBar } from '@/components/routes/RouteSearchBar';
@@ -571,6 +572,11 @@ export default function RoutesScreen(): React.ReactElement {
         refreshControl={<RefreshControl refreshing={(isFetching && !isLoading) || manualRefresh} onRefresh={handleRefresh} tintColor={Brand[500]} />}>
         {ranked.length > 0 && (
           <>
+            {/* On the list, not behind Filters: the amount is what people reach for
+                to see which bets fit their budget, so it is always one drag away. */}
+            <View style={{ borderRadius: Radius.xl, backgroundColor: theme.backgroundElevated, borderWidth: 1, borderColor: theme.border, paddingHorizontal: 14, paddingVertical: 10, ...Shadow.card }}>
+              <InvestmentAmountControl amount={displayedInvestment} maximum={investmentMaximum} onAmountChange={setInvestmentAndReset} />
+            </View>
             <SortBar
               sort={filters.sort}
               onSortChange={(sort) => setFiltersAndReset({ ...filters, sort })}
@@ -584,9 +590,6 @@ export default function RoutesScreen(): React.ReactElement {
                 routes={ranked}
                 shownCount={filtered.length}
                 onChange={setFiltersAndReset}
-                amount={displayedInvestment}
-                investmentMaximum={investmentMaximum}
-                onAmountChange={setInvestmentAndReset}
                 onDone={() => setShowFilters(false)}
               />
             ) : null}

@@ -2,7 +2,6 @@ import Slider from '@react-native-community/slider';
 import { SlidersHorizontal } from 'lucide-react-native';
 import { Pressable, ScrollView, View } from 'react-native';
 
-import { InvestmentAmountControl } from '@/components/routes/InvestmentAmountControl';
 import { Icon } from '@/components/ui/Icon';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, CategoryScale, OnBrand, Radius, Shadow } from '@/constants/theme';
@@ -130,9 +129,6 @@ interface RouteFiltersProps {
   /** How many routes the current filters leave, for the live count. */
   shownCount: number;
   onChange: (filters: Filters) => void;
-  amount: number;
-  investmentMaximum: number;
-  onAmountChange: (amount: number) => void;
   onDone: () => void;
 }
 
@@ -141,9 +137,6 @@ export function RouteFilters({
   routes,
   shownCount,
   onChange,
-  amount,
-  investmentMaximum,
-  onAmountChange,
   onDone,
 }: RouteFiltersProps): React.ReactElement {
   const theme = useTheme();
@@ -173,10 +166,6 @@ export function RouteFilters({
         gap: 14,
         ...Shadow.card,
       }}>
-      <InvestmentAmountControl amount={amount} maximum={investmentMaximum} onAmountChange={onAmountChange} />
-
-      <Divider />
-
       <Section label="Asset class">
         <FilterRow>
           <FilterChip label="All" active={filters.category === null} onPress={() => update({ category: null })} />

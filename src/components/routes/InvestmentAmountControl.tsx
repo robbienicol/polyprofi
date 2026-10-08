@@ -35,8 +35,7 @@ function stepFor(maximum: number): number {
  * keyboard is slow for rough ones. It is a ceiling: each route uses only what it
  * needs to reach the target, and never more than this.
  *
- * No card chrome of its own — this lives inside the Filters panel now, which
- * supplies the border and background for every section alike.
+ * No card chrome of its own — the Routes screen wraps it in a card on the list.
  */
 export function InvestmentAmountControl({
   amount,
