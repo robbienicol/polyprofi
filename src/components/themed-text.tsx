@@ -1,6 +1,6 @@
 import { Platform, StyleSheet, Text, type TextProps, type TextStyle } from 'react-native';
 
-import { Fonts, LINE_HEIGHT_RATIO, ThemeColor, Type } from '@/constants/theme';
+import { Brand, DISPLAY_MIN_SIZE, Fonts, LINE_HEIGHT_RATIO, ThemeColor, Type, bodyFontFamily, displayFontFamily } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 type TextVariant =
@@ -25,6 +25,24 @@ export function ThemedText({ style, type = 'default', themeColor, ...rest }: The
       ? Math.round(flat.fontSize * LINE_HEIGHT_RATIO)
       : undefined;
 
+  // Headings wear the serif, everything else the sans. Resolved from the *final*
+  // size/weight, so inline-styled headers (`fontSize: 34, fontWeight: '800'`)
+  // pick it up too. Anything that named its own family keeps it.
+  const resolved = StyleSheet.flatten([styles[type], style]) as TextStyle | undefined;
+  const size = typeof resolved?.fontSize === 'number' ? resolved.fontSize : Type.body.fontSize;
+  const family =
+    resolved && resolved.fontFamily == null
+      ? // The weight lives in the family name; leaving fontWeight set on top of it
+        // makes Android (and web @font-face matching) synthesize a second bold.
+        {
+          fontFamily:
+            size >= DISPLAY_MIN_SIZE
+              ? displayFontFamily(resolved.fontWeight)
+              : bodyFontFamily(resolved.fontWeight),
+          fontWeight: 'normal' as const,
+        }
+      : undefined;
+
   return (
     <Text
       style={[
@@ -32,6 +50,7 @@ export function ThemedText({ style, type = 'default', themeColor, ...rest }: The
         styles[type],
         style,
         autoLineHeight != null && { lineHeight: autoLineHeight },
+        family,
       ]}
       {...rest}
     />
@@ -56,7 +75,7 @@ const styles = StyleSheet.create({
   small: { fontSize: 14, lineHeight: 20, fontWeight: '500' },
   smallBold: { fontSize: 14, lineHeight: 20, fontWeight: '700' },
   link: { fontSize: 14, lineHeight: 22 },
-  linkPrimary: { fontSize: 14, lineHeight: 22, color: '#3c87f7' },
+  linkPrimary: { fontSize: 14, lineHeight: 22, color: Brand[500] },
   code: {
     fontFamily: Fonts.mono,
     fontWeight: Platform.select({ android: '700' }) ?? '500',
