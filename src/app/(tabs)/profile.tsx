@@ -117,15 +117,18 @@ export default function SettingsScreen(): React.ReactElement {
     setDeleteError('');
     try {
       await deleteAccount();
-      await AsyncStorage.clear();
-      await signOut();
-      // Storage is wiped; the in-memory copies must go too or they reappear for
-      // whoever signs up next without a relaunch.
-      queryClient.clear();
-      router.replace('/sign-in');
     } catch {
       setDeleteError('Could not delete your account. Please try again.');
+      return;
     }
+    // The Clerk user is already gone, so signOut's session-end call can reject;
+    // that must not surface as a failed deletion.
+    await AsyncStorage.clear().catch(() => {});
+    await signOut().catch(() => {});
+    // Storage is wiped; the in-memory copies must go too or they reappear for
+    // whoever signs up next without a relaunch.
+    queryClient.clear();
+    router.replace('/sign-in');
   }, [deleteAccount, queryClient, signOut, router]);
 
   const handleDeleteAccount = useCallback(() => {
