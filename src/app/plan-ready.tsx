@@ -30,7 +30,9 @@ export default function PlanReadyScreen(): React.ReactElement {
 
   const rows = isLoading ? [] : planRows(profile.answers);
 
-  const next = useCallback(() => router.replace('/goal-setup' as Href), [router]);
+  // Through `index`, not straight to goal setup: a retake from Settings already has
+  // goals, and `index` is what knows where each user belongs next.
+  const next = useCallback(() => router.replace('/' as Href), [router]);
 
   return (
     <View className="flex-1" style={{ backgroundColor: theme.background }}>

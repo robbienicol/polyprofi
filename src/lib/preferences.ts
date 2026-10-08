@@ -57,6 +57,8 @@ export interface Preferences {
   weeklyReminder: boolean;
   /** Portfolio math assumes stocks/crypto return 0 instead of their expected value. */
   conservativeProjections: boolean;
+  /** Skipped "What are you saving for?" after sign-up, so launch stops sending them back to it. */
+  goalSetupSkipped: boolean;
   /**
    * How the user weighted the four score components. Stored raw (slider importance,
    * 0-100 each) rather than normalised, so the sliders can be put back exactly where
@@ -72,6 +74,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   positionAlerts: true,
   weeklyReminder: true,
   conservativeProjections: false,
+  goalSetupSkipped: false,
   // The long-standing fixed weights, as slider positions — so an untouched set of
   // sliders reproduces exactly the ranking the app had before they existed.
   scoreWeights: {
@@ -124,6 +127,7 @@ export function sanitizePreferences(value: unknown): Preferences {
     positionAlerts: bool('positionAlerts'),
     weeklyReminder: bool('weeklyReminder'),
     conservativeProjections: bool('conservativeProjections'),
+    goalSetupSkipped: bool('goalSetupSkipped'),
     scoreWeights: sanitizeScoreWeights(raw.scoreWeights),
   };
 }

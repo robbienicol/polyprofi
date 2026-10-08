@@ -1,6 +1,5 @@
 import { useSignInWithApple } from '@clerk/clerk-expo';
 import * as AppleAuthentication from 'expo-apple-authentication';
-import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Platform, View } from 'react-native';
 
@@ -18,7 +17,6 @@ import { clerkErrorMessage } from '@/lib/clerk-errors';
  */
 export function AppleSignInButton({ onError }: { onError: (message: string) => void }): React.ReactElement | null {
   const { startAppleAuthenticationFlow } = useSignInWithApple();
-  const router = useRouter();
   const theme = useTheme();
   const scheme = useScheme();
   const [busy, setBusy] = useState(false);
@@ -33,7 +31,8 @@ export function AppleSignInButton({ onError }: { onError: (message: string) => v
       const { createdSessionId, setActive } = await startAppleAuthenticationFlow();
       if (createdSessionId && setActive) {
         await setActive({ session: createdSessionId });
-        router.replace('/');
+        // No navigation here: the session flips the root Stack's guard, which drops
+        // this screen from history and lands on `index`.
       }
     } catch (e: unknown) {
       // Closing the Apple sheet is a choice, not a failure.

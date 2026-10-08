@@ -43,7 +43,8 @@ export default function SignUpScreen(): React.ReactElement {
       // user with no code to enter was stuck on a dead-end screen.
       if (result.status === 'complete') {
         await setActive({ session: result.createdSessionId });
-        router.replace('/');
+        // No navigation here: the session flips the root Stack's guard, which drops
+        // this screen from history and lands on `index`.
         return;
       }
 
@@ -59,7 +60,7 @@ export default function SignUpScreen(): React.ReactElement {
     } finally {
       setLoading(false);
     }
-  }, [isLoaded, loading, signUp, email, password, setActive, router]);
+  }, [isLoaded, loading, signUp, email, password, setActive]);
 
   const handleVerify = useCallback(async () => {
     if (!isLoaded || loading) return;
@@ -70,7 +71,8 @@ export default function SignUpScreen(): React.ReactElement {
       const result = await signUp.attemptEmailAddressVerification({ code: code.trim() });
       if (result.status === 'complete') {
         await setActive({ session: result.createdSessionId });
-        router.replace('/');
+        // No navigation here: the session flips the root Stack's guard, which drops
+        // this screen from history and lands on `index`.
       } else {
         // Previously this branch did nothing, so the button looked broken.
         setError('That code isn’t right. Check it or send a new one.');
@@ -80,7 +82,7 @@ export default function SignUpScreen(): React.ReactElement {
     } finally {
       setLoading(false);
     }
-  }, [isLoaded, loading, signUp, code, setActive, router]);
+  }, [isLoaded, loading, signUp, code, setActive]);
 
   const handleResend = useCallback(async () => {
     if (!isLoaded || loading) return;

@@ -2,6 +2,7 @@ import { useAuth, useUser } from '@clerk/clerk-expo';
 import { Href, Redirect } from 'expo-router';
 
 import { useOnboarding } from '@/api/hooks/useOnboarding';
+import { usePreferences } from '@/api/hooks/usePreferences';
 import { useOnboardingProfile } from '@/api/hooks/useOnboardingProfile';
 import { useDevReplayFunnel } from '@/api/hooks/useDevReplayFunnel';
 import { useEarlyAccess } from '@/api/hooks/useEarlyAccess';
@@ -19,6 +20,7 @@ export default function Index(): React.ReactElement {
   const { hasCompletedProfile, checkFailed: profileCheckFailed, isLoading: profileLoading } = useUserProfile();
   const { hasAnyGoal, isLoading: goalLoading } = useSavingsGoal();
   const { hasEarlyAccess, isLoading: earlyAccessLoading } = useEarlyAccess();
+  const { preferences, isLoading: preferencesLoading } = usePreferences();
 
   if (onboardingLoading) {
     return <BrandLoader subtitle="Loading…" />;
@@ -76,8 +78,8 @@ export default function Index(): React.ReactElement {
   // Drafts count: goal setup hands off to the quiz, and the goal it creates there
   // stays a draft until money is committed. Gating on committed goals alone sent
   // everyone who had searched but not yet acquired back here on every launch.
-  if (goalLoading) return <BrandLoader subtitle="Loading your goal…" />;
-  if (!hasAnyGoal) return <Redirect href={'/goal-setup' as Href} />;
+  if (goalLoading || preferencesLoading) return <BrandLoader subtitle="Loading your goal…" />;
+  if (!hasAnyGoal && !preferences.goalSetupSkipped) return <Redirect href={'/goal-setup' as Href} />;
 
   return <Redirect href="/(tabs)" />;
 }

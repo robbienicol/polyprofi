@@ -18,11 +18,12 @@ import { useDevResetOnboarding } from '@/hooks/use-dev-reset-onboarding';
 import { clerkErrorMessage } from '@/lib/clerk-errors';
 
 /** Second factor we can collect in-app, in preference order. */
-type SecondFactor = 'totp' | 'phone_code' | 'backup_code';
+type SecondFactor = 'totp' | 'phone_code' | 'email_code' | 'backup_code';
 
 const SECOND_FACTOR_COPY: Record<SecondFactor, string> = {
   totp: 'Enter the 6-digit code from your authenticator app.',
   phone_code: 'We texted you a 6-digit code.',
+  email_code: 'New device. We emailed you a 6-digit code to confirm it’s you.',
   backup_code: 'Enter one of your backup codes.',
 };
 
@@ -52,22 +53,29 @@ export default function SignInScreen(): React.ReactElement {
 
       if (result.status === 'complete') {
         await setActive({ session: result.createdSessionId });
-        router.replace('/');
+        // No navigation here: the session flips the root Stack's guard, which drops
+        // this screen from history and lands on `index`.
         return;
       }
 
-      if (result.status === 'needs_second_factor') {
+      // `needs_client_trust` is Clerk's new-device check: right password, unknown
+      // device, so it emails a code. It used to fall through to "doesn't match an
+      // account", locking real users out of every fresh install.
+      if (result.status === 'needs_second_factor' || (result.status as string) === 'needs_client_trust') {
         // Previously this fell into the generic "invalid email or password" branch,
         // which made a 2FA-enabled account impossible to sign into.
         const factors = result.supportedSecondFactors ?? [];
         const phone = factors.find((f) => f.strategy === 'phone_code');
+        const emailFactor = factors.find((f) => f.strategy === 'email_code');
         const chosen: SecondFactor | null = factors.some((f) => f.strategy === 'totp')
           ? 'totp'
           : phone
             ? 'phone_code'
-            : factors.some((f) => f.strategy === 'backup_code')
-              ? 'backup_code'
-              : null;
+            : emailFactor
+              ? 'email_code'
+              : factors.some((f) => f.strategy === 'backup_code')
+                ? 'backup_code'
+                : null;
 
         if (!chosen) {
           setError('This account needs a verification step the app can’t complete. Contact support.');
@@ -77,6 +85,12 @@ export default function SignInScreen(): React.ReactElement {
           await signIn.prepareSecondFactor({
             strategy: 'phone_code',
             phoneNumberId: phone.phoneNumberId,
+          });
+        }
+        if (chosen === 'email_code' && emailFactor && 'emailAddressId' in emailFactor) {
+          await signIn.prepareSecondFactor({
+            strategy: 'email_code',
+            emailAddressId: emailFactor.emailAddressId,
           });
         }
         setSecondFactor(chosen);
@@ -112,7 +126,8 @@ export default function SignInScreen(): React.ReactElement {
       const result = await signIn.attemptSecondFactor({ strategy: secondFactor, code: code.trim() });
       if (result.status === 'complete') {
         await setActive({ session: result.createdSessionId });
-        router.replace('/');
+        // No navigation here: the session flips the root Stack's guard, which drops
+        // this screen from history and lands on `index`.
       } else {
         setError('That code isn’t right. Try again.');
       }
@@ -121,7 +136,7 @@ export default function SignInScreen(): React.ReactElement {
     } finally {
       setLoading(false);
     }
-  }, [isLoaded, secondFactor, loading, signIn, code, setActive, router]);
+  }, [isLoaded, secondFactor, loading, signIn, code, setActive]);
 
   if (secondFactor) {
     return (

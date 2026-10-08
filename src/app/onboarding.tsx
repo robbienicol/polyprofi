@@ -201,7 +201,15 @@ function OnboardingCarousel({
     setListHeight(event.nativeEvent.layout.height);
   }, []);
 
-  if (!started) return <WelcomeHero onStart={() => setStarted(true)} />;
+  if (!started) {
+    return (
+      <WelcomeHero
+        onStart={() => setStarted(true)}
+        // Their name and answers come back with the account once they sign in.
+        onSignIn={() => completeOnboarding(undefined, { onSuccess: () => router.replace("/sign-in" as Href) })}
+      />
+    );
+  }
 
   return (
     <View className="flex-1" style={{ backgroundColor: theme.background }}>

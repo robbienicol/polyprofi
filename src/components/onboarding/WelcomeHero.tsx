@@ -47,7 +47,7 @@ function rise(value: Animated.Value, distance = 18) {
  * First thing anyone sees. The pitch before the name: what Pathey is, in one line,
  * and the three reasons to keep going.
  */
-export function WelcomeHero({ onStart }: { onStart: () => void }): React.ReactElement {
+export function WelcomeHero({ onStart, onSignIn }: { onStart: () => void; onSignIn: () => void }): React.ReactElement {
   const theme = useTheme();
   const { height } = useWindowDimensions();
   const short = height > 0 && height < 700;
@@ -127,9 +127,13 @@ export function WelcomeHero({ onStart }: { onStart: () => void }): React.ReactEl
               Get started
             </ThemedText>
           </Pressable>
-          <ThemedText style={{ fontSize: 10.5, color: theme.textTertiary, textAlign: 'center', minHeight: 14 }}>
-            Takes about a minute
-          </ThemedText>
+          {/* A returning user on a new phone has an account already; walking them
+              through the pitch and a name they gave months ago was the only way in. */}
+          <Pressable onPress={onSignIn} accessibilityRole="button" hitSlop={8} className="items-center py-1 active:opacity-60">
+            <ThemedText style={{ fontSize: 14, color: theme.textSecondary }}>
+              I already have an account · <ThemedText style={{ fontSize: 14, fontWeight: '800', color: Brand[500] }}>Sign in</ThemedText>
+            </ThemedText>
+          </Pressable>
         </Animated.View>
       </SafeAreaView>
     </View>

@@ -1,5 +1,4 @@
 import { useSignIn } from '@clerk/clerk-expo';
-import { useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import { View } from 'react-native';
 
@@ -16,7 +15,6 @@ import { clerkErrorMessage } from '@/lib/clerk-errors';
 
 export default function ForgotPasswordScreen(): React.ReactElement {
   const { signIn, setActive, isLoaded } = useSignIn();
-  const router = useRouter();
 
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
@@ -61,8 +59,9 @@ export default function ForgotPasswordScreen(): React.ReactElement {
       });
       if (result.status === 'complete') {
         await setActive({ session: result.createdSessionId });
-        router.replace('/');
-      } else if (result.status === 'needs_second_factor') {
+        // No navigation here: the session flips the root Stack's guard, which drops
+        // this screen from history and lands on `index`.
+      } else if (result.status === 'needs_second_factor' || (result.status as string) === 'needs_client_trust') {
         // The password is changed at this point; finish the second factor on sign-in.
         setError('Password updated. Sign in again to finish your verification step.');
       } else {
@@ -73,7 +72,7 @@ export default function ForgotPasswordScreen(): React.ReactElement {
     } finally {
       setLoading(false);
     }
-  }, [isLoaded, loading, signIn, code, password, setActive, router]);
+  }, [isLoaded, loading, signIn, code, password, setActive]);
 
   return (
     <AuthScreen

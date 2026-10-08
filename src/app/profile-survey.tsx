@@ -114,10 +114,15 @@ function SurveyForm({
   }, [index, answers]);
 
   const back = useCallback(() => {
+    // A retake opened from Settings can be backed out of from its first page.
+    if (index === 0) {
+      if (router.canGoBack()) router.back();
+      return;
+    }
     let prev = index - 1;
     while (prev > 0 && !isPageVisible(PAGE_IDS[prev], answers)) prev--;
     setIndex(Math.max(0, prev));
-  }, [index, answers]);
+  }, [index, answers, router]);
 
   const nearby = useCallback((target: number) => Math.abs(target - index) <= RENDER_WINDOW, [index]);
 
@@ -190,11 +195,11 @@ function SurveyForm({
           <View className="flex-row items-center" style={{ gap: 12 }}>
             <Pressable
               onPress={back}
-              disabled={index === 0}
+              disabled={index === 0 && !router.canGoBack()}
               accessibilityRole="button"
               accessibilityLabel="Back"
               className="active:opacity-60"
-              style={{ opacity: index === 0 ? 0 : 1, paddingVertical: 4, paddingRight: 4 }}>
+              style={{ opacity: index === 0 && !router.canGoBack() ? 0 : 1, paddingVertical: 4, paddingRight: 4 }}>
               <ThemedText style={{ fontSize: 15, fontWeight: '700', color: theme.textSecondary }}>←</ThemedText>
             </Pressable>
             <View

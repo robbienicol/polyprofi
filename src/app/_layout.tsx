@@ -124,6 +124,53 @@ function UserDataSync(): null {
   return null;
 }
 
+/**
+ * Which screens exist depends on whether there is a session, so the back stack can
+ * never hold the wrong side. Signing in drops the auth screens from history (back
+ * after sign-up used to land on sign-in while still signed in, and signing in again
+ * failed with "already signed in"); signing out drops every account screen.
+ *
+ * Onboarding, the legal pages and `index` sit outside both: `index` is the one
+ * router that decides where a user belongs, and both guards fall back to it.
+ */
+function AppStack(): React.ReactElement | null {
+  const { isLoaded, isSignedIn } = useAuth();
+  // Same dev escape hatch as `index`, and as tightly gated: never in a release build.
+  const bypassAuth = __DEV__ && process.env.EXPO_PUBLIC_DEV_BYPASS_AUTH === '1';
+  // Until Clerk has read the token cache neither guard is known, and guessing
+  // "signed out" would throw a signed-in user's screens away on every launch.
+  if (!isLoaded && !bypassAuth) return null;
+  const signedIn = !!isSignedIn || bypassAuth;
+
+  return (
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="index" />
+      <Stack.Protected guard={!signedIn}>
+        <Stack.Screen name="sign-in" />
+        <Stack.Screen name="sign-up" />
+        <Stack.Screen name="forgot-password" />
+      </Stack.Protected>
+      <Stack.Protected guard={signedIn}>
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="early-access" />
+        <Stack.Screen name="profile-survey" />
+        <Stack.Screen name="building-plan" />
+        <Stack.Screen name="plan-ready" />
+        <Stack.Screen name="goal-setup" />
+        <Stack.Screen name="quiz" />
+        <Stack.Screen name="goal/[id]" />
+        <Stack.Screen name="goal-achieved" />
+        <Stack.Screen name="route/[id]" />
+        <Stack.Screen name="positions" />
+        <Stack.Screen name="import-statement" />
+        <Stack.Screen name="paywall" />
+        <Stack.Screen name="explore" />
+        <Stack.Screen name="learn" />
+      </Stack.Protected>
+    </Stack>
+  );
+}
+
 function GoalCelebrationGate(): null {
   const { pendingCelebration } = useSavingsGoal();
   const pathname = usePathname();
@@ -172,7 +219,7 @@ export default function RootLayout(): React.ReactElement | null {
           <ClerkProvider publishableKey={publishableKey} tokenCache={clerkTokenCache}>
             <QueryClientProvider client={queryClient}>
               <AppLockGate>
-                <Stack screenOptions={{ headerShown: false }} />
+                <AppStack />
                 <NotificationObserver />
                 <GoalCelebrationGate />
                 <GoalHousekeeping />

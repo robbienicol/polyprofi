@@ -3,6 +3,7 @@ import { useRef, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { usePreferences } from '@/api/hooks/usePreferences';
 import { useSavingsGoal } from '@/api/hooks/useSavingsGoal';
 import { OnboardingGlow } from '@/components/onboarding/OnboardingPreviews';
 import { ThemedText } from '@/components/themed-text';
@@ -35,6 +36,7 @@ export default function GoalSetupScreen(): React.ReactElement {
   const theme = useTheme();
   const router = useRouter();
   const { allGoals, hasAnyGoal, isLoading, addGoalAsync } = useSavingsGoal();
+  const { update: updatePreferences } = usePreferences();
   const amountRef = useRef<TextInput>(null);
 
   const [label, setLabel] = useState('');
@@ -111,7 +113,19 @@ export default function GoalSetupScreen(): React.ReactElement {
             keyboardDismissMode="on-drag"
             contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 20, paddingBottom: 28, gap: 26 }}>
             <View>
-              {isFirstGoal ? null : (
+              {isFirstGoal ? (
+                <Pressable
+                  onPress={() => {
+                    updatePreferences({ goalSetupSkipped: true });
+                    router.replace('/(tabs)' as Href);
+                  }}
+                  accessibilityRole="button"
+                  hitSlop={8}
+                  className="self-end active:opacity-60 py-1"
+                  style={{ marginBottom: 10 }}>
+                  <ThemedText style={{ fontSize: 14, fontWeight: '700', color: theme.textSecondary }}>Skip for now</ThemedText>
+                </Pressable>
+              ) : (
                 <Pressable
                   onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)' as Href))}
                   accessibilityRole="button"

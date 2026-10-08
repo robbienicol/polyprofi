@@ -355,6 +355,20 @@ export default function SettingsScreen(): React.ReactElement {
                 </ThemedText>
               }
             />
+            <SettingsRow
+              icon="🧭"
+              label="Retake priorities quiz"
+              description="Answer again to rebuild your Score"
+              onPress={() => router.push('/profile-survey' as Href)}
+            />
+            {!usingDefaultScoreWeights ? (
+              <SettingsRow
+                icon="↺"
+                label="Reset Score sliders"
+                chevron={false}
+                onPress={() => update({ scoreWeights: DEFAULT_PREFERENCES.scoreWeights })}
+              />
+            ) : null}
             {showScoreWeights ? (
               <View style={{ paddingHorizontal: 14, paddingBottom: 14 }}>
                 <ScoreWeightSliders
