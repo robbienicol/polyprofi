@@ -14,6 +14,7 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "bundleIdentifier": "com.robbiehey.polyprofit",
+      "usesAppleSignIn": true,
       "buildNumber": "25",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
@@ -36,6 +37,7 @@
     },
     "plugins": [
       "expo-router",
+      "expo-apple-authentication",
       [
         "expo-splash-screen",
         {

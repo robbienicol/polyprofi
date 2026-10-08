@@ -10,6 +10,7 @@ import {
   AuthScreen,
   AuthTextButton,
 } from '@/components/auth/AuthScreen';
+import { AppleSignInButton } from '@/components/auth/AppleSignInButton';
 import { AuthTextInput } from '@/components/auth/AuthTextInput';
 import { ThemedText } from '@/components/themed-text';
 import { useDevLogin } from '@/hooks/use-dev-login';
@@ -172,6 +173,7 @@ export default function SignInScreen(): React.ReactElement {
       subtitle="Sign in to your account"
       footer={<AuthFooterLink prompt="Don’t have an account?" action="Sign up" href="/sign-up" />}>
       <View className="gap-4">
+        <AppleSignInButton onError={setError} />
         <AuthTextInput
           label="Email"
           value={email}
