@@ -609,7 +609,7 @@ function RoutesScreen(): React.ReactElement {
         showsVerticalScrollIndicator={false}
         contentContainerClassName="px-4 pb-16 pt-4 gap-3"
         {...KEYBOARD_AWARE_SCROLL_PROPS}
-        refreshControl={<RefreshControl refreshing={(isFetching && !isLoading) || manualRefresh} onRefresh={handleRefresh} tintColor={Brand[500]} />}>
+        refreshControl={<RefreshControl refreshing={manualRefresh} onRefresh={handleRefresh} tintColor={Brand[500]} />}>
         {/* Scrolls with the list: the screen is for the routes, not the controls. */}
         {goal && isHistorical && (
           <RoutesHeader

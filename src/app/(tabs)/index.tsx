@@ -28,6 +28,8 @@ import { describeSearch } from '@/lib/quiz-profile';
 import { cashFlowAdjustedChange } from '@/lib/portfolio-progress';
 import { goalProgressFraction, goalRemaining, isOpenEnded } from '@/lib/savings-goal';
 import { withTabSkeleton } from '@/components/ui/with-tab-skeleton';
+import { usePullRefresh } from '@/hooks/use-pull-refresh';
+import { Bone, Skeleton } from '@/components/ui/loaders';
 import type { SavingsGoal } from '@/types/bets';
 
 const MONO = { fontVariant: ['tabular-nums' as const] };
@@ -147,6 +149,10 @@ function HomeScreen(): React.ReactElement {
           ? `${progress.activeCount} position${progress.activeCount === 1 ? '' : 's'} tracked`
           : 'No positions yet';
 
+  const pull = usePullRefresh(progress.refresh);
+  // Nothing priced yet and a refresh in flight: the first load, not a refresh.
+  const firstLoad = progress.updatedAt == null && progress.isRefreshing;
+
   return (
     <View className="flex-1" style={{ backgroundColor: theme.background }}>
       <SafeAreaView className="flex-1">
@@ -154,8 +160,8 @@ function HomeScreen(): React.ReactElement {
           showsVerticalScrollIndicator={false}
           refreshControl={(
             <RefreshControl
-              refreshing={progress.isRefreshing}
-              onRefresh={progress.refresh}
+              refreshing={pull.refreshing}
+              onRefresh={pull.onRefresh}
               tintColor={Brand[500]}
             />
           )}
@@ -201,6 +207,7 @@ function HomeScreen(): React.ReactElement {
               </View>
             </View>
 
+            {!firstLoad ? (
             <ThemedText
               style={{
                 fontSize: 40,
@@ -213,6 +220,8 @@ function HomeScreen(): React.ReactElement {
               }}>
               {money(headPoint.value)}
             </ThemedText>
+            ) : null}
+            {firstLoad ? null : (
             <View className="flex-row items-center" style={{ gap: 7, marginTop: 2 }}>
               <ThemedText style={{ fontSize: 14, fontWeight: '800', color: changeColor, ...MONO }}>
                 {money(change, { signed: true })} ({positive ? '+' : '−'}{Math.abs(changePct).toFixed(2)}%)
@@ -222,6 +231,17 @@ function HomeScreen(): React.ReactElement {
               </ThemedText>
             </View>
 
+            )}
+
+            {/* First prices still on their way: the value and line hold their shape
+                as a skeleton instead of showing $0 and a flat line. */}
+            {firstLoad ? (
+              <Skeleton style={{ gap: 10, marginTop: 9 }}>
+                <Bone width="55%" height={40} radius={8} />
+                <Bone width="35%" height={14} />
+                <Bone height={150} radius={10} />
+              </Skeleton>
+            ) : (
             <View style={{ marginTop: 10 }}>
               <PortfolioLineChart
                 series={series}
@@ -237,6 +257,7 @@ function HomeScreen(): React.ReactElement {
                 bleed={18}
               />
             </View>
+            )}
 
             <View
               className="flex-row items-center justify-between"

@@ -17,6 +17,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { goalProgressFraction, isOpenEnded, parseGoalIds } from '@/lib/savings-goal';
 import { ListRowsSkeleton } from '@/components/ui/loaders';
 import { withTabSkeleton } from '@/components/ui/with-tab-skeleton';
+import { usePullRefresh } from '@/hooks/use-pull-refresh';
 import type { SavingsGoal } from '@/types/bets';
 
 const MONO = { fontVariant: ['tabular-nums' as const] };
@@ -27,6 +28,7 @@ function GoalsScreen(): React.ReactElement {
   const { goals, achievedCount, isLoading, removeGoals } = useSavingsGoal();
   const { reassignBets } = useTrackedBets();
   const progress = useGoalsProgress(goals);
+  const pull = usePullRefresh(progress.refresh);
 
   // Ticked goals, for looking at their combined portfolio or clearing several out
   // at once. Ids rather than indexes, so a goal disappearing under the selection
@@ -128,7 +130,7 @@ function GoalsScreen(): React.ReactElement {
         <ScrollView
           showsVerticalScrollIndicator={false}
           refreshControl={(
-            <RefreshControl refreshing={progress.isRefreshing} onRefresh={progress.refresh} tintColor={Brand[500]} />
+            <RefreshControl refreshing={pull.refreshing} onRefresh={pull.onRefresh} tintColor={Brand[500]} />
           )}
           contentContainerClassName="px-4 pt-4 pb-16 gap-3">
 

@@ -19,6 +19,7 @@ import { Brand, OnBrand, Radius, Semantic, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { excludedSearchCategoriesFor, riskToleranceFor } from '@/lib/onboarding-profile';
 import { buildRouteParams, referenceStakeFor, surveyAmountCeiling } from '@/lib/quiz-profile';
+import { usePullRefresh } from '@/hooks/use-pull-refresh';
 import { betsForGoal, goalProgressFraction, goalRemaining, goalTimeframe, isOpenEnded } from '@/lib/savings-goal';
 
 const MONO = { fontVariant: ['tabular-nums' as const] };
@@ -42,6 +43,7 @@ export default function GoalDetailScreen(): React.ReactElement {
   const { profile } = useUserProfile();
   const investmentCeiling = surveyAmountCeiling(profile?.investmentAmount);
   const progress = useGoalProgress(id ?? null);
+  const pull = usePullRefresh(progress.refresh);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [searching, setSearching] = useState(false);
 
@@ -116,7 +118,7 @@ export default function GoalDetailScreen(): React.ReactElement {
         <ScrollView
           showsVerticalScrollIndicator={false}
           refreshControl={(
-            <RefreshControl refreshing={progress.isRefreshing} onRefresh={progress.refresh} tintColor={Brand[500]} />
+            <RefreshControl refreshing={pull.refreshing} onRefresh={pull.onRefresh} tintColor={Brand[500]} />
           )}
           contentContainerClassName="px-4 pt-3 pb-16 gap-4">
 
