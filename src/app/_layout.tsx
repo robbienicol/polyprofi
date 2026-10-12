@@ -19,7 +19,7 @@ import * as Notifications from 'expo-notifications';
 import * as SplashScreen from 'expo-splash-screen';
 import { Stack, router, useRootNavigationState, usePathname, type Href } from 'expo-router';
 import { useEffect, useRef } from 'react';
-import { useColorScheme } from 'react-native';
+import { Appearance, useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -32,6 +32,8 @@ import { getQueryClient } from '@/api/query-client';
 import { pullUserData, setSyncSession } from '@/api/client/user-data-sync';
 import { clerkTokenCache } from '@/lib/clerk-cache';
 import { useGainAlerts } from '@/api/hooks/useGainAlerts';
+import { ToastHost } from '@/components/ui/Toast';
+import { usePreferences } from '@/api/hooks/usePreferences';
 import { shouldPresentCelebration } from '@/lib/savings-goal';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -100,6 +102,20 @@ const SYNCED_QUERY_KEYS = {
  * Runs once per sign-in and again on reconnect, which is when changes made
  * offline finally reach the server.
  */
+/**
+ * Applies the Settings appearance choice to the whole app. Overriding React Native's
+ * own colour scheme means every useColorScheme reader — themed views, native tabs,
+ * the status bar — follows it without each one knowing the setting exists.
+ */
+function AppearanceSync(): null {
+  const { preferences } = usePreferences();
+  const choice = preferences.appearance;
+  useEffect(() => {
+    Appearance.setColorScheme(choice === 'system' ? 'unspecified' : choice);
+  }, [choice]);
+  return null;
+}
+
 function UserDataSync(): null {
   const { isLoaded, isSignedIn, userId, getToken } = useAuth();
   const queryClient = useQueryClient();
@@ -225,6 +241,8 @@ export default function RootLayout(): React.ReactElement | null {
                 <GoalHousekeeping />
                 <UserDataSync />
                 <OfflineBanner />
+                <ToastHost />
+                <AppearanceSync />
               </AppLockGate>
             </QueryClientProvider>
           </ClerkProvider>

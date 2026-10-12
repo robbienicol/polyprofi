@@ -38,3 +38,15 @@ export function useRoutePreview() {
 
   return { preview: data ?? null, setPreview };
 }
+
+/**
+ * Just the setter, for the list. The list never reads the preview, and subscribing
+ * to it meant every tap re-rendered the whole list before the detail screen could
+ * start opening — the freeze between a tap and the push.
+ */
+export function useSetRoutePreview() {
+  const queryClient = useQueryClient();
+  return useCallback((batch: SavedRoutesBatch) => {
+    queryClient.setQueryData(routePreviewQueryKey(), batch);
+  }, [queryClient]);
+}

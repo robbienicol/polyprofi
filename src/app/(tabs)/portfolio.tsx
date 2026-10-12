@@ -18,13 +18,14 @@ import { PortfolioOverview } from '@/components/portfolio/PortfolioOverview';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, Radius } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { withTabSkeleton } from '@/components/ui/with-tab-skeleton';
 import { goalRemaining, parseGoalIds } from '@/lib/savings-goal';
 
 /**
  * Every position across every goal. The per-goal breakdown lives in the Goals
  * tab; this is the rollup.
  */
-export default function PortfolioScreen(): React.ReactElement {
+function PortfolioScreen(): React.ReactElement {
   const theme = useTheme();
   const router = useRouter();
   const { bets: allBets, resolveBet } = useTrackedBets();
@@ -185,3 +186,5 @@ function ScopeChip({ label, onPress }: { label: string; onPress: () => void }): 
     </Pressable>
   );
 }
+
+export default withTabSkeleton(PortfolioScreen, 'list');

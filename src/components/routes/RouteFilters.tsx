@@ -1,13 +1,16 @@
 import Slider from '@react-native-community/slider';
-import { SlidersHorizontal } from 'lucide-react-native';
+import { SlidersHorizontal, type LucideIcon } from 'lucide-react-native';
 import { Pressable, ScrollView, View } from 'react-native';
 
 import { Icon } from '@/components/ui/Icon';
+import { leagueIcon, subcategoryIcon, topicIcon } from '@/components/ui/route-icons';
+import { Haptic } from '@/lib/haptics';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, CategoryScale, OnBrand, Radius, Shadow } from '@/constants/theme';
 import { useSemanticText, useTheme } from '@/hooks/use-theme';
 import { isPredictionCategory, PREDICTION_SUBTOPICS, PREDICTION_TOPICS } from '@/lib/prediction-topics';
 import type { RouteFilters as Filters, RouteSort } from '@/lib/route-results';
+import { subcategoriesFor } from '@/lib/route-subcategories';
 import type { Route } from '@/types/routes';
 
 /*
@@ -41,6 +44,8 @@ const SORT_OPTIONS: { label: string; value: RouteSort }[] = [
   { label: 'Best odds', value: 'score' },
   { label: 'Biggest return', value: 'payout' },
   { label: 'Best value', value: 'value' },
+  // Ties (no payout date) sort last, so a fund with no maturity never claims "soonest".
+  { label: 'Pays out soonest', value: 'soonest' },
 ];
 
 /**
@@ -77,7 +82,7 @@ export function SortBar({
           return (
             <Pressable
               key={value}
-              onPress={() => onSortChange(value)}
+              onPress={() => { Haptic.select(); onSortChange(value); }}
               accessibilityRole="radio"
               accessibilityState={{ selected: active }}
               accessibilityLabel={`Sort by ${label}`}
@@ -144,20 +149,36 @@ export function PortalBar({
   const topics = PREDICTION_TOPICS.filter((topic) => predictionRoutes.some((route) => route.predictionTopic === topic.value));
   const leagues = PREDICTION_SUBTOPICS.filter((sub) =>
     sub.topic === filters.predictionTopic && predictionRoutes.some((route) => route.predictionSubtopic === sub.value));
+  const subcategories = filters.category && !inPrediction ? subcategoriesFor(routes, filters.category) : [];
 
   return (
     <View style={{ gap: 8 }}>
       <FilterRow>
-        <FilterChip label="All" active={filters.category === null} onPress={() => update({ category: null, predictionTopic: null, predictionSubtopic: null })} />
+        <FilterChip label="All" active={filters.category === null} onPress={() => update({ category: null, predictionTopic: null, predictionSubtopic: null, subcategory: null })} />
         {assetClasses.map((category) => (
           <FilterChip
             key={category}
             label={assetClassLabel(category)}
             active={filters.category === category}
-            onPress={() => update({ category, predictionTopic: null, predictionSubtopic: null })}
+            onPress={() => update({ category, predictionTopic: null, predictionSubtopic: null, subcategory: null })}
           />
         ))}
       </FilterRow>
+      {subcategories.length > 0 ? (
+        <FilterRow>
+          <FilterChip label="All" active={!filters.subcategory} onPress={() => update({ subcategory: null })} />
+          {subcategories.map((sub) => (
+            <FilterChip
+              key={sub.value}
+              label={sub.label}
+              icon={subcategoryIcon(sub.value)}
+              glyph={sub.emoji}
+              active={filters.subcategory === sub.value}
+              onPress={() => update({ subcategory: sub.value })}
+            />
+          ))}
+        </FilterRow>
+      ) : null}
       {inPrediction && topics.length > 0 ? (
         <FilterRow>
           <FilterChip label="All topics" active={filters.predictionTopic === null} onPress={() => update({ predictionTopic: null, predictionSubtopic: null })} />
@@ -165,6 +186,7 @@ export function PortalBar({
             <FilterChip
               key={topic.value}
               label={topic.label}
+              icon={topicIcon(topic.value)}
               glyph={topic.emoji}
               active={filters.predictionTopic === topic.value}
               onPress={() => update({ predictionTopic: topic.value, predictionSubtopic: null })}
@@ -179,6 +201,7 @@ export function PortalBar({
             <FilterChip
               key={league.value}
               label={league.label}
+              icon={leagueIcon(league.value)}
               active={filters.predictionSubtopic === league.value}
               onPress={() => update({ predictionSubtopic: league.value })}
             />
@@ -408,7 +431,7 @@ function FilterRow({ children }: React.PropsWithChildren): React.ReactElement {
  * at 3.2:1 on its own tint. Selection is carried by weight and border as well as by
  * colour, so it survives a screen reader and a colour-blind reader both.
  */
-function FilterChip({ label, glyph, active, activeColor = Brand[500], activeTextColor, onPress }: { label: string; glyph?: string; active: boolean; activeColor?: string; activeTextColor?: string; onPress: () => void }): React.ReactElement {
+function FilterChip({ label, icon, glyph, active, activeColor = Brand[500], activeTextColor, onPress }: { label: string; icon?: LucideIcon; glyph?: string; active: boolean; activeColor?: string; activeTextColor?: string; onPress: () => void }): React.ReactElement {
   const theme = useTheme();
   const semantic = useSemanticText();
   const tint = active ? activeTextColor ?? semantic.brand : theme.textSecondary;
@@ -416,10 +439,10 @@ function FilterChip({ label, glyph, active, activeColor = Brand[500], activeText
     <Pressable
       accessibilityRole="button"
       accessibilityState={{ selected: active }}
-      onPress={onPress}
-      className="flex-row items-center"
+      onPress={() => { Haptic.select(); onPress(); }}
+      className="flex-row items-center active:opacity-70"
       style={{ gap: 6, paddingHorizontal: 14, minHeight: 44, borderRadius: Radius.pill, borderWidth: active ? 2 : 1, borderColor: active ? activeColor : theme.borderControl, backgroundColor: active ? activeColor + '1A' : theme.backgroundElement }}>
-      {glyph ? <Icon glyph={glyph} size={14} color={tint} /> : null}
+      {icon || glyph ? <Icon icon={icon} glyph={glyph} size={14} color={tint} /> : null}
       <ThemedText style={{ fontSize: 14, fontWeight: active ? '800' : '600', color: tint }}>{label}</ThemedText>
     </Pressable>
   );

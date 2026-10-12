@@ -12,6 +12,7 @@ import { compareGoalOdds, goalOdds, type GoalOdds } from '@/lib/goal-odds';
 import { downsideAtStake, expectedValue } from '@/lib/route-expected-value';
 import { isDebtRoute } from '@/lib/route-investment-metrics';
 import { rescoreForStake, stakeNeededForReturn } from '@/lib/stake-rescore';
+import { routeSubcategory } from '@/lib/route-subcategories';
 import type { Route, RouteParams } from '@/types/routes';
 
 export type RouteSort = 'score' | 'chance' | 'payout' | 'value' | 'soonest' | 'type';
@@ -28,6 +29,11 @@ export interface RouteFilters {
   predictionTopic: string | null;
   /** League inside the topic ('nfl', 'cfb', ...). Only meaningful with a topic set. */
   predictionSubtopic?: string | null;
+  /**
+   * Kind of route inside a non-prediction class ('subscriptions', 'index', 'BTC-USD'),
+   * from @/lib/route-subcategories. Only meaningful with that class selected.
+   */
+  subcategory?: string | null;
   /** Longest acceptable time to resolution, in days. Null means any. */
   maxDaysToResolve: number | null;
   /** Sections the list by probability band instead of showing one flat ranking. */
@@ -450,6 +456,9 @@ export function buildRouteResults(
 
   let filtered = ranked;
   if (filters.category) filtered = filtered.filter((route) => route.category === filters.category);
+  if (filters.category && filters.subcategory) {
+    filtered = filtered.filter((route) => routeSubcategory(route)?.value === filters.subcategory);
+  }
   if (filters.lossProfile) filtered = filtered.filter((route) => route.lossProfile === filters.lossProfile);
   if (filters.minimumProbability > 0) {
     filtered = filtered.filter((route) => route.probability >= filters.minimumProbability);

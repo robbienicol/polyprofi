@@ -16,7 +16,7 @@ import { goalByLabel } from '@/lib/savings-goal';
  * Name it and set the number, nothing pre-picked. The preset grid (headphones, a
  * surfboard, a car…) put six stranger's goals between the user and their own, and
  * its dollar figures were guesses. There is no open-ended option any more: anyone
- * who just wants to see routes gets them from "Find quick routes" on Home.
+ * who just wants to see routes gets them from "Find live routes" on Home.
  */
 const TARGET_EMOJI = '🎯';
 /** Widest amount the hero field shows without running off a small phone. */
@@ -117,7 +117,7 @@ export default function GoalSetupScreen(): React.ReactElement {
                 <Pressable
                   onPress={() => {
                     updatePreferences({ goalSetupSkipped: true });
-                    router.replace('/(tabs)' as Href);
+                    router.replace('/(tabs)/routes' as Href);
                   }}
                   accessibilityRole="button"
                   hitSlop={8}

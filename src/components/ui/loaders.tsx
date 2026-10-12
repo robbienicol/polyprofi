@@ -180,3 +180,146 @@ export function BrandLoader({
     </View>
   );
 }
+
+/**
+ * Grey blocks in the shape of what is loading, softly pulsing. Holds the layout so
+ * nothing jumps when the real content lands; still under Reduce Motion.
+ */
+export function SkeletonBlocks({ heights = [72, 140] }: { heights?: number[] }): React.ReactElement {
+  const theme = useTheme();
+  const reduceMotion = useReduceMotion();
+  const [opacity] = useState(() => new Animated.Value(0.5));
+  useEffect(() => {
+    if (reduceMotion) return;
+    const loop = Animated.loop(Animated.sequence([
+      Animated.timing(opacity, { toValue: 1, duration: 700, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+      Animated.timing(opacity, { toValue: 0.5, duration: 700, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+    ]));
+    loop.start();
+    return () => loop.stop();
+  }, [opacity, reduceMotion]);
+  return (
+    <Animated.View style={{ gap: 12, opacity }} accessibilityLabel="Loading" accessible>
+      {heights.map((height, index) => (
+        <View key={index} style={{ height, borderRadius: Radius.lg, backgroundColor: theme.backgroundElement, borderWidth: 1, borderColor: theme.border }} />
+      ))}
+    </Animated.View>
+  );
+}
+
+/** The shared pulse for a group of bones, so a whole skeleton breathes as one. */
+function usePulse(): Animated.Value {
+  const reduceMotion = useReduceMotion();
+  const [opacity] = useState(() => new Animated.Value(0.55));
+  useEffect(() => {
+    if (reduceMotion) return;
+    const loop = Animated.loop(Animated.sequence([
+      Animated.timing(opacity, { toValue: 1, duration: 650, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+      Animated.timing(opacity, { toValue: 0.55, duration: 650, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+    ]));
+    loop.start();
+    return () => loop.stop();
+  }, [opacity, reduceMotion]);
+  return opacity;
+}
+
+/** One grey shape inside a skeleton. */
+export function Bone({ width = '100%', height = 12, radius = 6, style }: {
+  width?: number | `${number}%`;
+  height?: number;
+  radius?: number;
+  style?: React.ComponentProps<typeof View>['style'];
+}): React.ReactElement {
+  const theme = useTheme();
+  return <View style={[{ width, height, borderRadius: radius, backgroundColor: theme.backgroundSelected }, style]} />;
+}
+
+/** Wraps bones in one pulse and one "Loading" for a screen reader. */
+export function Skeleton({ children, style }: React.PropsWithChildren<{ style?: React.ComponentProps<typeof View>['style'] }>): React.ReactElement {
+  const opacity = usePulse();
+  return (
+    <Animated.View style={[{ opacity }, style]} accessible accessibilityLabel="Loading">
+      {children}
+    </Animated.View>
+  );
+}
+
+/** A route card's shape: header, two lines of copy, the profit and chart, the pill. */
+export function RouteCardSkeleton(): React.ReactElement {
+  const theme = useTheme();
+  return (
+    <View style={{ borderRadius: Radius.xl, backgroundColor: theme.backgroundElement, borderWidth: 1, borderColor: theme.border, padding: 16, gap: 14 }}>
+      <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+        <Bone width={36} height={36} radius={Radius.md} />
+        <View style={{ flex: 1, gap: 7 }}>
+          <Bone width="55%" height={13} />
+          <Bone width="35%" height={10} />
+        </View>
+        <Bone width={52} height={20} radius={999} />
+      </View>
+      <View style={{ gap: 7 }}>
+        <Bone height={11} />
+        <Bone width="80%" height={11} />
+      </View>
+      <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}>
+        <View style={{ flex: 1, gap: 8 }}>
+          <Bone width="45%" height={10} />
+          <Bone width="60%" height={24} />
+          <Bone width="50%" height={10} />
+        </View>
+        <Bone width="45%" height={56} radius={8} />
+      </View>
+      <Bone height={48} radius={999} />
+    </View>
+  );
+}
+
+/** The Routes screen before its routes exist: search, amounts, chips, two cards. */
+export function RoutesScreenSkeleton(): React.ReactElement {
+  return (
+    <Skeleton style={{ gap: 12, padding: 16 }}>
+      <Bone height={48} radius={999} />
+      <Bone height={104} radius={Radius.xl} />
+      <View style={{ flexDirection: 'row', gap: 8 }}>
+        <Bone width={60} height={40} radius={999} />
+        <Bone width={150} height={40} radius={999} />
+        <Bone width={120} height={40} radius={999} />
+      </View>
+      <RouteCardSkeleton />
+      <RouteCardSkeleton />
+    </Skeleton>
+  );
+}
+
+/** A route's detail screen: the summary card, the chart, the actions. */
+export function RouteDetailSkeleton(): React.ReactElement {
+  const theme = useTheme();
+  return (
+    <View style={{ flex: 1, backgroundColor: theme.background }}>
+      <Skeleton style={{ gap: 14, padding: 16, paddingTop: 72 }}>
+        <Bone width="40%" height={18} style={{ alignSelf: 'center' }} />
+        <Bone height={300} radius={Radius.xl} />
+        <Bone height={240} radius={Radius.lg} />
+        <Bone height={52} radius={Radius.lg} />
+      </Skeleton>
+    </View>
+  );
+}
+
+/** Rows of a list, for a tab whose items are still being read off the device. */
+export function ListRowsSkeleton({ rows = 3, height = 84 }: { rows?: number; height?: number }): React.ReactElement {
+  return (
+    <Skeleton style={{ gap: 10 }}>
+      {Array.from({ length: rows }, (_, index) => <Bone key={index} height={height} radius={Radius.lg} />)}
+    </Skeleton>
+  );
+}
+
+/** Three lines of a reply being written. */
+export function TextLinesSkeleton({ lines = 3 }: { lines?: number }): React.ReactElement {
+  return (
+    <Skeleton style={{ gap: 7 }}>
+      {Array.from({ length: lines }, (_, index) => <Bone key={index} width={index === lines - 1 ? '60%' : '100%'} height={11} />)}
+    </Skeleton>
+  );
+}

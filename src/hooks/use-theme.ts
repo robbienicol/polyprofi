@@ -3,7 +3,7 @@
  * https://docs.expo.dev/guides/color-schemes/
  */
 
-import { Colors, RiskTextScale, SemanticText } from '@/constants/theme';
+import { ChartColor, Colors, RiskTextScale, SemanticText } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 /** The resolved appearance. `unspecified` and null both mean the light one. */
@@ -28,4 +28,9 @@ export function useSemanticText(): Record<keyof typeof SemanticText.light, strin
 /** The risk ramp as ink, safe → risky, for this appearance. */
 export function useRiskTextScale(): readonly string[] {
   return RiskTextScale[useScheme()];
+}
+
+/** The market-line hue for this appearance: stroke/fill and its text-safe ink. */
+export function useChartColor(): { line: string; ink: string } {
+  return ChartColor[useScheme()];
 }

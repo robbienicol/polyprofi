@@ -158,9 +158,11 @@ export async function fetchOutcomeHistory(
   range: ChartRange,
   since: number,
   now: number,
+  /** Minutes per point, finer than the range's default. */
+  fidelityMinutes?: number,
 ): Promise<PriceSeries | null> {
   const start = Math.floor(rangeStartTime(range, now, since) / 1_000);
-  const url = `https://clob.polymarket.com/prices-history?market=${encodeURIComponent(tokenId)}&startTs=${start}&endTs=${Math.ceil(now / 1_000)}&fidelity=${clobFidelity(range, since, now)}`;
+  const url = `https://clob.polymarket.com/prices-history?market=${encodeURIComponent(tokenId)}&startTs=${start}&endTs=${Math.ceil(now / 1_000)}&fidelity=${fidelityMinutes ?? clobFidelity(range, since, now)}`;
   try {
     const response = await fetch(url, { headers: { Accept: 'application/json' } });
     if (!response.ok) return null;

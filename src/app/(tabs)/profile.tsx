@@ -27,7 +27,8 @@ import { useDevSeedDemoData } from '@/hooks/use-dev-seed-demo-data';
 import { useTheme } from '@/hooks/use-theme';
 import { requestAppRating } from '@/lib/app-rating';
 import { requestNotificationPermission, syncWeeklyReminder } from '@/lib/notifications';
-import { ACQUISITION_PLATFORMS, CURRENCIES, currencyMeta, type CurrencyCode } from '@/lib/preferences';
+import { ACQUISITION_PLATFORMS, APPEARANCE_OPTIONS, CURRENCIES, currencyMeta, type CurrencyCode } from '@/lib/preferences';
+import { withTabSkeleton } from '@/components/ui/with-tab-skeleton';
 import type { AcquisitionPlatform } from '@/types/bets';
 
 const SUPPORT_EMAIL = 'team@usepathey.com';
@@ -37,7 +38,7 @@ const CURRENCY_OPTIONS = CURRENCIES.map((entry) => ({
   label: `${entry.symbol} ${entry.code}`,
 }));
 
-export default function SettingsScreen(): React.ReactElement {
+function SettingsScreen(): React.ReactElement {
   const theme = useTheme();
   const router = useRouter();
   const { user } = useUser();
@@ -384,6 +385,15 @@ export default function SettingsScreen(): React.ReactElement {
             />
           </SettingsSection>
 
+          {/* Appearance */}
+          <SettingsSection title="Appearance">
+            <SettingsChoiceRow
+              options={APPEARANCE_OPTIONS}
+              selected={preferences.appearance}
+              onSelect={(appearance) => update({ appearance })}
+            />
+          </SettingsSection>
+
           {/* About */}
           <SettingsSection title="About">
             <SettingsRow icon="⭐️" label="Rate Pathey" chevron={false} onPress={() => void requestAppRating()} />
@@ -447,3 +457,5 @@ export default function SettingsScreen(): React.ReactElement {
     </View>
   );
 }
+
+export default withTabSkeleton(SettingsScreen, 'settings');

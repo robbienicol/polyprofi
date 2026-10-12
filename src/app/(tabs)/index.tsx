@@ -27,6 +27,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { describeSearch } from '@/lib/quiz-profile';
 import { cashFlowAdjustedChange } from '@/lib/portfolio-progress';
 import { goalProgressFraction, goalRemaining, isOpenEnded } from '@/lib/savings-goal';
+import { withTabSkeleton } from '@/components/ui/with-tab-skeleton';
 import type { SavingsGoal } from '@/types/bets';
 
 const MONO = { fontVariant: ['tabular-nums' as const] };
@@ -48,7 +49,7 @@ function relativeUpdate(date: Date | null): string {
   return `Updated ${minutes}m ago`;
 }
 
-export default function HomeScreen(): React.ReactElement {
+function HomeScreen(): React.ReactElement {
   const theme = useTheme();
   const router = useRouter();
   const { user } = useUser();
@@ -271,7 +272,7 @@ export default function HomeScreen(): React.ReactElement {
             className="py-5 items-center active:opacity-85"
             style={{ borderRadius: Radius.xl, backgroundColor: Brand[500], ...Shadow.card }}>
             <ThemedText style={{ fontSize: 17, fontWeight: '900', color: OnBrand, letterSpacing: -0.2 }}>
-              Find quick routes →
+              Find live routes →
             </ThemedText>
             <ThemedText style={{ fontSize: 11, fontWeight: '700', color: OnBrand, opacity: 0.7, marginTop: 3 }}>
               Ranked routes from live markets, in under a minute
@@ -459,3 +460,5 @@ function GoalTrack({
     </Pressable>
   );
 }
+
+export default withTabSkeleton(HomeScreen, 'home');

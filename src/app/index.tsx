@@ -81,5 +81,5 @@ export default function Index(): React.ReactElement {
   if (goalLoading || preferencesLoading) return <BrandLoader subtitle="Loading your goal…" />;
   if (!hasAnyGoal && !preferences.goalSetupSkipped) return <Redirect href={'/goal-setup' as Href} />;
 
-  return <Redirect href="/(tabs)" />;
+  return <Redirect href="/(tabs)/routes" />;
 }

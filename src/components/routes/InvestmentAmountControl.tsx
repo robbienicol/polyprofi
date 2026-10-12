@@ -66,41 +66,14 @@ export function InvestmentAmountControl({
   const trackMaximum = Math.max(step, Math.round(maximum), displayed);
 
   return (
-    <View style={{ gap: 6 }}>
-      {/* Label and input share a row so the whole card is one compact strip
-          instead of stacking to three lines. */}
-      <View className="flex-row items-center justify-between" style={{ gap: 10 }}>
-        <ThemedText style={{ fontSize: 14, fontWeight: '700', color: theme.text, flexShrink: 1 }}>
-          {label}
-        </ThemedText>
-        <View
-          className="flex-row items-center"
-          style={{ borderRadius: Radius.md, borderWidth: 1.5, borderColor: theme.borderStrong, backgroundColor: theme.background, paddingHorizontal: 10 }}>
-          <ThemedText style={{ fontSize: 17, fontWeight: '800', color: theme.text, marginRight: 2 }}>$</ThemedText>
-          <TextInput
-            value={displayed > 0 ? displayed.toLocaleString('en-US') : ''}
-            onChangeText={(text) => {
-              setDrag(null);
-              onAmountChange(Number(text.replace(/[^0-9]/g, '')) || 0);
-            }}
-            onBlur={() => amount < 1 && onAmountChange(1)}
-            keyboardType="number-pad"
-            inputMode="numeric"
-            returnKeyType="done"
-            selectTextOnFocus
-            accessibilityLabel={`${spokenLabel}, in dollars`}
-            placeholder="0"
-            placeholderTextColor={theme.textSecondary}
-            // A TextInput never passes through ThemedText, so naming the family is the
-            // only way the custom face reaches it: fontWeight alone is ignored for
-            // custom fonts on native and silently falls back to the system font.
-            style={{ minWidth: 70, color: theme.text, fontSize: 17, fontFamily: bodyFontFamily('800'), fontVariant: ['tabular-nums'], minHeight: 44, textAlign: 'right' }}
-          />
-        </View>
-      </View>
-
+    // One line: label, track, figure. It sits in the pinned header, so every pixel of
+    // height here is a pixel of list lost on every screen.
+    <View className="flex-row items-center" style={{ gap: 8, minHeight: 34 }}>
+      <ThemedText style={{ width: 58, fontSize: 12, fontWeight: '700', color: theme.textSecondary }} numberOfLines={1}>
+        {label}
+      </ThemedText>
       <Slider
-        style={{ width: '100%', height: 44 }}
+        style={{ flex: 1, height: 30 }}
         minimumValue={step}
         maximumValue={trackMaximum}
         step={step}
@@ -116,6 +89,30 @@ export function InvestmentAmountControl({
         maximumTrackTintColor={theme.borderControl}
         thumbTintColor={Brand[500]}
       />
+      <View
+        className="flex-row items-center"
+        style={{ borderRadius: Radius.sm, borderWidth: 1, borderColor: theme.borderStrong, backgroundColor: theme.background, paddingHorizontal: 7 }}>
+        <ThemedText style={{ fontSize: 13, fontWeight: '800', color: theme.textSecondary, marginRight: 1 }}>$</ThemedText>
+        <TextInput
+          value={displayed > 0 ? displayed.toLocaleString('en-US') : ''}
+          onChangeText={(text) => {
+            setDrag(null);
+            onAmountChange(Number(text.replace(/[^0-9]/g, '')) || 0);
+          }}
+          onBlur={() => amount < 1 && onAmountChange(1)}
+          keyboardType="number-pad"
+          inputMode="numeric"
+          returnKeyType="done"
+          selectTextOnFocus
+          accessibilityLabel={`${spokenLabel}, in dollars`}
+          placeholder="0"
+          placeholderTextColor={theme.textSecondary}
+          // A TextInput never passes through ThemedText, so naming the family is the
+          // only way the custom face reaches it: fontWeight alone is ignored for
+          // custom fonts on native and silently falls back to the system font.
+          style={{ minWidth: 48, color: theme.text, fontSize: 13, fontFamily: bodyFontFamily('800'), fontVariant: ['tabular-nums'], minHeight: 28, paddingVertical: 0, textAlign: 'right' }}
+        />
+      </View>
     </View>
   );
 }

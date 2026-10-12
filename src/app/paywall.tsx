@@ -29,19 +29,19 @@ export default function PaywallScreen(): React.ReactElement {
     subscribe(undefined, {
       onSuccess: () => {
         if (quizAnswers) router.replace('/(tabs)/routes?generate=1');
-        else router.replace('/(tabs)');
+        else router.replace('/(tabs)/routes');
       },
     });
   }, [subscribe, router, quizAnswers]);
 
   const handleClose = useCallback(() => {
     if (router.canGoBack()) router.back();
-    else router.replace('/(tabs)');
+    else router.replace('/(tabs)/routes');
   }, [router]);
 
   // Paywall is disabled — there's no real payment behind it yet (see
   // FEATURE_FLAGS.paywallEnabled). Bounce out instead of rendering it.
-  if (!FEATURE_FLAGS.paywallEnabled) return <Redirect href="/(tabs)" />;
+  if (!FEATURE_FLAGS.paywallEnabled) return <Redirect href="/(tabs)/routes" />;
 
   return (
     <View className="flex-1" style={{ backgroundColor: theme.background }}>

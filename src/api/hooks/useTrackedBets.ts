@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback } from 'react';
 
 import { getTrackedBets, saveTrackedBets } from '@/api/client/storage';
 import { deviceQuery } from '@/api/query-client';
+import { toast } from '@/components/ui/Toast';
 import { TrackedBet } from '@/types/bets';
 
 function trackedBetsQueryKey() {
@@ -92,10 +94,24 @@ export function useTrackedBets() {
     };
   }
 
-  const { mutate: trackBet, isPending: isTracking } = useMutation({
+  const { mutate: addBetMutation, isPending: isTracking } = useMutation({
     mutationFn: (bet: TrackedBet) => addBet(bet),
     ...optimistic<TrackedBet>((bets, bet) => [bet, ...bets]),
   });
+
+  /**
+   * Adds a position and answers at once. The list already updates optimistically, so
+   * waiting on the disk write before the screen said "saved" was the stall after
+   * every Add. `onSuccess` runs on the tap; a failed write puts the list back and
+   * says so.
+   */
+  const trackBet = useCallback((bet: TrackedBet, options?: { onSuccess?: () => void }) => {
+    addBetMutation(bet, {
+      onError: () => toast.error('Could not save that to your plan. Try again.'),
+    });
+    options?.onSuccess?.();
+    toast.success('Added to your plan');
+  }, [addBetMutation]);
 
   const { mutate: resolveBet } = useMutation({
     mutationFn: ({ id, status }: { id: string; status: TrackedBet['status'] }) =>

@@ -12,6 +12,7 @@ import { useSavingsGoal } from "@/api/hooks/useSavingsGoal";
 import { useTrackedBets } from "@/api/hooks/useTrackedBets";
 import { MarketComparisonCard } from "@/components/routes/MarketComparisonCard";
 import { RelatedRoutes } from "@/components/routes/RelatedRoutes";
+import { RouteLiveChart } from "@/components/routes/RouteLiveChart";
 import { RouteCoach } from "@/components/routes/RouteCoach";
 import { RouteDetails, RouteOpportunityCard } from "@/components/routes/RouteOpportunityCard";
 import { TrackRecordCard } from "@/components/routes/TrackRecordCard";
@@ -20,9 +21,13 @@ import { TrackRouteForm } from "@/components/routes/TrackRouteForm";
 import { cancellationActionLabel, cancellationTargetFor } from "@/lib/cancel-links";
 import { spendingCutPosition } from "@/lib/spending-cut-position";
 import { ThemedText } from "@/components/themed-text";
-import { BrandLoader } from "@/components/ui/loaders";
+import { Icon } from "@/components/ui/Icon";
+import { Haptic } from "@/lib/haptics";
+import { Plus } from "lucide-react-native";
+import { RouteDetailSkeleton, SkeletonBlocks } from "@/components/ui/loaders";
 import { KEYBOARD_AWARE_SCROLL_PROPS } from "@/constants/keyboard";
-import { Brand, OnBrand, Radius, Semantic, Shadow } from "@/constants/theme";
+import { Brand, Radius, Semantic } from "@/constants/theme";
+import { useAfterTransition } from "@/hooks/use-after-transition";
 import { useTheme } from "@/hooks/use-theme";
 import { betOutcomeSide } from "@/lib/bet-monitor-match";
 import { parseEntryPrice } from "@/lib/parse-bet-line";
@@ -60,6 +65,9 @@ export default function RouteDetailScreen(): React.ReactElement {
   const [acquireAmount, setAcquireAmount] = useState("");
   const [cutPercent, setCutPercent] = useState(25);
   const [showDetails, setShowDetails] = useState(false);
+  const [pillPressed, setPillPressed] = useState(false);
+  // Below the fold waits for the push to finish, so the tap answers at once.
+  const transitioned = useAfterTransition();
 
   // The list this row was tapped from first, then saved history. Route ids repeat
   // across searches that share a daily pool, so history alone can resolve to another
@@ -77,7 +85,7 @@ export default function RouteDetailScreen(): React.ReactElement {
   // History is read from disk, so a cold open here starts with an empty list. Calling
   // that a missing pick shows the dead end before we have looked.
   if (!savedRoute && historyLoading) {
-    return <BrandLoader subtitle="Loading this route…" />;
+    return <RouteDetailSkeleton />;
   }
   if (!savedRoute) {
     return (
@@ -333,32 +341,39 @@ export default function RouteDetailScreen(): React.ReactElement {
             deadlineDays={goalDeadlineDays}
           />
 
-          <View
-            style={{
-              backgroundColor: theme.backgroundElement,
-              borderRadius: Radius.lg,
-              padding: 14,
-              borderWidth: 1,
-              borderColor: theme.border,
-            }}
-          >
-            <ThemedText
-              style={{
-                fontSize: 10,
-                color: theme.textTertiary,
-                fontWeight: "700",
-                letterSpacing: 0.6,
-                marginBottom: 4,
-              }}
-            >
-              HOW IT WORKS
-            </ThemedText>
-            <ThemedText
-              style={{ fontSize: 13.5, color: theme.text, lineHeight: 20 }}
-            >
-              {route.strategy}
-            </ThemedText>
-          </View>
+          {/* The live line where there is a market to draw; the plain-words strategy
+              for routes with no price (a T-bill, a spending cut). */}
+          <RouteLiveChart
+            route={route}
+            fallback={
+              <View
+                style={{
+                  backgroundColor: theme.backgroundElement,
+                  borderRadius: Radius.lg,
+                  padding: 14,
+                  borderWidth: 1,
+                  borderColor: theme.border,
+                }}
+              >
+                <ThemedText
+                  style={{
+                    fontSize: 10,
+                    color: theme.textTertiary,
+                    fontWeight: "700",
+                    letterSpacing: 0.6,
+                    marginBottom: 4,
+                  }}
+                >
+                  HOW IT WORKS
+                </ThemedText>
+                <ThemedText
+                  style={{ fontSize: 13.5, color: theme.text, lineHeight: 20 }}
+                >
+                  {route.strategy}
+                </ThemedText>
+              </View>
+            }
+          />
 
           {/* Every venue that lists this exact contract, not just the one we would have
               picked. Two order books on the same outcome genuinely differ in price, and
@@ -454,24 +469,30 @@ export default function RouteDetailScreen(): React.ReactElement {
             </>
           ) : null}
 
-          <RouteCoach route={route} />
+          {transitioned ? (
+            <>
+            <RouteCoach route={route} />
 
-          <RelatedRoutes
-            routes={relatedRoutes}
-            onSelect={(selected) => {
-              const selectedStake = Math.min(
-                availableInvestment,
-                stakeNeededForReturn(
-                  selected,
-                  baseStake || 1,
-                  targetProfit,
-                ) ?? availableInvestment,
-              );
-              router.push(
-                `/route/${selected.id}?stake=${selectedStake}&available=${availableInvestment}`,
-              );
-            }}
-          />
+            <RelatedRoutes
+              routes={relatedRoutes}
+              onSelect={(selected) => {
+                const selectedStake = Math.min(
+                  availableInvestment,
+                  stakeNeededForReturn(
+                    selected,
+                    baseStake || 1,
+                    targetProfit,
+                  ) ?? availableInvestment,
+                );
+                router.push(
+                  `/route/${selected.id}?stake=${selectedStake}&available=${availableInvestment}`,
+                );
+              }}
+            />
+            </>
+          ) : (
+            <SkeletonBlocks heights={[96, 180]} />
+          )}
           <ThemedText
             className="text-center"
             style={{
@@ -513,23 +534,38 @@ export default function RouteDetailScreen(): React.ReactElement {
               />
             ) : (
               <Pressable
-                onPress={beginAcquire}
+                onPress={() => { Haptic.press(); beginAcquire(); }}
                 disabled={added || isTracking}
                 accessibilityRole="button"
-                className="py-4 items-center active:opacity-85"
+                onPressIn={() => setPillPressed(true)}
+                onPressOut={() => setPillPressed(false)}
+                // A pill that sits up off the page and gives under the finger: the one
+                // action on this screen should look like the thing to press. Pressed state
+                // is held here, not in a style function, which NativeWind's Pressable drops.
                 style={{
+                  minHeight: 54,
                   borderRadius: Radius.lg,
                   backgroundColor: Brand[500],
-                  opacity: added || isTracking ? 0.65 : 1,
-                  ...Shadow.card,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 8,
+                  opacity: added || isTracking ? 0.6 : pillPressed ? 0.88 : 1,
+                  transform: [{ scale: pillPressed ? 0.98 : 1 }],
+                  shadowColor: "#000",
+                  shadowOpacity: pillPressed ? 0.06 : 0.12,
+                  shadowRadius: pillPressed ? 4 : 10,
+                  shadowOffset: { width: 0, height: pillPressed ? 1 : 4 },
+                  elevation: pillPressed ? 1 : 3,
                 }}
               >
-                <ThemedText style={{ fontSize: 16, fontWeight: "900", color: OnBrand }}>
+                {!added && !isTracking ? <Icon icon={Plus} size={19} color="#FFFFFF" strokeWidth={2.75} /> : null}
+                <ThemedText style={{ fontSize: 17, fontWeight: "800", color: "#FFFFFF", letterSpacing: -0.2 }}>
                   {added
-                    ? "Saved to your plan"
+                    ? "Saved to your plan ✓"
                     : isTracking
                       ? "Saving..."
-                      : "Add to plan →"}
+                      : "Add to plan"}
                 </ThemedText>
               </Pressable>
             )}

@@ -15,11 +15,13 @@ import { ThemedText } from '@/components/themed-text';
 import { Brand, OnBrand, Radius, Semantic } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { goalProgressFraction, isOpenEnded, parseGoalIds } from '@/lib/savings-goal';
+import { ListRowsSkeleton } from '@/components/ui/loaders';
+import { withTabSkeleton } from '@/components/ui/with-tab-skeleton';
 import type { SavingsGoal } from '@/types/bets';
 
 const MONO = { fontVariant: ['tabular-nums' as const] };
 
-export default function GoalsScreen(): React.ReactElement {
+function GoalsScreen(): React.ReactElement {
   const theme = useTheme();
   const router = useRouter();
   const { goals, achievedCount, isLoading, removeGoals } = useSavingsGoal();
@@ -191,7 +193,7 @@ export default function GoalsScreen(): React.ReactElement {
             />
           ) : null}
 
-          {isLoading ? null : goals.length === 0 ? (
+          {isLoading ? <ListRowsSkeleton rows={3} /> : goals.length === 0 ? (
             <EmptyGoals onAdd={addGoal} />
           ) : (
             goals.map((goal) => (
@@ -547,3 +549,5 @@ function EmptyGoals({ onAdd }: { onAdd: () => void }): React.ReactElement {
     </View>
   );
 }
+
+export default withTabSkeleton(GoalsScreen, 'list');

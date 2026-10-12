@@ -1,11 +1,15 @@
-import { Bitcoin, ChartNoAxesColumn, CreditCard, Landmark, Scissors, TrendingUp, type LucideIcon } from 'lucide-react-native';
+import { Plus, type LucideIcon } from 'lucide-react-native';
 import { memo } from 'react';
 import { Pressable, View } from 'react-native';
 
+import { routeFeed, useRouteLive } from '@/api/hooks/useRouteLive';
+import { LiveBadge, LiveQuote, Sparkline, SparklinePlaceholder } from '@/components/molecules/Sparkline';
 import { Icon } from '@/components/ui/Icon';
+import { routeIcon } from '@/components/ui/route-icons';
+import { Haptic } from '@/lib/haptics';
 import { ThemedText } from '@/components/themed-text';
-import { Brand, CategoryScale, Colors, OnBrand, Radius, RiskScale, Shadow } from '@/constants/theme';
-import { useRiskTextScale, useTheme } from '@/hooks/use-theme';
+import { CategoryScale, Colors, Radius, RiskScale, Semantic, Shadow } from '@/constants/theme';
+import { useRiskTextScale, useSemanticText, useTheme } from '@/hooks/use-theme';
 import { predictionTopic } from '@/lib/prediction-topics';
 import type { GoalOdds } from '@/lib/goal-odds';
 import { Route } from '@/types/routes';
@@ -56,6 +60,14 @@ export const formatProbability = (value: number) => `${Math.round(value)}%`;
 
 const MONO = { fontVariant: ['tabular-nums' as const] };
 
+/** The chance, coded the way a quote board codes it: likely green, coin-flip amber, long shot red. */
+type ChanceTone = 'positive' | 'caution' | 'negative';
+function chanceTone(percent: number): ChanceTone {
+  if (percent >= 60) return 'positive';
+  if (percent >= 30) return 'caution';
+  return 'negative';
+}
+
 /** Compact maturity label: 1d, 9d, 3w, 5mo, 1.5y. */
 export function formatMaturity(days: number): string {
   if (days <= 1) return '1d';
@@ -77,8 +89,9 @@ interface RouteCardProps {
   odds?: GoalOdds | null;
   /** The goal's profit, for the words around the odds. */
   target?: number | null;
-  onTrack?: () => void;
-  onPress?: () => void;
+  /** Called with this card's route, so one stable handler serves the whole list. */
+  onTrack?: (route: Route) => void;
+  onPress?: (route: Route) => void;
 }
 
 function formatMoney(amount: number): string {
@@ -98,20 +111,6 @@ function displayLabel(value: string): string {
 }
 
 /**
- * The mark for a route, chosen by what the route is rather than by the emoji the
- * model happened to emit — the same kind of route always wears the same icon.
- */
-function routeIcon(route: Route): LucideIcon | undefined {
-  if (route.spendingCut) return Scissors;
-  if (route.cardRewards) return CreditCard;
-  if (/polymarket|prediction|kalshi/i.test(`${route.category} ${route.platform}`)) return ChartNoAxesColumn;
-  if (/crypto/i.test(route.category)) return Bitcoin;
-  if (/savings|treasur/i.test(route.category)) return Landmark;
-  if (/stock|etf/i.test(route.category)) return TrendingUp;
-  return undefined;
-}
-
-/**
  * What VoiceOver reads for a whole card, in the order someone scanning it takes the
  * numbers in. Authored rather than left to RN, which otherwise concatenates every
  * string in layout order and announces a route as fourteen unlabelled fragments.
@@ -124,6 +123,33 @@ function badCaseNote(odds: GoalOdds): string {
     case 'tail': return '1-in-20 bad stretch';
     case 'none': return 'nothing at risk';
   }
+}
+
+/** When the money comes back, in plain words: "Pays out in 3 mo", "Hold 2 wk". */
+function maturityWords(route: Route): string {
+  const span = shortMaturity(route.maturesInDays ?? 0);
+  if (route.sourceSlug || route.optionPosition) return `Pays out in ${span}`;
+  if (/savings|treasur/i.test(route.category)) return `Matures in ${span}`;
+  return `Hold ${span}`;
+}
+
+/** The play itself, in the words a market board uses: the side, or the ticker. */
+function recommendedPlay(route: Route): string {
+  const option = route.optionPosition;
+  if (option) {
+    const ticker = option.underlying.toUpperCase();
+    switch (option.strategy) {
+      case 'long-call': return `Buy ${ticker} call`;
+      case 'long-put': return `Buy ${ticker} put`;
+      case 'bull-call-spread': return `${ticker} call spread`;
+      case 'cash-secured-put': return `Sell ${ticker} put`;
+      case 'covered-call': return `${ticker} covered call`;
+    }
+  }
+  const feed = routeFeed(route);
+  if (feed?.kind === 'outcome') return `Buy ${feed.side}`;
+  if (feed?.kind === 'quote') return `Buy ${feed.symbol.replace(/-USD$/, '')}`;
+  return 'Add to plan';
 }
 
 function cardAccessibilityLabel({ route, riskWord, odds, probabilityLabel, probabilityValue, stake }: {
@@ -162,6 +188,7 @@ function cardAccessibilityLabel({ route, riskWord, odds, probabilityLabel, proba
 function RouteCardInner({ route, requiredInvestment, currentInvestment, odds, target, onTrack, onPress }: RouteCardProps) {
   const theme = useTheme();
   const riskInk = useRiskTextScale();
+  const { live, loading: liveLoading } = useRouteLive(route);
   const riskLevel = displayRiskLevel(route);
   const riskWord = riskLabel(riskLevel);
   const needsMoreToHitGoal = !!requiredInvestment && !!currentInvestment && requiredInvestment > currentInvestment;
@@ -185,6 +212,8 @@ function RouteCardInner({ route, requiredInvestment, currentInvestment, odds, ta
   const probabilityWidth = odds
     ? Math.min(odds.hitsGoal ? odds.chance : route.probability, 100)
     : route.meetsTarget ? Math.min(route.probability, 100) : 0;
+  const tone = chanceTone(probabilityWidth);
+  const play = recommendedPlay(route);
 
   const stake = odds
     ? { label: 'STAKE', value: odds.stake > 0 ? `$${formatMoney(odds.stake)}` : 'No money' }
@@ -216,7 +245,7 @@ function RouteCardInner({ route, requiredInvestment, currentInvestment, odds, ta
         ...Shadow.card,
       }}>
       <Content
-        onPress={onPress}
+        onPress={onPress ? () => { Haptic.tap(); onPress(route); } : undefined}
         accessible
         accessibilityRole={onPress ? 'button' : undefined}
         accessibilityLabel={cardAccessibilityLabel({ route, riskWord, odds, probabilityLabel, probabilityValue, stake })}
@@ -260,114 +289,120 @@ function RouteCardInner({ route, requiredInvestment, currentInvestment, odds, ta
                 </ThemedText>
               </View>
               {route.maturesInDays != null && route.maturesInDays > 0 ? (
-                <View className="flex-row items-center" style={{ gap: 4 }}>
+                <View className="flex-row items-center flex-1" style={{ gap: 4 }}>
                   <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: maturityColor(route.maturesInDays) }} />
-                  <ThemedText style={{ fontSize: 11, fontWeight: '800', color: theme.textSecondary, ...MONO }}>
-                    {shortMaturity(route.maturesInDays)}
+                  <ThemedText style={{ fontSize: 11, fontWeight: '700', color: theme.textSecondary, ...MONO }} numberOfLines={1}>
+                    {maturityWords(route)}
                   </ThemedText>
                 </View>
               ) : null}
-              <ThemedText style={{ fontSize: 11, color: theme.textTertiary, flex: 1 }} numberOfLines={1}>
-                {displayLabel(route.platform)}
-              </ThemedText>
             </View>
           </View>
-          {odds ? (
+          {live && !(odds && !odds.hitsGoal) ? <LiveBadge /> : null}
+          {odds && !odds.hitsGoal ? (
             <View style={{ alignItems: 'flex-end', gap: 1 }}>
-              <ThemedText style={{ fontSize: 22, fontWeight: '900', color: odds.hitsGoal ? theme.text : theme.textTertiary, letterSpacing: -0.6, ...MONO }}>
-                {odds.hitsGoal ? formatProbability(odds.chance) : `$${formatMoney(odds.profitIfItWorks)}`}
+              {live ? <LiveBadge /> : null}
+              <ThemedText style={{ fontSize: 22, fontWeight: '900', color: theme.textTertiary, letterSpacing: -0.6, ...MONO }}>
+                ${formatMoney(odds.profitIfItWorks)}
               </ThemedText>
-              <ThemedText style={{ fontSize: 11, fontWeight: '700', color: theme.textSecondary }}>
-                {odds.hitsGoal ? `to hit ${goalWords}` : `of ${goalWords}`}
-              </ThemedText>
+              <ThemedText style={{ fontSize: 11, fontWeight: '700', color: theme.textSecondary }}>of {goalWords}</ThemedText>
             </View>
           ) : null}
         </View>
-
-        {/* The contract price a prediction-market route trades at */}
-        {route.line ? (
-          <View
-            className="self-start"
-            style={{ backgroundColor: theme.backgroundSelected, borderRadius: Radius.sm, paddingHorizontal: 9, paddingVertical: 5 }}>
-            <ThemedText style={{ fontSize: 13, fontWeight: '800', color: theme.text, letterSpacing: 0.2, ...MONO }}>
-              {route.line}
-            </ThemedText>
-          </View>
-        ) : null}
 
         <ThemedText style={{ fontSize: 13, color: theme.textSecondary, lineHeight: 20 }} numberOfLines={2}>
           {route.description}
         </ThemedText>
 
-        {/* Chance meter. Ink, not a hue: the band is already said in words beside it,
-            and a green bar on a 76% chance reads as a verdict the number never gave. */}
-        <View className="gap-1.5">
-          <View className="flex-row justify-between">
-            <ThemedText style={{ fontSize: 11, color: theme.textSecondary, fontWeight: '500' }}>{probabilityLabel}</ThemedText>
-            <ThemedText style={{ fontSize: 11, color: theme.text, fontWeight: '800', ...MONO }}>{probabilityValue}</ThemedText>
-          </View>
-          <View style={{ height: 6, borderRadius: Radius.pill, backgroundColor: theme.borderStrong, overflow: 'hidden' }}>
-            <View style={{ height: '100%', width: `${probabilityWidth}%`, borderRadius: Radius.pill, backgroundColor: theme.text }} />
-          </View>
-        </View>
-
-        {/* The two numbers that decide it, side by side: what it could make, what it takes */}
-        <View
-          className="flex-row items-end"
-          style={{ gap: 16, borderTopWidth: 1, borderTopColor: theme.border, paddingTop: 12 }}>
-          <View className="flex-1">
-            <ThemedText style={{ fontSize: 11, fontWeight: '800', color: theme.textSecondary, letterSpacing: 0.4 }}>
+        {/* What it makes, with the live market for what it buys beside it */}
+        <View className="flex-row items-center" style={{ gap: 14 }}>
+          <View style={{ flex: 1, gap: 4 }}>
+            <ThemedText style={{ fontSize: 11, fontWeight: '700', color: theme.textTertiary, letterSpacing: 0.4 }}>
               {odds ? 'IF IT WORKS' : route.meetsTarget ? 'POTENTIAL PROFIT' : 'PROFIT · BELOW GOAL'}
             </ThemedText>
-            <ThemedText style={{ fontSize: 22, fontWeight: '800', color: theme.text, letterSpacing: -0.6, marginTop: 1, ...MONO }}>
+            <ThemedText style={{ fontSize: 24, fontWeight: '800', color: theme.text, letterSpacing: -0.6, ...MONO }}>
               +${formatMoney(odds ? odds.profitIfItWorks : route.expectedReturn)}
             </ThemedText>
+            {live ? <LiveQuote live={live} /> : null}
+            {stake ? (
+              <ThemedText style={{ fontSize: 12, color: theme.textTertiary, ...MONO }}>
+                {stake.label === 'STAKE' ? 'Stake' : stake.label === 'USES' ? 'Uses' : 'To hit goal'} {stake.value}
+              </ThemedText>
+            ) : null}
           </View>
-          {stake ? (
-            <View style={{ paddingBottom: 3 }}>
-              <ThemedText style={{ fontSize: 11, fontWeight: '800', color: theme.textSecondary, letterSpacing: 0.4 }}>
-                {stake.label}
-              </ThemedText>
-              <ThemedText style={{ fontSize: 16, fontWeight: '800', color: theme.text, marginTop: 2, ...MONO }}>
-                {stake.value}
-              </ThemedText>
+          {live ? (
+            <View style={{ flex: 1 }}>
+              <Sparkline live={live} height={64} />
             </View>
-          ) : null}
-          {odds && odds.stake > 0 ? (
-            <View style={{ paddingBottom: 3, alignItems: 'flex-end' }}>
-              <ThemedText style={{ fontSize: 11, fontWeight: '800', color: theme.textSecondary, letterSpacing: 0.4 }}>
-                BAD CASE
-              </ThemedText>
-              <ThemedText style={{ fontSize: 16, fontWeight: '800', color: odds.badCase > 0 ? theme.text : theme.textSecondary, marginTop: 2, ...MONO }}>
-                {odds.badCase > 0 ? `−$${formatMoney(odds.badCase)}` : '$0'}
-              </ThemedText>
-              <ThemedText style={{ fontSize: 10, color: theme.textTertiary }}>{badCaseNote(odds)}</ThemedText>
+          ) : liveLoading ? (
+            <View style={{ flex: 1 }}>
+              <SparklinePlaceholder height={64} />
             </View>
           ) : null}
         </View>
       </Content>
 
-      {onTrack && (
-        <View className="flex-row justify-end" style={{ marginTop: 12 }}>
-          <Pressable
-            onPress={onTrack}
-            accessibilityRole="button"
-            accessibilityLabel={`Add this ${displayLabel(route.category).toLowerCase()} route to your plan`}
-            accessibilityHint="Asks how much before anything is recorded"
-            style={{
-              borderRadius: Radius.md,
-              paddingHorizontal: 20,
-              minHeight: 44,
-              alignItems: 'center',
-              justifyContent: 'center',
-              backgroundColor: Brand[500],
-            }}
-            className="active:opacity-80">
-            <ThemedText style={{ fontSize: 14, fontWeight: '800', color: OnBrand }}>Add</ThemedText>
-          </Pressable>
+      {/* One pill: the play we recommend and its chance, the card's action. */}
+      {onTrack || onPress ? (
+        <View style={{ marginTop: 14 }}>
+          <OutcomePill
+            tone={probabilityWidth > 0 ? tone : null}
+            icon={onTrack ? Plus : undefined}
+            label={play}
+            value={probabilityWidth > 0 ? probabilityValue : undefined}
+            onPress={onTrack ? () => onTrack(route) : onPress ? () => onPress(route) : undefined}
+            accessibilityLabel={`${onTrack ? 'Add' : 'Open'} ${play}. ${probabilityLabel}: ${probabilityValue}`}
+            accessibilityHint={onTrack ? 'Asks how much before anything is recorded' : undefined}
+          />
         </View>
-      )}
+      ) : null}
     </View>
+  );
+}
+
+/**
+ * A big outlined pill in the outcome's colour, word and chance side by side. Sized
+ * and tinted to read as the thing to tap — the card's actions, not its footnotes.
+ */
+function OutcomePill({ tone, icon, label, value, onPress, accessibilityLabel, accessibilityHint }: {
+  tone: ChanceTone | null;
+  icon?: LucideIcon;
+  label: string;
+  value?: string;
+  onPress?: () => void;
+  accessibilityLabel: string;
+  accessibilityHint?: string;
+}) {
+  const theme = useTheme();
+  const ink = useSemanticText();
+  const color = tone ? ink[tone] : theme.text;
+  const fill = tone ? Semantic[tone] : theme.text;
+  return (
+    <Pressable
+      onPress={onPress ? () => { Haptic.tap(); onPress(); } : undefined}
+      disabled={!onPress}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      accessibilityHint={accessibilityHint}
+      className="active:opacity-70"
+      style={{
+        flex: 1,
+        minHeight: 48,
+        borderRadius: Radius.pill,
+        borderWidth: 1.5,
+        borderColor: fill + '59',
+        backgroundColor: fill + '12',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 6,
+        paddingHorizontal: 12,
+      }}>
+      {icon ? <Icon icon={icon} size={15} color={color} strokeWidth={2.5} /> : null}
+      <ThemedText style={{ fontSize: 15, fontWeight: '800', color, ...MONO }} numberOfLines={1}>
+        {value ? `${label} · ${value}` : label}
+      </ThemedText>
+    </Pressable>
   );
 }
 

@@ -135,6 +135,17 @@ export const CategoryScale = {
 } as const;
 
 /**
+ * The one hue for market lines. A price going up is not good news and going down is
+ * not bad — they are facts — so charts never wear the semantic green and red. A
+ * violet the rest of the palette does not use, so a line reads as data, not verdict.
+ * `line` is the stroke and fill; `ink` is the same hue legible as small text.
+ */
+export const ChartColor = {
+  light: { line: '#7357F6', ink: '#5B3FE0' },
+  dark: { line: '#A08BFF', ink: '#B7A6FF' },
+} as const;
+
+/**
  * Typography scale — every variant pairs fontSize with a safe lineHeight
  * (~1.25–1.4×) so text never clips, plus tuned letterSpacing + weight.
  * Source of truth for ThemedText variants; import directly for custom Text.

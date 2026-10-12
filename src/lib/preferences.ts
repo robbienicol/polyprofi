@@ -65,7 +65,16 @@ export interface Preferences {
    * they were left — `normalizeScoreWeights` turns them into fractions at scoring time.
    */
   scoreWeights: ScoreWeights;
+  /** Light, dark, or whatever the phone is set to. */
+  appearance: AppearancePreference;
 }
+
+export type AppearancePreference = 'system' | 'light' | 'dark';
+export const APPEARANCE_OPTIONS: readonly { value: AppearancePreference; label: string }[] = [
+  { value: 'system', label: 'Match phone' },
+  { value: 'light', label: 'Light' },
+  { value: 'dark', label: 'Dark' },
+];
 
 export const DEFAULT_PREFERENCES: Preferences = {
   currency: 'USD',
@@ -83,6 +92,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
     capitalEfficiency: 30,
     timeEfficiency: 10,
   },
+  appearance: 'system',
 };
 
 /** Slider importance from disk, clamped to the range the sliders can express. */
@@ -129,6 +139,9 @@ export function sanitizePreferences(value: unknown): Preferences {
     conservativeProjections: bool('conservativeProjections'),
     goalSetupSkipped: bool('goalSetupSkipped'),
     scoreWeights: sanitizeScoreWeights(raw.scoreWeights),
+    appearance: APPEARANCE_OPTIONS.some((option) => option.value === raw.appearance)
+      ? (raw.appearance as AppearancePreference)
+      : DEFAULT_PREFERENCES.appearance,
   };
 }
 

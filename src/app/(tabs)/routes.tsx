@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { usePreferences } from '@/api/hooks/usePreferences';
@@ -8,7 +8,7 @@ import { useQuizAnswers } from '@/api/hooks/useQuizAnswers';
 import { useRoutes } from '@/api/hooks/useRoutes';
 import { usePredictionSearch } from '@/api/hooks/usePredictionSearch';
 import { useAssetSearch } from '@/api/hooks/useAssetSearch';
-import { useRoutePreview } from '@/api/hooks/useRoutePreview';
+import { useSetRoutePreview } from '@/api/hooks/useRoutePreview';
 import { useSavedRoutes } from '@/api/hooks/useSavedRoutes';
 import { useSavingsGoal } from '@/api/hooks/useSavingsGoal';
 import { useCardRewards } from '@/api/hooks/useCardRewards';
@@ -23,7 +23,8 @@ import { TrackRouteForm } from '@/components/routes/TrackRouteForm';
 import { RouteCard } from '@/components/molecules/RouteCard';
 import { Icon } from '@/components/ui/Icon';
 import { ThemedText } from '@/components/themed-text';
-import { AnalyzingLoader, BrandLoader } from '@/components/ui/loaders';
+import { AnalyzingLoader, RoutesScreenSkeleton } from '@/components/ui/loaders';
+import { useSlowToast } from '@/components/ui/Toast';
 import { KEYBOARD_AWARE_SCROLL_PROPS } from '@/constants/keyboard';
 import { Brand, OnBrand, Radius, Semantic, Shadow } from '@/constants/theme';
 import { useSemanticText, useTheme } from '@/hooks/use-theme';
@@ -42,6 +43,7 @@ import { buildCardRewardRoutes } from '@/lib/card-reward-routes';
 import { buildSpendingCutRoutes } from '@/lib/spending-cut-routes';
 import { rescoreForStake } from '@/lib/stake-rescore';
 import { trackedPositionFields } from '@/lib/tracked-assets';
+import { withTabSkeleton } from '@/components/ui/with-tab-skeleton';
 import type { Route, RouteParams, SavedRoutesBatch } from '@/types/routes';
 
 const DEFAULT_FILTERS: Filters = {
@@ -51,12 +53,15 @@ const DEFAULT_FILTERS: Filters = {
   sort: 'score',
   predictionTopic: null,
   predictionSubtopic: null,
+  subcategory: null,
   maxDaysToResolve: null,
   groupByChance: false,
   keyword: '',
 };
 
 const NO_ROUTES: Route[] = [];
+/** Cards mounted at a time. Each carries a live chart, so fewer at once is a faster list. */
+const PAGE_SIZE = 12;
 
 /**
  * What the app just wrote down, in the user's words. Shown before any handoff, because
@@ -72,7 +77,7 @@ interface Receipt {
   onAction: (() => void) | null;
 }
 
-export default function RoutesScreen(): React.ReactElement {
+function RoutesScreen(): React.ReactElement {
   const theme = useTheme();
   const semantic = useSemanticText();
   const router = useRouter();
@@ -81,7 +86,7 @@ export default function RoutesScreen(): React.ReactElement {
   const { batchId, generate, goalId } = useLocalSearchParams<{ batchId?: string; generate?: string; goalId?: string }>();
   const { quizAnswers, isLoading: quizLoading } = useQuizAnswers();
   const { history, saveGeneratedRoutes } = useSavedRoutes();
-  const { setPreview } = useRoutePreview();
+  const setPreview = useSetRoutePreview();
   const { preferences } = usePreferences();
   const { allGoals, confirmGoal } = useSavingsGoal();
   const { trackBet, isTracking: isTrackingBet } = useTrackedBets();
@@ -90,9 +95,19 @@ export default function RoutesScreen(): React.ReactElement {
   const latestBatch = history[0] ?? null;
   const isGenerating = generate === '1';
   const isHistorical = viewedBatch !== null;
-  const sessionParams: RouteParams | null = isGenerating && quizAnswers
+  // The search as it was run: what fetching and saving key on.
+  const baseParams: RouteParams | null = isGenerating && quizAnswers
     ? quizAnswers
     : viewedBatch?.quizSnapshot ?? latestBatch?.quizSnapshot ?? null;
+  // How much to make, dragged on the list. Tagged with the search's own target so a
+  // new search starts from its own number instead of keeping the last drag.
+  const [targetDrag, setTargetDrag] = useState<{ base: number; value: number } | null>(null);
+  const targetOverride = baseParams && targetDrag && targetDrag.base === baseParams.target ? targetDrag.value : null;
+  // Everything that scores, sizes or labels routes reads this one.
+  const sessionParams = useMemo<RouteParams | null>(
+    () => (baseParams && targetOverride != null ? { ...baseParams, target: targetOverride } : baseParams),
+    [baseParams, targetOverride],
+  );
   // The goal these routes belong to: the one the quiz handed over, else the one
   // the shown batch was saved for. Every position taken here inherits it. A goal
   // that has since been swept away is dropped rather than left dangling on a
@@ -106,8 +121,8 @@ export default function RoutesScreen(): React.ReactElement {
 
   const [manualRefresh, setManualRefresh] = useState(false);
   const [recentRoutes, setRecentRoutes] = useState<Route[] | null>(null);
-  const shouldFetch = sessionParams !== null && (isGenerating || manualRefresh);
-  const { routes: fetchedRoutes, isLoading, isFetching, error, refresh } = useRoutes(sessionParams, { enabled: shouldFetch });
+  const shouldFetch = baseParams !== null && (isGenerating || manualRefresh);
+  const { routes: fetchedRoutes, isLoading, isFetching, error, refresh } = useRoutes(baseParams, { enabled: shouldFetch });
   // Memoised because the keyword-search pool below derives from it: a fresh array
   // every render would rebuild that pool every render.
   const generatedRoutes = useMemo(
@@ -154,7 +169,7 @@ export default function RoutesScreen(): React.ReactElement {
   const [investment, setInvestment] = useState<number | null>(null);
   // Most the user is OK losing in a bad case. Null: the whole amount they'd invest.
   const [maxLoss, setMaxLoss] = useState<number | null>(null);
-  const [visibleCount, setVisibleCount] = useState(30);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const savedGeneration = useRef<string | null>(null);
 
   useEffect(() => {
@@ -190,16 +205,16 @@ export default function RoutesScreen(): React.ReactElement {
   const displayedMaxLoss = Math.min(maxLoss ?? displayedInvestment, displayedInvestment);
   function setMaxLossAndReset(amount: number): void {
     setMaxLoss(Math.max(1, Math.round(amount)));
-    setVisibleCount(30);
+    setVisibleCount(PAGE_SIZE);
   }
 
   function setInvestmentAndReset(amount: number): void {
     setInvestment(Math.max(0, Math.round(amount)));
-    setVisibleCount(30);
+    setVisibleCount(PAGE_SIZE);
   }
   function setFiltersAndReset(next: Filters): void {
     setFilters(next);
-    setVisibleCount(30);
+    setVisibleCount(PAGE_SIZE);
   }
 
   // Keyword search reaches past this goal's pool on both sides of the map — the whole
@@ -207,8 +222,8 @@ export default function RoutesScreen(): React.ReactElement {
   // merged in before scoring. Ids already present win, so a market that is both
   // searched and already a route is not duplicated.
   const keyword = activeKeyword(filters);
-  const predictionSearch = usePredictionSearch(keyword, sessionParams);
-  const assetSearch = useAssetSearch(keyword, sessionParams);
+  const predictionSearch = usePredictionSearch(keyword, baseParams);
+  const assetSearch = useAssetSearch(keyword, baseParams);
   // Gamma's search is lenient — it ORs the words, so "zorble quantis" comes back with
   // a hundred markets matching neither. The strict local match is what the list
   // actually shows, so it is also what gets merged and counted: a "149 pulled in"
@@ -240,6 +255,7 @@ export default function RoutesScreen(): React.ReactElement {
     filters.lossProfile !== null,
     filters.minimumProbability > 0,
     filters.predictionTopic !== null,
+    !!filters.subcategory,
     filters.maxDaysToResolve != null,
     filters.groupByChance,
   ].filter(Boolean).length;
@@ -255,12 +271,56 @@ export default function RoutesScreen(): React.ReactElement {
   // Memoised: this rescores, scores and ranks the entire pool, and it used to run on
   // every render — including every event the investment slider fires while being
   // dragged, which is what made that slider feel unresponsive.
+  //
+  // Deferred: a chip, a sort or a slider answers at once, and the re-rank renders
+  // behind it instead of holding the tap until the whole list has been rebuilt.
+  const deferredParams = useDeferredValue(sessionParams);
+  const deferredInvestment = useDeferredValue(displayedInvestment);
+  const deferredFilters = useDeferredValue(filters);
+  const deferredMaxLoss = useDeferredValue(displayedMaxLoss);
+  const isUpdating = deferredParams !== sessionParams
+    || deferredInvestment !== displayedInvestment
+    || deferredFilters !== filters
+    || deferredMaxLoss !== displayedMaxLoss;
   const results = useMemo(
-    () => (sessionParams
-      ? buildRouteResults(searchPool, sessionParams, displayedInvestment, filters, scoreWeights, displayedMaxLoss)
+    () => (deferredParams
+      ? buildRouteResults(searchPool, deferredParams, deferredInvestment, deferredFilters, scoreWeights, deferredMaxLoss)
       : null),
-    [searchPool, sessionParams, displayedInvestment, filters, scoreWeights, displayedMaxLoss],
+    [searchPool, deferredParams, deferredInvestment, deferredFilters, scoreWeights, deferredMaxLoss],
   );
+
+  // Stable handlers, so RouteCard's memo holds: a chip tap re-renders this screen, and
+  // fresh closures per card re-rendered all twelve cards before the chip could light
+  // up. They read the latest state through a ref instead.
+  const cardActions = useRef<{ track: (route: Route) => void; open: (route: Route) => void } | null>(null);
+  useEffect(() => {
+    cardActions.current = {
+      track: (route) => {
+        setTrackingId(route.id);
+        setCutPercent(25);
+        setTrackingAmount(String(results?.selectedStake(route) ?? referenceStake));
+      },
+      open: (route) => {
+        // Hand the detail screen the list it was tapped from. Search hits are
+        // merged in live and never saved, so history alone cannot find them.
+        if (sessionParams) {
+          setPreview({
+            id: `preview-${Date.now()}`,
+            generatedAt: new Date().toISOString(),
+            quizSnapshot: sessionParams,
+            routes: searchPool,
+            ...(sessionGoalId ? { goalId: sessionGoalId } : null),
+          });
+        }
+        router.push(`/route/${route.id}?stake=${results?.selectedStake(route) ?? referenceStake}&available=${displayedInvestment}`);
+      },
+    };
+  });
+  // A new search can take a while on a slow network; say so instead of looking stuck.
+  useSlowToast(isGenerating && isLoading, 'Still pricing routes — live markets are slow right now…', 10_000);
+  useSlowToast(keyword !== '' && (predictionSearch.isSearching || assetSearch.isSearching), 'Still searching every market…', 5_000);
+  const trackCard = useCallback((route: Route) => cardActions.current?.track(route), []);
+  const openCard = useCallback((route: Route) => cardActions.current?.open(route), []);
   const ranked = results?.ranked ?? [];
   const filtered = results?.filtered ?? [];
   const goalReach = results?.goalReach ?? null;
@@ -298,13 +358,13 @@ export default function RoutesScreen(): React.ReactElement {
     && !isLoading;
 
   async function handleRefresh(): Promise<void> {
-    if (isHistorical || !sessionParams) return;
+    if (isHistorical || !baseParams) return;
     setManualRefresh(true);
     try {
       const refreshed = await refresh();
       if (refreshed.length > 0) {
         setRecentRoutes(refreshed);
-        saveGeneratedRoutes(sessionParams, refreshed, sessionGoalId);
+        saveGeneratedRoutes(baseParams, refreshed, sessionGoalId);
       }
     } catch {
       // The query's own error state renders the retry card; nothing to add here.
@@ -478,7 +538,7 @@ export default function RoutesScreen(): React.ReactElement {
     return <Screen><AnalyzingLoader /></Screen>;
   }
   if (quizLoading) {
-    return <BrandLoader subtitle="Loading your saved quiz…" />;
+    return <Screen><RoutesScreenSkeleton /></Screen>;
   }
   if (history.length === 0 && !isGenerating && routes.length === 0 && !error) {
     return <EmptyRoutes
@@ -519,26 +579,9 @@ export default function RoutesScreen(): React.ReactElement {
           requiredInvestment={results?.requiredInvestmentById.get(route.id)}
           currentInvestment={results?.selectedStake(route)}
           odds={results?.oddsById.get(route.id) ?? null}
-          target={sessionParams?.target ?? null}
-          onTrack={trackingId === null ? () => {
-            setTrackingId(route.id);
-            setCutPercent(25);
-            setTrackingAmount(String(results?.selectedStake(route) ?? referenceStake));
-          } : undefined}
-          onPress={() => {
-            // Hand the detail screen the list it was tapped from. Search hits are
-            // merged in live and never saved, so history alone cannot find them.
-            if (sessionParams) {
-              setPreview({
-                id: `preview-${Date.now()}`,
-                generatedAt: new Date().toISOString(),
-                quizSnapshot: sessionParams,
-                routes: searchPool,
-                ...(sessionGoalId ? { goalId: sessionGoalId } : null),
-              });
-            }
-            router.push(`/route/${route.id}?stake=${results?.selectedStake(route) ?? referenceStake}&available=${displayedInvestment}`);
-          }}
+          target={deferredParams?.target ?? null}
+          onTrack={trackingId === null ? trackCard : undefined}
+          onPress={openCard}
         />
         {receipt?.routeId === route.id && (
           <TrackReceipt receipt={receipt} onDone={() => setReceipt(null)} />
@@ -562,11 +605,13 @@ export default function RoutesScreen(): React.ReactElement {
 
   return (
     <Screen>
-      {/* Pinned above the scroll rather than a stickyHeaderIndices entry — this card
-          is conditional on `goal`, and an index-based pin would silently point at
-          the wrong child the moment another conditional block above it changes. */}
-      <View className="px-4 pt-4 pb-2" style={{ gap: 12 }}>
-        {goal && (
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerClassName="px-4 pb-16 pt-4 gap-3"
+        {...KEYBOARD_AWARE_SCROLL_PROPS}
+        refreshControl={<RefreshControl refreshing={(isFetching && !isLoading) || manualRefresh} onRefresh={handleRefresh} tintColor={Brand[500]} />}>
+        {/* Scrolls with the list: the screen is for the routes, not the controls. */}
+        {goal && isHistorical && (
           <RoutesHeader
             goal={goal}
             historical={isHistorical}
@@ -582,25 +627,31 @@ export default function RoutesScreen(): React.ReactElement {
           isSearching={isSearching}
           pulledInCount={searchRoutes.length}
         />
-      </View>
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerClassName="px-4 pb-16 pt-1 gap-3"
-        {...KEYBOARD_AWARE_SCROLL_PROPS}
-        refreshControl={<RefreshControl refreshing={(isFetching && !isLoading) || manualRefresh} onRefresh={handleRefresh} tintColor={Brand[500]} />}>
         {ranked.length > 0 && (
           <>
-            {/* On the list, not behind Filters: the amount is what people reach for
-                to see which bets fit their budget, so it is always one drag away. */}
-            <View style={{ borderRadius: Radius.xl, backgroundColor: theme.backgroundElevated, borderWidth: 1, borderColor: theme.border, paddingHorizontal: 14, paddingVertical: 10, gap: 4, ...Shadow.card }}>
-              <InvestmentAmountControl amount={displayedInvestment} maximum={investmentMaximum} onAmountChange={setInvestmentAndReset} />
+            {/* On the list, not behind Filters: the amounts are what people reach for
+                to see which bets fit their budget. One line each, so it stays short. */}
+            <View style={{ borderRadius: Radius.xl, backgroundColor: theme.backgroundElevated, borderWidth: 1, borderColor: theme.border, paddingHorizontal: 12, paddingVertical: 4, gap: 0, ...Shadow.card }}>
+              {sessionParams && baseParams ? (
+                <InvestmentAmountControl
+                  amount={sessionParams.target}
+                  maximum={Math.max(baseParams.target * 4, 1_000)}
+                  onAmountChange={(amount) => {
+                    setTargetDrag({ base: baseParams.target, value: Math.max(1, Math.round(amount)) });
+                    setVisibleCount(PAGE_SIZE);
+                  }}
+                  label="Make"
+                  spokenLabel="Profit you want to make"
+                />
+              ) : null}
+              <InvestmentAmountControl amount={displayedInvestment} maximum={investmentMaximum} onAmountChange={setInvestmentAndReset} label="Invest" />
               {/* Every route is sized so its bad case stays under this. A bet that would
                   need more is shrunk to fit, and says how far that gets you. */}
               <InvestmentAmountControl
                 amount={displayedMaxLoss}
                 maximum={displayedInvestment}
                 onAmountChange={(amount) => setMaxLossAndReset(Math.min(amount, displayedInvestment))}
-                label="Max I'd lose"
+                label="Max loss"
                 spokenLabel="Most you are OK losing"
               />
             </View>
@@ -642,6 +693,13 @@ export default function RoutesScreen(): React.ReactElement {
             onRaiseInvestment={setInvestmentAndReset}
           />
         ) : null}
+        {isUpdating ? (
+          <View className="flex-row items-center justify-center" style={{ gap: 8, paddingVertical: 4 }}>
+            <ActivityIndicator size="small" color={Brand[500]} />
+            <ThemedText style={{ fontSize: 12, fontWeight: '700', color: theme.textSecondary }}>Updating routes…</ThemedText>
+          </View>
+        ) : null}
+        <View style={{ gap: 12, opacity: isUpdating ? 0.45 : 1 }}>
         {filters.groupByChance && predictionFacetsActive(filters)
           ? groupRoutesByChance(visibleRoutes).map((group) => (
             <View key={group.floor} className="gap-3">
@@ -659,17 +717,18 @@ export default function RoutesScreen(): React.ReactElement {
               )
               : renderRoute(route)
           ))}
+        </View>
         {moreCuts.length > 0 && (lastVisibleCutId == null || (filters.groupByChance && predictionFacetsActive(filters))) ? (
           <MoreWaysToSave cuts={moreCuts} renderRoute={renderRoute} />
         ) : null}
         {visibleCount < filtered.length && (
           <Pressable
-            onPress={() => setVisibleCount((count) => count + 30)}
+            onPress={() => setVisibleCount((count) => count + PAGE_SIZE)}
             accessibilityRole="button"
-            accessibilityLabel={`Show 30 more routes. ${filtered.length - visibleCount} remaining.`}
+            accessibilityLabel={`Show ${PAGE_SIZE} more routes. ${filtered.length - visibleCount} remaining.`}
             className="items-center justify-center active:opacity-70"
             style={{ borderRadius: Radius.md, minHeight: 48, borderWidth: 1, borderColor: theme.border, backgroundColor: theme.backgroundElement }}>
-            <ThemedText style={{ fontSize: 14, fontWeight: '800', color: semantic.brand }}>Show 30 more · {filtered.length - visibleCount} remaining</ThemedText>
+            <ThemedText style={{ fontSize: 14, fontWeight: '800', color: semantic.brand }}>Show {Math.min(PAGE_SIZE, filtered.length - visibleCount)} more · {filtered.length - visibleCount} remaining</ThemedText>
           </Pressable>
         )}
         {outcome === 'searching' && filtered.length === 0 && (
@@ -1051,3 +1110,5 @@ function formatBatchLabel(batch: SavedRoutesBatch): string {
   const percent = batch.quizSnapshot.balance > 0 ? ((batch.quizSnapshot.target / batch.quizSnapshot.balance) * 100).toFixed(0) : '0';
   return `Saved ${generated} · +${percent}% · ${timeframeLabel(batch.quizSnapshot.timeframe)}`;
 }
+
+export default withTabSkeleton(RoutesScreen, 'routes');
