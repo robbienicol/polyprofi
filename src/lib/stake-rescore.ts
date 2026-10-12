@@ -50,6 +50,10 @@ function returnAtStake(route: Route, refStake: number, stake: number): number {
   // A spending cut (or anything else flagged zero-capital) pays the same fixed amount
   // whatever stake the user dials in — there is no position size to scale.
   if (route.noCapitalRequired) return route.expectedReturn;
+  // Options fill in whole contracts: $1,000 against a $420 contract buys two, and the
+  // $160 left over earns nothing.
+  const option = route.optionPosition;
+  if (option != null) return Math.floor(stake / option.lotCost) * option.lotCost * option.winReturnRate;
   const sourcedYield = route.investmentFacts?.yieldPct;
   const days = sourcedYieldDays(route);
   if (sourcedYield != null && days != null) {
@@ -73,6 +77,11 @@ export function stakeNeededForReturn(route: Route, refStake: number, target: num
   // Costs nothing to take, whatever the goal — never priced by the target/rate ratio below.
   if (route.noCapitalRequired) return 0;
   if (target <= 0) return null;
+  const option = route.optionPosition;
+  if (option != null) {
+    const profitPerLot = option.lotCost * option.winReturnRate;
+    return profitPerLot > 0 ? Math.ceil(target / profitPerLot) * option.lotCost : null;
+  }
   const profitAtReferenceStake = returnAtStake(route, refStake, refStake);
   if (profitAtReferenceStake <= 0) return null;
   return Math.ceil((target / profitAtReferenceStake) * refStake);
@@ -154,6 +163,15 @@ export function __selfCheck(): void {
   };
   // 8% return at ref $100 → $16 at $200
   console.assert(Math.round(returnAtStake(part, 100, 200)) === 16, 'partial scales with stake');
+
+  // Whole contracts: a $420 lot at +100% needs two lots ($840) to make $500 — not $500.
+  const call: Route = {
+    ...bin, id: '1d', category: 'Options', line: undefined,
+    optionPosition: { lotCost: 420, winReturnRate: 1 } as Route['optionPosition'],
+  };
+  console.assert(stakeNeededForReturn(call, 1000, 500) === 840, 'options stake rounds up to whole contracts');
+  console.assert(returnAtStake(call, 1000, 1000) === 840, 'leftover cash below one contract earns nothing');
+  console.assert(returnAtStake(call, 1000, 300) === 0, 'a stake below one contract buys nothing');
 
   const misses = rescoreForStake([part], 100, 50, 100);
   console.assert(misses.length === 1 && !misses[0].meetsTarget, 'near-miss stays visible and is marked under target');

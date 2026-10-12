@@ -12,7 +12,7 @@
 import { isDebtRoute } from '@/lib/route-investment-metrics';
 import type { Route } from '@/types/routes';
 
-export type ProbabilityMethod = 'volatility' | 'market-implied' | 'contractual-yield' | 'bracket-barrier';
+export type ProbabilityMethod = 'volatility' | 'market-implied' | 'contractual-yield' | 'bracket-barrier' | 'options-implied';
 
 const MARKET_IMPLIED_PATTERN = /polymarket|prediction|sportsbook|parlay|moneyline|\bml\b|over\/under|spread/i;
 
@@ -21,6 +21,7 @@ export function probabilityMethodForRoute(route: Route): ProbabilityMethod {
   // Checked first: a bracketed contract is priced off its own barriers, not off the
   // market's consensus that the event happens, so the market-implied copy would be wrong.
   if (route.exitPlan?.kind === 'bracket') return 'bracket-barrier';
+  if (route.optionPosition != null) return 'options-implied';
   if (isDebtRoute(route)) return 'contractual-yield';
   const text = [route.category, route.platform, route.line].filter(Boolean).join(' ');
   if (MARKET_IMPLIED_PATTERN.test(text) || (route.lossProfile === 'binary' && route.line != null)) {
@@ -99,6 +100,26 @@ export const METHODOLOGY: Record<ProbabilityMethod, MethodologyCopy> = {
       'A wilder market is not a better trade. Volatility makes the exit arrive sooner, not more often in your favour.',
       'The stop only protects you if you can get out at it. In a thin market the price can jump straight past your stop, and we lower the protection we credit accordingly.',
       'If neither price is reached by your deadline you are left holding the contract at whatever it is worth then, which may be less than you paid.',
+    ],
+  },
+
+  // Listed options — the probability is read off the contract's own implied volatility.
+  'options-implied': {
+    method: 'options-implied',
+    badge: 'Options-implied',
+    short: "The options market's own priced-in odds, from the contract's implied volatility.",
+    long:
+      'This probability comes from live option prices, not from us. Every option price implies how ' +
+      'widely traders expect the stock to move by expiry — its implied volatility. From that spread ' +
+      'we work out the chance the stock finishes past the level this position needs (the standard ' +
+      'Black-Scholes N(d2), using the T-bill rate). Each leg is priced at the ask when you buy and ' +
+      'the bid when you sell, so the spread you would actually pay is already in the numbers.',
+    caveats: [
+      'These are risk-neutral odds: what the market has priced in, which is not the same as a forecast and ignores any drift in the stock.',
+      'Quotes are about 15 minutes delayed, and option prices move fast — the contract may cost more when you place the order.',
+      'The win shown is the payoff at a specific price on expiry. Finishing short of it pays less, and a bought option below its strike expires worthless.',
+      'Options trade in whole contracts of 100 shares, so the amount you can put in moves in steps.',
+      'Your broker must approve you for options, and selling puts or calls may need a higher approval level.',
     ],
   },
 

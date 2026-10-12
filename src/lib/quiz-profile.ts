@@ -41,7 +41,7 @@ export function enforceRouteIntegrity(routes: Route[], target: number): Route[] 
 const QUIZ_TO_ROUTE_CATEGORIES: Record<string, string[]> = {
   Polymarket: ['Polymarket'],
   Crypto: ['Crypto'],
-  Stocks: ['Stocks & ETFs', 'Stocks', 'Savings & Treasuries'],
+  Stocks: ['Stocks & ETFs', 'Stocks', 'Savings & Treasuries', 'Options'],
 };
 
 const LONG_TIMEFRAMES = new Set<QuizAnswers['timeframe']>(['1year', '5years']);

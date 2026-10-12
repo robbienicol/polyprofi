@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
 #
-# One-shot iOS release: build the production IPA locally on this Mac with EAS,
-# then upload it to TestFlight.
+# One-shot iOS release: build the production IPA locally on this Mac with EAS
+# and upload it straight to TestFlight with altool. No cloud build, no manual step.
 #
-#   bun run build            # checks → local build → submit
+#   bun run build            # checks → local build → TestFlight upload
 #   SKIP_CHECKS=1 bun run build   # skip the type-check gate
+#   UPLOAD=0 bun run build        # build only, leave the IPA on disk
+#
+# Upload credentials come from .env: APPLE_ID and APPLE_APP_PASSWORD (an
+# app-specific password from appleid.apple.com, not the account password).
 #
 # The build number comes from EAS (appVersionSource: remote + autoIncrement in
 # eas.json), so every run gets the next one without touching app.json. The IPA
@@ -32,6 +36,17 @@ step "Preflight"
 command -v xcodebuild >/dev/null || fail "xcodebuild not found. Install Xcode and run: sudo xcode-select -s /Applications/Xcode.app"
 command -v pod >/dev/null || fail "CocoaPods not found. Install it: brew install cocoapods"
 command -v fastlane >/dev/null || fail "fastlane not found (EAS local builds use it to sign). Install it: brew install fastlane"
+
+UPLOAD="${UPLOAD:-1}"
+if [ "$UPLOAD" = "1" ]; then
+  # Read straight out of .env so the secrets never need to be exported by hand.
+  if [ -f .env ]; then
+    APPLE_ID="${APPLE_ID:-$(grep -m1 '^APPLE_ID=' .env | cut -d= -f2- | tr -d '"'"'"'\"')}"
+    APPLE_APP_PASSWORD="${APPLE_APP_PASSWORD:-$(grep -m1 '^APPLE_APP_PASSWORD=' .env | cut -d= -f2- | tr -d '"'"'"'\"')}"
+  fi
+  [ -n "${APPLE_ID:-}" ] || fail "APPLE_ID not set (.env or env). Set UPLOAD=0 to build only."
+  [ -n "${APPLE_APP_PASSWORD:-}" ] || fail "APPLE_APP_PASSWORD not set (.env or env). Set UPLOAD=0 to build only."
+fi
 
 if command -v eas >/dev/null; then
   EAS=(eas)
@@ -73,13 +88,20 @@ BUILD="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$PLIST")"
 rm -rf "$PLIST_TMP"
 bold "Built Pathey $VERSION ($BUILD) → $IPA"
 
-# ── submit ───────────────────────────────────────────────────────────────────
-step "Uploading $VERSION ($BUILD) to TestFlight"
-"${EAS[@]}" submit \
-  --platform ios \
-  --profile "$PROFILE" \
-  --path "$IPA" \
-  --non-interactive
+# ── upload ───────────────────────────────────────────────────────────────────
+if [ "$UPLOAD" != "1" ]; then
+  STEP="done"
+  bold "✓ Pathey $VERSION ($BUILD) built (upload skipped):"
+  echo "  xcrun altool --upload-app -f $IPA -t ios -u \"\$APPLE_ID\" -p \"\$APPLE_APP_PASSWORD\""
+  exit 0
+fi
+
+step "Validating with App Store Connect"
+xcrun altool --validate-app -f "$IPA" -t ios -u "$APPLE_ID" -p "$APPLE_APP_PASSWORD"
+
+step "Uploading to TestFlight"
+xcrun altool --upload-app -f "$IPA" -t ios -u "$APPLE_ID" -p "$APPLE_APP_PASSWORD"
 
 STEP="done"
-bold "✓ Pathey $VERSION ($BUILD) uploaded. It shows in TestFlight once Apple finishes processing (usually 5–15 min)."
+bold "✓ Pathey $VERSION ($BUILD) uploaded to TestFlight. Processing takes ~5-15 min."
+echo "  https://appstoreconnect.apple.com/apps/6789668562/testflight/ios"

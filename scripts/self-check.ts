@@ -12,6 +12,7 @@ import { __selfCheck as checkRouteCalibration } from '@/lib/route-calibration';
 import { __selfCheck as checkDeviceRegion } from '@/lib/device-region';
 import { __selfCheck as checkGainAlerts } from '@/lib/gain-alerts';
 import { __selfCheck as checkEtfRoutes } from '@/lib/etf-routes';
+import { __selfCheck as checkOptionsRoutes } from '@/lib/options-routes';
 import { __selfCheck as checkMetricGlossary } from '@/lib/metric-glossary';
 import { __selfCheck as checkMethodology } from '@/lib/methodology';
 import { __selfCheck as checkPolymarketMarketQuality } from '@/lib/polymarket-market-quality';
@@ -52,6 +53,7 @@ const checks = [
   ['gain alerts', checkGainAlerts],
   ['device region', checkDeviceRegion],
   ['etf routes', checkEtfRoutes],
+  ['options routes', checkOptionsRoutes],
   ['methodology', checkMethodology],
   ['metric glossary', checkMetricGlossary],
   ['polymarket market quality', checkPolymarketMarketQuality],

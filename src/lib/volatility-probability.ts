@@ -84,6 +84,25 @@ export function callProbabilityITM(
   return Math.max(0, Math.min(100, (1 - normalCdf(z)) * 100));
 }
 
+/**
+ * Risk-neutral P(price at expiry ≥ level) off an option's own implied volatility — the
+ * market's priced-in spread of outcomes, not our estimate of one. N(d2), as in
+ * `callProbabilityITM`, but in the annualised units an option chain quotes.
+ */
+export function probabilityAboveAtExpiry(
+  spot: number,
+  level: number,
+  annualIv: number,
+  years: number,
+  riskFreeAnnualPct = 0,
+): number | null {
+  if (spot <= 0 || level <= 0 || annualIv <= 0 || years <= 0) return null;
+  const rate = Math.log(1 + riskFreeAnnualPct / 100);
+  const sigmaT = annualIv * Math.sqrt(years);
+  const d2 = (Math.log(spot / level) + (rate - (annualIv * annualIv) / 2) * years) / sigmaT;
+  return Math.max(0, Math.min(100, normalCdf(d2) * 100));
+}
+
 // ── self-check ──────────────────────────────────────────────────────────────
 export function __selfCheck(): void {
   console.assert(Math.abs(normalCdf(0) - 0.5) < 1e-6, 'CDF(0) = 0.5');
@@ -121,4 +140,10 @@ export function __selfCheck(): void {
   const higherRate = callProbabilityITM(100, 110, 0.02, 21, 5)!;
   console.assert(higherRate > otm, 'higher risk-free rate raises P(ITM) for the same strike');
   console.assert(callProbabilityITM(100, 100, null, 21) === null, 'no vol data → null, not a fake number');
+
+  // probabilityAboveAtExpiry: ATM with no rate sits just under a coin flip (the −σ²/2 term)
+  const atm = probabilityAboveAtExpiry(100, 100, 0.3, 0.25)!;
+  console.assert(atm < 50 && atm > 45, 'ATM, no rate → just under 50%');
+  console.assert(probabilityAboveAtExpiry(100, 120, 0.3, 0.25)! < atm, 'higher level → lower P(above)');
+  console.assert(probabilityAboveAtExpiry(100, 100, 0, 0.25) === null, 'no IV → null, not a fake number');
 }

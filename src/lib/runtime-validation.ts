@@ -111,7 +111,20 @@ export function isRoute(value: unknown): value is Route {
     && isOptional(value.sourceEndDate, isString)
     && isOptional(value.predictionTopic, isString)
     && isOptional(value.spendingCut, isSpendingCutFacts)
-    && isOptional(value.cardRewards, isCardRewardsFacts);
+    && isOptional(value.cardRewards, isCardRewardsFacts)
+    && isOptional(value.optionPosition, isOptionPosition);
+}
+
+function isOptionPosition(value: unknown): value is NonNullable<Route['optionPosition']> {
+  if (!isRecord(value)) return false;
+  return isOneOf(value.strategy, ['long-call', 'long-put', 'bull-call-spread', 'cash-secured-put', 'covered-call'])
+    && typeof value.underlying === 'string'
+    && typeof value.expiry === 'string'
+    && Array.isArray(value.legs)
+    && isFiniteNumber(value.lotCost) && value.lotCost > 0
+    && isFiniteNumber(value.winReturnRate)
+    && isFiniteNumber(value.winLevel)
+    && isOneOf(value.winDirection, ['above', 'below']);
 }
 
 function isCardRewardsFacts(value: unknown): value is NonNullable<Route['cardRewards']> {

@@ -1,4 +1,6 @@
 import { fetchMarketContext } from '@/api/client/market-data';
+import { fetchOptionChains } from '@/api/client/options-chains';
+import type { OptionChain } from '@/api/client/options-chain-types';
 import { fetchPolymarketSnapshot } from '@/api/client/polymarket-market-data';
 import { playbookRoutes, targetBucket, timeframeCalendarDays } from '@/api/client/playbook';
 import { getDailyPool, setDailyPool } from '@/api/client/storage';
@@ -8,6 +10,7 @@ import { buildCryptoRoutes } from '@/lib/crypto-routes';
 import { buildPolymarketRoutes } from '@/lib/polymarket-routes';
 import { enforceRouteIntegrity, filterRoutesForQuiz } from '@/lib/quiz-profile';
 import { buildEtfRoutes } from '@/lib/etf-routes';
+import { buildOptionsRoutes } from '@/lib/options-routes';
 import { isDebtRoute } from '@/lib/route-investment-metrics';
 import { isRecord, isRoute, responseJson } from '@/lib/runtime-validation';
 import { withTimeout } from '@/lib/with-timeout';
@@ -16,7 +19,7 @@ import { sortByPatheyScore } from '@/lib/score';
 import { stakeNeededForReturn } from '@/lib/stake-rescore';
 import type { Route, RouteParams } from '@/types/routes';
 
-const DAILY_POOL_VERSION = 'return-bucket-v3';
+const DAILY_POOL_VERSION = 'return-bucket-v4';
 // Ceilings on the two halves of a search. Nothing here is load-bearing on its own —
 // the deterministic builders alone produce a full result set — so a slow upstream
 // costs freshness, never the whole screen.
@@ -73,7 +76,7 @@ async function generateRoutes(params: RouteParams, getToken?: TokenProvider): Pr
   );
   // Everything here is live market data for the deterministic builders. The AI part
   // is a shared daily slate fetched alongside it — no prompt is built on the device.
-  const [marketContext, polymarketSnapshot, aiRoutes] = await Promise.all([
+  const [marketContext, polymarketSnapshot, aiRoutes, optionChains] = await Promise.all([
     withTimeout(
       fetchMarketContext({ polymarket: polymarketSnapshotRequest.then((snapshot) => snapshot.context) }),
       MARKET_DATA_TIMEOUT_MS,
@@ -82,10 +85,11 @@ async function generateRoutes(params: RouteParams, getToken?: TokenProvider): Pr
     ),
     polymarketSnapshotRequest,
     requestAiRoutes(params, fallbackMaturity, getToken),
+    withTimeout(fetchOptionChains(getToken), MARKET_DATA_TIMEOUT_MS, [], 'routes:options-chains'),
   ]);
   const polymarketUniverse = polymarketSnapshot.universe;
   return {
-    routes: mergeAndRankRoutes(aiRoutes, polymarketUniverse, marketContext, params, returnPct, fallbackMaturity),
+    routes: mergeAndRankRoutes(aiRoutes, polymarketUniverse, marketContext, optionChains, params, returnPct, fallbackMaturity),
     degraded: polymarketUniverse.length === 0,
   };
 }
@@ -145,6 +149,7 @@ function mergeAndRankRoutes(
   aiRoutes: Route[],
   polymarketUniverse: Awaited<ReturnType<typeof fetchPolymarketSnapshot>>['universe'],
   market: Awaited<ReturnType<typeof fetchMarketContext>>,
+  optionChains: OptionChain[],
   params: RouteParams,
   returnPct: number,
   fallbackMaturity: number
@@ -155,11 +160,23 @@ function mergeAndRankRoutes(
   const savingsAccountRoutes = buildSavingsAccountRoute({ yields: market.treasuryBillYields, balance, target, deadlineDays: fallbackMaturity });
   const etfRoutes = buildEtfRoutes({ quotes: market.stocks, balance, target, deadlineDays: fallbackMaturity });
   const cryptoRoutes = buildCryptoRoutes({ quotes: market.stocks, balance, target, deadlineDays: fallbackMaturity });
-  const baselines = treasuryRoutes.length > 0 ? baselineRoutes.filter((route) => !isDebtRoute(route)) : baselineRoutes;
+  const optionsRoutes = buildOptionsRoutes({
+    chains: optionChains,
+    balance,
+    target,
+    deadlineDays: fallbackMaturity,
+    riskFreePct: market.stocks.find((quote) => quote.symbol === '^IRX')?.price ?? 0,
+  });
+  // The playbook's generic "OTM options" / "Selling premium" picks stand in for options
+  // only when there are no live contracts to show in their place.
+  const playbook = optionsRoutes.length > 0
+    ? baselineRoutes.filter((route) => route.platform !== 'Options brokerage')
+    : baselineRoutes;
+  const baselines = treasuryRoutes.length > 0 ? playbook.filter((route) => !isDebtRoute(route)) : playbook;
   // The AI is scoped to Polymarket; hard-guard it so a stray stock/treasury route can't slip in
   // and collide with the deterministic builders that own those categories.
   const polymarketAiRoutes = aiRoutes.filter((route) => /polymarket/i.test(route.category));
-  const sourced = applySourcedDebtFacts([...treasuryRoutes, ...savingsAccountRoutes, ...etfRoutes, ...cryptoRoutes, ...baselines, ...polymarketAiRoutes], market.stocks, balance, fallbackMaturity, target);
+  const sourced = applySourcedDebtFacts([...treasuryRoutes, ...savingsAccountRoutes, ...etfRoutes, ...cryptoRoutes, ...optionsRoutes, ...baselines, ...polymarketAiRoutes], market.stocks, balance, fallbackMaturity, target);
   const tailored = enforceRouteIntegrity(sourced, target);
   const livePolymarket = enforceRouteIntegrity(buildPolymarketRoutes(polymarketUniverse, params), target);
   // filterRoutesForQuiz (including the timeframe cutoff) has to run on the LIVE Polymarket
