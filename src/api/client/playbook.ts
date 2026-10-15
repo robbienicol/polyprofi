@@ -13,16 +13,18 @@
  */
 import { Route } from '@/types/routes';
 import { StockQuote } from '@/api/client/market-data';
-import { probabilityOfTargetMove } from '@/lib/volatility-probability';
+import { callProbabilityITM, probabilityOfTargetMove } from '@/lib/volatility-probability';
 
 interface PlaybookPick {
   vehicle: string;
   probability: number;
 }
-export interface PlaybookCell {
+interface PlaybookCell {
   best: PlaybookPick;
   second: PlaybookPick;
 }
+
+const pct = (p: number) => (p < 1 ? '<1%' : `${p}%`);
 
 // Column order per row: [day, week, month, year, fiveYears]
 type Cell = [string, number]; // [vehicle, prob]
@@ -86,7 +88,7 @@ function timeframeToCol(timeframe: string): Col {
 }
 
 // Pick the smallest target bucket >= the needed return, so we never overstate odds.
-function targetBucket(returnPct: number): (typeof TARGETS)[number] {
+export function targetBucket(returnPct: number): (typeof TARGETS)[number] {
   for (const t of TARGETS) if (returnPct <= t) return t;
   return 500;
 }
@@ -125,15 +127,6 @@ export function getPlaybook(returnPct: number, timeframe: string): PlaybookCell 
   return { best: { vehicle: bv, probability: bp }, second: { vehicle: sv, probability: sp } };
 }
 
-const pct = (p: number) => (p < 1 ? '<1%' : `${p}%`);
-
-export function formatPlaybook(cell: PlaybookCell, returnPct: number, timeframeLabel: string): string {
-  return `For a ${returnPct.toFixed(1)}% return over ${timeframeLabel}, the math-calibrated vehicles are:
-  1) ${cell.best.vehicle} — ~${pct(cell.best.probability)} hit probability
-  2) ${cell.second.vehicle} — ~${pct(cell.second.probability)} hit probability
-These two are injected automatically by the app with fixed risk levels — do NOT output them yourself or invent your own version of them. Use them only as the bar your other picks must justify: anything riskier than these baselines needs a clearly higher probability or a real catalyst to earn a spot above them.`;
-}
-
 interface VehicleMeta {
   riskLevel: number; // 1 (safest) – 5 (riskiest), fixed — never LLM-assigned for these vehicles
   lossProfile: 'binary' | 'partial';
@@ -164,7 +157,7 @@ function concreteInstrument(
   live: PlaybookLiveData | undefined,
   returnPct: number,
   timeframe: string
-): { name: string; detail: string } | null {
+): { name: string; detail: string; probability?: number } | null {
   if (!live) return null;
   const { stocks } = live;
 
@@ -188,7 +181,24 @@ function concreteInstrument(
     const best = candidates[0]?.s;
     if (!best) return null;
     const action = vehicle === 'OTM options' ? 'OTM calls on' : vehicle === 'Selling premium' ? 'Cash-secured puts/covered calls on' : '';
-    return { name: action ? `${action} ${best.symbol}` : best.symbol, detail: `$${best.price.toFixed(2)}, highest realized-vol fit for this target among tracked growth names` };
+    const name = action ? `${action} ${best.symbol}` : best.symbol;
+    const detail = `$${best.price.toFixed(2)}, highest realized-vol fit for this target among tracked growth names`;
+
+    if (vehicle === 'OTM options') {
+      // The real call-pricing math, not the hand-tuned matrix: Black-Scholes N(d2) for a
+      // call struck at the target return, off this stock's own realized volatility and
+      // the live risk-free rate (^IRX) — see `callProbabilityITM`. Falls through to the
+      // matrix number (in pickToRoute) only if that can't be computed.
+      const strike = best.price * (1 + returnPct / 100);
+      const riskFreeRate = stocks.find((s) => s.symbol === '^IRX')?.price ?? 0;
+      const rawProbability = callProbabilityITM(best.price, strike, best.dailyVol, horizonTradingDays, riskFreeRate);
+      // Rounded to the matrix's own granularity (whole/half percents) — N(d2)'s extra
+      // decimals are false precision for a single stock's noisy realized vol, not signal.
+      const probability = rawProbability != null ? Math.round(rawProbability * 2) / 2 : null;
+      if (probability != null) return { name, detail, probability };
+    }
+
+    return { name, detail };
   }
   return null; // Polymarket: no live instrument to name here, stays generic — never fabricate a fake market
 }
@@ -199,15 +209,20 @@ function pickToRoute(pick: PlaybookPick, id: string, returnPct: number, target: 
   };
   const concrete = concreteInstrument(pick.vehicle, live, returnPct, timeframe);
   const named = concrete?.name ?? pick.vehicle;
+  // The matrix's `pick.probability` is the fallback for when there's no live quote to
+  // compute the real thing from (also all `playbookRiskBounds` ever has) — once
+  // `concreteInstrument` can price it (currently just OTM options, off Black-Scholes),
+  // that computed number wins.
+  const probability = concrete?.probability ?? pick.probability;
   return {
     id,
     category: meta.category,
     emoji: meta.emoji,
     description: concrete
-      ? `Put your $${Math.round(target / (returnPct / 100))} in ${named} (${concrete.detail}) — clears ${returnPct.toFixed(1)}% ~${pct(pick.probability)} of the time.`
-      : `Put your $${Math.round(target / (returnPct / 100))} in ${pick.vehicle} — clears ${returnPct.toFixed(1)}% ~${pct(pick.probability)} of the time.`,
+      ? `Put your $${Math.round(target / (returnPct / 100))} in ${named} (${concrete.detail}) — clears ${returnPct.toFixed(1)}% ~${pct(probability)} of the time.`
+      : `Put your $${Math.round(target / (returnPct / 100))} in ${pick.vehicle} — clears ${returnPct.toFixed(1)}% ~${pct(probability)} of the time.`,
     riskLevel: meta.riskLevel,
-    probability: pick.probability,
+    probability,
     expectedReturn: target,
     lossProfile: meta.lossProfile,
     meetsTarget: true,

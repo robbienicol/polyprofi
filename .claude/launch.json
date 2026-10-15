@@ -3,31 +3,127 @@
   "configurations": [
     {
       "name": "Expo (all platforms)",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["start"],
+      "runtimeExecutable": "bun",
+      "runtimeArgs": [
+        "start"
+      ],
       "port": 8081,
       "autoPort": false
     },
     {
       "name": "Expo (iOS)",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "ios"],
+      "runtimeExecutable": "bun",
+      "runtimeArgs": [
+        "run",
+        "ios"
+      ],
       "port": 8081,
       "autoPort": false
     },
     {
       "name": "Expo (Android)",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "android"],
+      "runtimeExecutable": "bun",
+      "runtimeArgs": [
+        "run",
+        "android"
+      ],
       "port": 8081,
       "autoPort": false
     },
     {
       "name": "Expo (Web)",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "web"],
+      "runtimeExecutable": "bun",
+      "runtimeArgs": [
+        "run",
+        "web"
+      ],
       "port": 8081,
       "autoPort": false
+    },
+    {
+      "name": "Expo (Web 8082)",
+      "runtimeExecutable": "bunx",
+      "runtimeArgs": [
+        "expo",
+        "start",
+        "--web",
+        "--port",
+        "8082"
+      ],
+      "port": 8082,
+      "autoPort": false
+    },
+    {
+      "name": "Expo (Web 8090)",
+      "runtimeExecutable": "bunx",
+      "runtimeArgs": [
+        "expo",
+        "start",
+        "--web",
+        "--port",
+        "8090"
+      ],
+      "port": 8090,
+      "autoPort": false
+    },
+    {
+      "name": "Expo (Web 8091)",
+      "runtimeExecutable": "bunx",
+      "runtimeArgs": [
+        "expo",
+        "start",
+        "--web",
+        "--port",
+        "8091"
+      ],
+      "port": 8091,
+      "autoPort": false
+    },
+    {
+      "name": "SSB64 Web",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "/Users/robbienicol/Documents/ssb64-web/server/index.js"
+      ],
+      "port": 8064,
+      "autoPort": false
+    },
+    {
+      "name": "BattleShip Web Test",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8065",
+        "-d",
+        "/Users/robbienicol/Documents/ssb64-web/vendor/BattleShip/build-web"
+      ],
+      "port": 8065,
+      "autoPort": false
+    },
+    {
+      "name": "SSB64 ROM (local test)",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "/private/tmp/claude-501/-Users-robbienicol-Documents-polyprofit/f61568d0-370f-41f5-970b-bf4c830faa64/scratchpad/romsrv/serve.py",
+        "/Users/robbienicol/Documents/ssb64-web/rom"
+      ],
+      "port": 8066,
+      "autoPort": false
+    },
+    {
+      "name": "AI Slopaissance",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "/Users/robbienicol/Documents/prompt-arcade/server.js"
+      ],
+      "port": 8067,
+      "autoPort": false,
+      "env": {
+        "PORT": "8067",
+        "DATA_DIR": "/private/tmp/claude-501/-Users-robbienicol-Documents-polyprofit/cf7cdaed-c225-433a-8fae-71e704ef4ee4/scratchpad/padata",
+        "ADMIN_TOKEN": "local-dev-key"
+      }
     }
   ]
 }
