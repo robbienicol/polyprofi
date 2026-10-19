@@ -1,9 +1,9 @@
+import { apiRequest, type TokenProvider } from '@/api/client/api-request';
 import { fetchMarketContext } from '@/api/client/market-data';
 import { fetchPolymarketSnapshot } from '@/api/client/polymarket-market-data';
-import { apiBaseUrl } from '@/lib/api-base-url';
 import { filterRoutesForQuiz } from '@/lib/quiz-profile';
 import { buildRoutePool } from '@/lib/route-pool';
-import { isRecord, isRoute, responseJson } from '@/lib/runtime-validation';
+import { isRecord, isRoute } from '@/lib/runtime-validation';
 import { withTimeout } from '@/lib/with-timeout';
 import type { Route, RouteParams } from '@/types/routes';
 
@@ -11,8 +11,6 @@ import type { Route, RouteParams } from '@/types/routes';
  * The routes for a search: the server's shared pool for this goal, narrowed to the
  * user's own filters. One request, where the device used to make ~45 of its own.
  */
-
-type TokenProvider = () => Promise<string | null>;
 
 /** Long enough for a cold pool build on the server; past it the device builds its own. */
 const SERVER_TIMEOUT_MS = 12_000;
@@ -40,33 +38,15 @@ export function fetchRoutes(params: RouteParams, options: { getToken?: TokenProv
 
 /** The shared pool, or null when the server can't be reached in time. */
 async function fetchServerPool(params: RouteParams, getToken?: TokenProvider): Promise<Route[] | null> {
-  const token = await getToken?.().catch(() => null);
-  if (!token) return null;
   const query = new URLSearchParams({
     balance: String(params.balance),
     target: String(params.target),
     timeframe: params.timeframe,
   });
-  const abort = new AbortController();
-  const timer = setTimeout(() => abort.abort(), SERVER_TIMEOUT_MS);
-  try {
-    const response = await fetch(`${apiBaseUrl()}/api/route-pool?${query}`, {
-      headers: { Authorization: `Bearer ${token}` },
-      signal: abort.signal,
-    });
-    if (!response.ok) {
-      console.warn(`[routes] server pool unavailable (${response.status}) — building on device`);
-      return null;
-    }
-    const payload = await responseJson(response);
-    const routes = isRecord(payload) && Array.isArray(payload.routes) ? payload.routes.filter(isRoute) : [];
-    return routes.length > 0 ? routes : null;
-  } catch (error) {
-    console.warn(`[routes] server pool failed — building on device: ${error instanceof Error ? error.message : String(error)}`);
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
+  const payload = await apiRequest(`/api/route-pool?${query}`, { getToken, timeoutMs: SERVER_TIMEOUT_MS });
+  const routes = isRecord(payload) && Array.isArray(payload.routes) ? payload.routes.filter(isRoute) : [];
+  if (routes.length === 0) console.warn('[routes] no server pool — building on device');
+  return routes.length > 0 ? routes : null;
 }
 
 /**

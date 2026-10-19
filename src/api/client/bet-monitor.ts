@@ -12,6 +12,7 @@ import {
   resolvedSportsOutcome,
   sportsScoreMargin,
 } from '@/lib/bet-monitor-match';
+import { createInFlightCache } from '@/lib/in-flight-cache';
 import { isPredictionMarketBet } from '@/lib/parse-bet-line';
 import { isRecord, responseJson } from '@/lib/runtime-validation';
 import { BetLiveStatus, TrackedBet } from '@/types/bets';
@@ -57,7 +58,14 @@ export async function fetchMarketsForBets(bets: TrackedBet[]): Promise<Polymarke
   return stale.length > 0 ? [...found, ...await fetchPolymarketMarketsByQuestion(stale)] : found;
 }
 
-async function fetchLiveSports(): Promise<SportsGame[]> {
+/** Scores move by the minute and every position shares them: one scoreboard sweep per 30 s. */
+const liveSportsCache = createInFlightCache<SportsGame[]>(30_000);
+
+function fetchLiveSports(): Promise<SportsGame[]> {
+  return liveSportsCache(fetchLiveSportsUncached);
+}
+
+async function fetchLiveSportsUncached(): Promise<SportsGame[]> {
   const today = new Date();
   const fmt = (d: Date) =>
     `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;

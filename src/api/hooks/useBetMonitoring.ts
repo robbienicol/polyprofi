@@ -1,6 +1,7 @@
+import { useAuth } from '@clerk/clerk-expo';
 import { useQuery } from '@tanstack/react-query';
 
-import { fetchAllBetStatuses } from '@/api/client/bet-monitor';
+import { fetchLiveStatuses } from '@/api/client/live-positions';
 import { useTrackedBets } from '@/api/hooks/useTrackedBets';
 import { BetLiveStatus } from '@/types/bets';
 
@@ -10,11 +11,12 @@ function betMonitoringQueryKey(betIds: string[]) {
 
 export function useBetMonitoring(enabled = true) {
   const { bets } = useTrackedBets();
+  const { getToken } = useAuth();
   const activeIds = bets.filter((b) => b.status === 'active').map((b) => b.id);
 
   const { data, isFetching, refetch, dataUpdatedAt } = useQuery({
     queryKey: betMonitoringQueryKey(activeIds),
-    queryFn: () => fetchAllBetStatuses(bets),
+    queryFn: () => fetchLiveStatuses(bets, getToken),
     enabled: enabled && activeIds.length > 0,
     staleTime: 30_000,
     refetchInterval: enabled && activeIds.length > 0 ? 60_000 : false,

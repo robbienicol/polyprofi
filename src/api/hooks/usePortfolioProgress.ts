@@ -1,7 +1,8 @@
+import { useAuth } from '@clerk/clerk-expo';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 
-import { fetchTrackedAssetQuotes } from '@/api/client/portfolio-live';
+import { fetchLiveQuotes } from '@/api/client/live-positions';
 import {
   getPortfolioProgress,
   PortfolioProgressPoint,
@@ -31,6 +32,7 @@ const resolvingIds = new Set<string>();
  */
 export function usePortfolioMarketInputs() {
   const { bets, isLoading: betsLoading, resolveBet } = useTrackedBets();
+  const { getToken } = useAuth();
   const allActive = bets.filter((bet) => bet.status === 'active');
   const monitoring = useBetMonitoring(allActive.length > 0);
   const [now, setNow] = useState(() => Date.now());
@@ -66,7 +68,7 @@ export function usePortfolioMarketInputs() {
 
   const quotesQuery = useQuery({
     queryKey: ['TRACKED_ASSET_QUOTES', ...symbols],
-    queryFn: () => fetchTrackedAssetQuotes(symbols),
+    queryFn: () => fetchLiveQuotes(symbols, getToken),
     enabled: symbols.length > 0,
     // Often enough that the tip of the chart visibly moves while the market is open.
     staleTime: 10_000,
