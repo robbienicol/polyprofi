@@ -24,7 +24,9 @@ const DAILY_POOL_VERSION = 'return-bucket-v4';
 // the deterministic builders alone produce a full result set — so a slow upstream
 // costs freshness, never the whole screen.
 const MARKET_DATA_TIMEOUT_MS = 20_000;
-const AI_TIMEOUT_MS = 45_000;
+// The slate is a cached read on the server; anything slower than this means the
+// server is regenerating it, and a search should not wait on that.
+const AI_TIMEOUT_MS = 3_000;
 const inflightRoutes = new Map<string, Promise<Route[]>>();
 
 type TokenProvider = () => Promise<string | null>;
@@ -60,7 +62,10 @@ export async function fetchRoutes(
 
 interface GeneratedPool {
   routes: Route[];
-  /** True when the live prediction-market feed came back empty, so the pool is stocks-only. */
+  /**
+   * True when the live prediction-market feed came back empty (the pool is stocks-only)
+   * or the AI slate didn't arrive in time. Either way the pool is served, not cached.
+   */
   degraded: boolean;
 }
 
@@ -76,7 +81,7 @@ async function generateRoutes(params: RouteParams, getToken?: TokenProvider): Pr
   );
   // Everything here is live market data for the deterministic builders. The AI part
   // is a shared daily slate fetched alongside it — no prompt is built on the device.
-  const [marketContext, polymarketSnapshot, aiRoutes, optionChains] = await Promise.all([
+  const [marketContext, polymarketSnapshot, aiSlate, optionChains] = await Promise.all([
     withTimeout(
       fetchMarketContext({ polymarket: polymarketSnapshotRequest.then((snapshot) => snapshot.context) }),
       MARKET_DATA_TIMEOUT_MS,
@@ -89,8 +94,8 @@ async function generateRoutes(params: RouteParams, getToken?: TokenProvider): Pr
   ]);
   const polymarketUniverse = polymarketSnapshot.universe;
   return {
-    routes: mergeAndRankRoutes(aiRoutes, polymarketUniverse, marketContext, optionChains, params, returnPct, fallbackMaturity),
-    degraded: polymarketUniverse.length === 0,
+    routes: mergeAndRankRoutes(aiSlate.routes, polymarketUniverse, marketContext, optionChains, params, returnPct, fallbackMaturity),
+    degraded: polymarketUniverse.length === 0 || !aiSlate.ok,
   };
 }
 
@@ -106,14 +111,14 @@ async function requestAiRoutes(
   params: RouteParams,
   fallbackMaturity: number,
   getToken?: TokenProvider,
-): Promise<Route[]> {
+): Promise<{ routes: Route[]; ok: boolean }> {
   if (!getToken) {
     console.warn('[routes:ai] no authenticated session — skipping the AI slate');
-    return [];
+    return { routes: [], ok: true };
   }
   try {
     const token = await getToken();
-    if (!token) return [];
+    if (!token) return { routes: [], ok: true };
     const abort = new AbortController();
     const abortTimer = setTimeout(() => abort.abort(), AI_TIMEOUT_MS);
     const response = await fetch(`${apiBaseUrl()}/api/ai-routes`, {
@@ -122,14 +127,16 @@ async function requestAiRoutes(
     }).finally(() => clearTimeout(abortTimer));
     if (!response.ok) {
       console.warn(`[routes:ai] server error ${response.status}`);
-      return [];
+      return { routes: [], ok: false };
     }
     const payload = await responseJson(response);
     const values: unknown[] = isRecord(payload) && Array.isArray(payload.routes) ? payload.routes : [];
-    return values.filter(isRoute).map((route) => priceSlateRoute(route, params, fallbackMaturity));
+    return { routes: values.filter(isRoute).map((route) => priceSlateRoute(route, params, fallbackMaturity)), ok: true };
   } catch (error) {
+    // A timeout lands here: the search goes on without the slate, and the pool is
+    // not cached so the next search picks it up.
     console.warn(`[routes:ai] ${error instanceof Error ? error.message : String(error)}`);
-    return [];
+    return { routes: [], ok: false };
   }
 }
 

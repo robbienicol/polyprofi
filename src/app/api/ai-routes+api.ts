@@ -37,6 +37,13 @@ const sql = neon(process.env.NEON_DATABASE_URL!);
  */
 const CACHE_KEY = 'ai-route-slate-v1';
 const TTL_MS = 24 * 60 * 60 * 1000;
+/**
+ * When the last generation failed, wait this long before trying again. Without it a
+ * dead model key turned every search into a 5-8 s failed generation before the stale
+ * slate was served — for eight days, on every request.
+ */
+const ATTEMPT_KEY = 'ai-route-slate-attempt';
+const RETRY_AFTER_MS = 60 * 60 * 1000;
 const OPENAI_MODEL = 'gpt-4o';
 const MAX_OUTPUT_TOKENS = 6_000;
 
@@ -54,11 +61,18 @@ export async function GET(request: Request): Promise<Response> {
   if (!userId) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
   const rows = (await sql`
-    SELECT bundle, fetched_at FROM polymarket_pick_cache WHERE key = ${CACHE_KEY}
-  `) as CacheRow[];
-  const cached = rows[0];
+    SELECT key, bundle, fetched_at FROM polymarket_pick_cache WHERE key IN (${CACHE_KEY}, ${ATTEMPT_KEY})
+  `) as (CacheRow & { key: string })[];
+  const cached = rows.find((row) => row.key === CACHE_KEY);
+  const lastAttempt = rows.find((row) => row.key === ATTEMPT_KEY);
   const fresh = cached != null && Date.now() - new Date(cached.fetched_at).getTime() < TTL_MS;
   if (fresh) return Response.json({ routes: cached.bundle.routes, generatedAt: cached.fetched_at });
+  const coolingDown = lastAttempt != null && Date.now() - new Date(lastAttempt.fetched_at).getTime() < RETRY_AFTER_MS;
+  if (coolingDown) {
+    return cached
+      ? Response.json({ routes: cached.bundle.routes, generatedAt: cached.fetched_at, stale: true })
+      : Response.json({ routes: [] });
+  }
 
   inflight ??= generateSlate(new URL(request.url).origin).finally(() => {
     inflight = null;
@@ -73,6 +87,13 @@ export async function GET(request: Request): Promise<Response> {
 
 async function generateSlate(origin: string): Promise<Route[] | null> {
   if (!isAiConfigured()) return null;
+  // Claimed before the slow part, so concurrent requests on other instances see it
+  // and serve the stale slate instead of each starting their own generation.
+  await sql`
+    INSERT INTO polymarket_pick_cache (key, bundle, fetched_at)
+    VALUES (${ATTEMPT_KEY}, '{}'::jsonb, now())
+    ON CONFLICT (key) DO UPDATE SET fetched_at = EXCLUDED.fetched_at
+  `.catch(() => undefined);
 
   const snapshot = await fetchPolymarketSnapshot().catch(() => ({ context: [], universe: [] }));
   // Without live prices there is nothing to validate an idea against; don't pay
