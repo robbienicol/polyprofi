@@ -1,5 +1,5 @@
 import { buildRoutePool, routePoolKey, type PoolGoal } from '@/lib/route-pool';
-import { cached } from '@/server/cache';
+import { cached } from '@/server/shared/cache';
 import { cachedMarketSnapshot } from '@/server/market/snapshot';
 import { cachedOptionChains } from '@/server/market/option-chains';
 import { readSlate } from '@/server/routes/ai-slate';

@@ -1,5 +1,5 @@
 import type { PoolGoal } from '@/lib/route-pool';
-import { HttpError } from '@/server/http';
+import { HttpError } from '@/server/shared/http';
 
 const TIMEFRAMES: readonly PoolGoal['timeframe'][] = ['today', 'week', 'month', '3months', '1year', '5years'];
 

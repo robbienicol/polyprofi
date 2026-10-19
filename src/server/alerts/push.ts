@@ -1,6 +1,8 @@
 import type { AlertMessage } from '@/lib/alert-messages';
 import { isRecord } from '@/lib/runtime-validation';
-import { sql } from '@/server/db';
+import { inArray } from 'drizzle-orm';
+
+import { db, pushTokens } from '@/server/db';
 
 /**
  * Sends notifications through Expo's push service, which forwards to Apple and
@@ -49,6 +51,6 @@ export async function sendPush(messages: PushMessage[]): Promise<void> {
     const gone = batch
       .filter((_, index) => tickets[index]?.details?.error === 'DeviceNotRegistered')
       .map((message) => message.to);
-    if (gone.length > 0) await sql`DELETE FROM push_tokens WHERE token = ANY(${gone})`;
+    if (gone.length > 0) await db.delete(pushTokens).where(inArray(pushTokens.token, gone));
   }
 }

@@ -1,2 +1,0 @@
-ALTER TABLE users
-ADD COLUMN IF NOT EXISTS quiz_answers JSONB;

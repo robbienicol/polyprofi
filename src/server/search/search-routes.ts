@@ -3,7 +3,7 @@ import { matchAssetSymbols } from '@/lib/asset-search';
 import type { PoolGoal } from '@/lib/route-pool';
 import { assetSearchRoutes, predictionSearchRoutes, type SearchResults } from '@/lib/search-routes';
 import { cachedMarketSnapshot } from '@/server/market/snapshot';
-import { memoized } from '@/server/memo';
+import { memoized } from '@/server/shared/memo';
 
 /** A keyword's markets barely move in five minutes; popular searches cost one lookup. */
 const SEARCH_TTL_MS = 5 * 60_000;

@@ -1,11 +1,12 @@
-import { sql } from '@/server/db';
+import { eq } from 'drizzle-orm';
+
+import { cacheEntries, db } from '@/server/db';
 
 /**
  * Shared, database-backed cache for anything that is the same for every user: market
  * data, option chains, the AI slate. One fetch serves everyone until it goes stale.
  *
- * Rows live in `polymarket_pick_cache` (key → JSONB, fetched_at) — the table predates
- * the name it now deserves, and every cached thing gets its own key.
+ * Rows live in `cacheEntries` (see db/schema), one key per cached thing.
  *
  * Three rules every caller gets for free:
  * - Fresh rows are served without touching the source.
@@ -26,27 +27,18 @@ interface CacheOptions<T> {
   isEmpty?: (value: T) => boolean;
 }
 
-interface CacheRow {
-  bundle: unknown;
-  fetched_at: string;
-}
-
 const inflight = new Map<string, Promise<unknown>>();
 
 export async function readCache<T>(key: string): Promise<{ value: T; fetchedAt: string } | null> {
-  const rows = (await sql`
-    SELECT bundle, fetched_at FROM polymarket_pick_cache WHERE key = ${key}
-  `) as CacheRow[];
-  const row = rows[0];
-  return row ? { value: row.bundle as T, fetchedAt: row.fetched_at } : null;
+  const [row] = await db.select().from(cacheEntries).where(eq(cacheEntries.key, key));
+  return row ? { value: row.bundle as T, fetchedAt: row.fetchedAt } : null;
 }
 
 export async function writeCache(key: string, value: unknown): Promise<void> {
-  await sql`
-    INSERT INTO polymarket_pick_cache (key, bundle, fetched_at)
-    VALUES (${key}, ${JSON.stringify(value)}::jsonb, now())
-    ON CONFLICT (key) DO UPDATE SET bundle = EXCLUDED.bundle, fetched_at = EXCLUDED.fetched_at
-  `;
+  const fetchedAt = new Date().toISOString();
+  await db.insert(cacheEntries)
+    .values({ key, bundle: value, fetchedAt })
+    .onConflictDoUpdate({ target: cacheEntries.key, set: { bundle: value, fetchedAt } });
 }
 
 function ageMs(fetchedAt: string): number {

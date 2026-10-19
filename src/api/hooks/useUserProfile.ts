@@ -2,7 +2,7 @@ import { useAuth } from '@clerk/clerk-expo';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { getProfileCompleted, setProfileCompleted } from '@/api/client/storage';
-import type { UserProfilePayload } from '@/app/api/profile+api';
+import type { UserProfilePayload } from '@/server/users/profile';
 import { deviceQuery } from '@/api/query-client';
 import { apiBaseUrl } from '@/lib/api-base-url';
 

@@ -1,5 +1,5 @@
 import { fetchYahooQuote, type TrackedAssetQuote } from '@/api/client/yahoo-quote';
-import { memoized } from '@/server/memo';
+import { memoized } from '@/server/shared/memo';
 
 /** Matches how often the portfolio refreshes a live price. */
 const QUOTE_TTL_MS = 15_000;

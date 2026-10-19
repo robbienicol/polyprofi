@@ -1,6 +1,6 @@
 import { fetchChains } from '@/api/client/options-chain-fetch';
 import type { OptionChain } from '@/api/client/options-chain-types';
-import { cached } from '@/server/cache';
+import { cached } from '@/server/shared/cache';
 
 /**
  * Live option chains for the options routes, trimmed server-side.

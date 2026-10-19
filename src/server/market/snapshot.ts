@@ -1,6 +1,6 @@
 import { fetchMarketContext, type MarketContext, type PolymarketEntry } from '@/api/client/market-data';
 import { fetchPolymarketSnapshot } from '@/api/client/polymarket-market-data';
-import { cached } from '@/server/cache';
+import { cached } from '@/server/shared/cache';
 
 /**
  * Every piece of public market data a search needs, fetched once and shared by every

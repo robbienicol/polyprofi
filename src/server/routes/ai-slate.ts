@@ -13,7 +13,7 @@ import {
 import { buildDailySlatePrompt, extractRoutesJson, formatRawPicks } from '@/api/client/route-generation-prompt';
 import { chatCompletion, isAiConfigured, type ChatResult } from '@/lib/ai-chat';
 import { isRecord, isRoute, parseJson, responseJson } from '@/lib/runtime-validation';
-import { readCache, writeCache } from '@/server/cache';
+import { readCache, writeCache } from '@/server/shared/cache';
 import { cachedMarketSnapshot } from '@/server/market/snapshot';
 import type { Route } from '@/types/routes';
 
