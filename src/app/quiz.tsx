@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
-import React, { useRef, useState } from 'react';
-import { ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform, Pressable, TextInput, View } from 'react-native';
+import React, { useState } from 'react';
+import { ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform, Pressable, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { timeframeCalendarDays } from '@/api/client/playbook';
@@ -12,7 +12,14 @@ import { useOnboardingProfile } from '@/api/hooks/useOnboardingProfile';
 import { useUserProfile } from '@/api/hooks/useUserProfile';
 import { useSavingsGoal, type SavingsGoalInput } from '@/api/hooks/useSavingsGoal';
 import { OnboardingGlow } from '@/components/onboarding/OnboardingPreviews';
-import { Icon } from '@/components/ui/Icon';
+import { CUSTOM_GOAL_EMOJI, goalSeedFrom, type GoalSeed } from '@/components/onboarding/quiz/goal-seed';
+import {
+  Field,
+  GoalChip,
+  InvestInput,
+  TargetAmountInput,
+  TimeframePicker,
+} from '@/components/onboarding/quiz/QuizFields';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, OnBrand, Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -27,50 +34,6 @@ import { buildRouteParams, referenceStakeFor, surveyAmountCeiling } from '@/lib/
 import { goalByLabel, goalRemaining, isOpenEnded } from '@/lib/savings-goal';
 import type { AcquisitionPlatform, QuizAnswers, SavingsGoal } from '@/types/bets';
 
-/** `label` sits in the one-row picker, so it has to stay short. */
-const TIMEFRAMES = [
-  { value: 'today', label: '1 day' },
-  { value: 'week', label: '1 wk' },
-  { value: 'month', label: '1 mo' },
-  { value: '3months', label: '3 mo' },
-  { value: '1year', label: '1 yr' },
-  { value: '5years', label: '5 yr' },
-] as const;
-
-/** Icon for a seeded goal that did not carry one of its own. */
-const CUSTOM_GOAL_EMOJI = '🎯';
-
-/** A goal chosen in goal setup, carried here in the URL and not yet saved anywhere. */
-interface GoalSeed {
-  label: string;
-  emoji: string;
-  /** Null for the open-ended goal, which has no finish line. */
-  target: number | null;
-}
-
-/**
- * The seeded goal, or null when the quiz was opened any other way. Goal setup hands
- * the choice over rather than writing it, so a goal only ever reaches the Goals tab
- * by way of a search.
- */
-function goalSeedFrom(label?: string, emoji?: string, target?: string): GoalSeed | null {
-  const trimmed = label?.trim();
-  if (!trimmed) return null;
-  const amount = Number(target);
-  return {
-    label: trimmed,
-    emoji: emoji?.trim() || CUSTOM_GOAL_EMOJI,
-    target: Number.isFinite(amount) && amount > 0 ? Math.round(amount) : null,
-  };
-}
-
-/** Widest goal the hero number can show without running off a small phone. */
-const MAX_TARGET_DIGITS = 7;
-
-/** How many thousands separators toLocaleString will add to this many digits. */
-function groupingCommas(digits: string): number {
-  return Math.max(0, Math.ceil(digits.length / 3) - 1);
-}
 
 export default function QuizScreen(): React.ReactElement {
   // A goal can be named by whoever sent us here (the Goals tab, a goal detail
@@ -178,7 +141,6 @@ function QuizForm({
 }): React.ReactElement {
   const router = useRouter();
   const theme = useTheme();
-  const amountRef = useRef<TextInput>(null);
 
   // Searching again for a goal you already have should continue it, so the name
   // and the amount both start from the goal the last search was for.
@@ -202,7 +164,6 @@ function QuizForm({
   // Seeded from the last search, else from the signup survey, else blank. Blank is fine:
   // it falls back to the goal-derived stake, which is what the app did before this asked.
   const [invest, setInvest] = useState(String(prefill?.investmentCeiling ?? investmentCeiling ?? ''));
-  const [investFocused, setInvestFocused] = useState(false);
 
   const targetValue = Number(target.replace(/[^0-9]/g, '')) || 0;
   const investValue = Number(invest.replace(/[^0-9]/g, '')) || 0;
@@ -289,121 +250,17 @@ function QuizForm({
                 <ThemedText style={{ fontSize: 24, lineHeight: 32, fontWeight: '600', color: theme.textSecondary }}>
                   I want to make
                 </ThemedText>
-                <Pressable
-                  onPress={() => amountRef.current?.focus()}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Amount, ${targetValue} dollars. Double tap to edit.`}
-                  className="flex-row items-end self-start active:opacity-80"
-                  style={{ marginTop: 2, borderBottomWidth: 3, borderBottomColor: Brand[500], paddingBottom: 2 }}>
-                  <ThemedText style={{ fontSize: 34, lineHeight: 66, fontWeight: '700', color: Brand[500] }}>$</ThemedText>
-                  <TextInput
-                    ref={amountRef}
-                    value={targetValue > 0 ? targetValue.toLocaleString() : target}
-                    // Cap digits here rather than with maxLength, which would count the
-                    // grouping commas and swallow the last two digits of a 7-figure goal.
-                    onChangeText={(text) => setTarget(text.replace(/[^0-9]/g, '').slice(0, MAX_TARGET_DIGITS))}
-                    keyboardType="number-pad"
-                    inputMode="numeric"
-                    selectTextOnFocus
-                    placeholder="0"
-                    placeholderTextColor={Brand[500] + '55'}
-                    style={{
-                      color: Brand[500],
-                      fontSize: 56,
-                      lineHeight: 66,
-                      fontWeight: '800',
-                      fontVariant: ['tabular-nums'],
-                      padding: 0,
-                      // TextInput can't hug its text, so size it from the character count —
-                      // otherwise the underline runs on past the number. Digits are wide and
-                      // the grouping commas are narrow; the slack covers the widest digit in
-                      // the platform font, since a tight fit clips.
-                      width: Math.max(1, target.length) * 37 + groupingCommas(target) * 14 + 12,
-                    }}
-                  />
-                </Pressable>
+                <TargetAmountInput target={target} targetValue={targetValue} onChange={setTarget} />
 
-                {attachedLabel ? (
-                  <View
-                    className="flex-row items-center self-start"
-                    style={{ gap: 8, paddingLeft: 12, paddingRight: 6, paddingVertical: 6, borderRadius: Radius.pill, backgroundColor: theme.backgroundSelected, marginTop: 14 }}>
-                    <ThemedText style={{ fontSize: 13, fontWeight: '700', color: theme.textSecondary }}>
-                      Toward {attachedLabel}
-                    </ThemedText>
-                    <Pressable
-                      onPress={() => setGoalAttached(false)}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Search without ${attachedLabel}`}
-                      hitSlop={8}
-                      className="active:opacity-60"
-                      style={{ width: 22, height: 22, borderRadius: 999, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.background }}>
-                      <Icon glyph="✕" size={12} color={theme.textSecondary} strokeWidth={2.5} />
-                    </Pressable>
-                  </View>
-                ) : null}
+                {attachedLabel ? <GoalChip label={attachedLabel} onRemove={() => setGoalAttached(false)} /> : null}
               </View>
 
               <Field label="Within">
-                <View
-                  className="flex-row"
-                  accessibilityRole="radiogroup"
-                  style={{ padding: 4, borderRadius: Radius.pill, backgroundColor: theme.backgroundSelected }}>
-                  {TIMEFRAMES.map((tf) => {
-                    const selected = timeframe === tf.value;
-                    return (
-                      <Pressable
-                        key={tf.value}
-                        onPress={() => {
-                          Keyboard.dismiss();
-                          if (!selected) Haptic.select();
-                          setTimeframe(tf.value);
-                        }}
-                        accessibilityRole="radio"
-                        accessibilityState={{ selected }}
-                        className="flex-1 items-center active:opacity-80"
-                        style={{
-                          paddingVertical: 10,
-                          borderRadius: Radius.pill,
-                          backgroundColor: selected ? theme.backgroundElevated : 'transparent',
-                          ...(selected ? Shadow.card : null),
-                        }}>
-                        <ThemedText
-                          style={{ fontSize: 13, fontWeight: '700', color: selected ? theme.text : theme.textSecondary }}>
-                          {tf.label}
-                        </ThemedText>
-                      </Pressable>
-                    );
-                  })}
-                </View>
+                <TimeframePicker value={timeframe} onChange={setTimeframe} />
               </Field>
 
               <Field label="Investing up to">
-                <View
-                  className="flex-row items-center"
-                  style={{
-                    gap: 6,
-                    paddingHorizontal: 14,
-                    borderWidth: 1.5,
-                    borderRadius: Radius.md,
-                    borderColor: investFocused ? Brand[500] : theme.borderStrong,
-                    backgroundColor: theme.backgroundElement,
-                  }}>
-                  <ThemedText style={{ fontSize: 17, fontWeight: '800', color: Brand[500] }}>$</ThemedText>
-                  <TextInput
-                    value={investValue > 0 ? investValue.toLocaleString() : invest}
-                    onChangeText={(text) => setInvest(text.replace(/[^0-9]/g, '').slice(0, MAX_TARGET_DIGITS))}
-                    onFocus={() => setInvestFocused(true)}
-                    onBlur={() => setInvestFocused(false)}
-                    keyboardType="number-pad"
-                    inputMode="numeric"
-                    selectTextOnFocus
-                    returnKeyType="done"
-                    placeholder="Any amount"
-                    placeholderTextColor={theme.textTertiary}
-                    accessibilityLabel="Most you would invest, in dollars"
-                    style={{ flex: 1, color: theme.text, fontSize: 17, fontWeight: '700', fontVariant: ['tabular-nums'], paddingVertical: 14 }}
-                  />
-                </View>
+                <InvestInput invest={invest} investValue={investValue} onChange={setInvest} />
               </Field>
             </View>
           </Pressable>
@@ -424,18 +281,6 @@ function QuizForm({
           </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
-    </View>
-  );
-}
-
-function Field({ label, children }: React.PropsWithChildren<{ label: string }>): React.ReactElement {
-  const theme = useTheme();
-  return (
-    <View style={{ gap: 10 }}>
-      <ThemedText style={{ fontSize: 11, fontWeight: '800', letterSpacing: 0.9, color: theme.textTertiary }}>
-        {label.toUpperCase()}
-      </ThemedText>
-      {children}
     </View>
   );
 }
