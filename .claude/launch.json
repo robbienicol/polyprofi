@@ -112,6 +112,13 @@
       "autoPort": false
     },
     {
+      "name": "Pathey Web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "/Users/robbienicol/Documents/ChatGPT/Pathey web", "run", "dev"],
+      "port": 3000,
+      "autoPort": false
+    },
+    {
       "name": "AI Slopaissance",
       "runtimeExecutable": "node",
       "runtimeArgs": [

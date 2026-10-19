@@ -20,8 +20,11 @@ import {
   OnboardingGlow,
   renderOnboardingPreview,
 } from "@/components/onboarding/OnboardingPreviews";
-import { ONBOARDING_SLIDES } from "@/components/onboarding/onboarding-data";
 import { WelcomeHero } from "@/components/onboarding/WelcomeHero";
+import {
+  ONBOARDING_SLIDES,
+  type OnboardingSlide,
+} from "@/components/onboarding/onboarding-data";
 import { useSpokenLine } from "@/components/onboarding/quiz-kit";
 import { ThemedText } from "@/components/themed-text";
 import { BrandMark } from "@/components/ui/BrandMark";
@@ -48,8 +51,8 @@ function ProgressTrack({
   position: Animated.Value;
 }): React.ReactElement {
   const theme = useTheme();
-  const [trackWidth, setTrackWidth] = useState(0);
-  const segmentWidth =
+  const [trackWidth, setTrackWidth] = useState<number>(0);
+  const segmentWidth: number =
     trackWidth > 0
       ? (trackWidth - TRACK_GAP * (SLIDE_COUNT - 1)) / SLIDE_COUNT
       : 0;
@@ -60,7 +63,7 @@ function ProgressTrack({
 
   return (
     <View className="flex-row" style={{ gap: TRACK_GAP }} onLayout={onLayout}>
-      {ONBOARDING_SLIDES.map((slide, index) => (
+      {ONBOARDING_SLIDES.map((slide: OnboardingSlide, index: number) => (
         <View
           key={slide.id}
           style={{
@@ -206,7 +209,13 @@ function OnboardingCarousel({
       <WelcomeHero
         onStart={() => setStarted(true)}
         // Their name and answers come back with the account once they sign in.
-        onSignIn={() => completeOnboarding(undefined, { onSuccess: () => router.replace("/sign-in" as Href) })}
+        onSignIn={() =>
+          completeOnboarding(undefined, {
+            // Through `index`, not straight to sign-in: an already signed-in user
+            // can't reach the sign-in screen, and `index` knows where each belongs.
+            onSuccess: () => router.replace("/" as Href),
+          })
+        }
       />
     );
   }
@@ -749,8 +758,10 @@ function NameSlide({
             <Icon glyph="✓" size={12} color={OnBrand} strokeWidth={3} />
           ) : null}
         </View>
-        <ThemedText style={{ fontSize: 14, fontWeight: "600", color: theme.text }}>
-          I'm 18 or older
+        <ThemedText
+          style={{ fontSize: 14, fontWeight: "600", color: theme.text }}
+        >
+          I&apos;m 18 or older
         </ThemedText>
       </Pressable>
     </View>

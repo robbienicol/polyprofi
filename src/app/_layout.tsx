@@ -111,6 +111,8 @@ function AppearanceSync(): null {
   const { preferences } = usePreferences();
   const choice = preferences.appearance;
   useEffect(() => {
+    // react-native-web's Appearance has no setColorScheme; calling it crashes the web app.
+    if (typeof Appearance.setColorScheme !== 'function') return;
     Appearance.setColorScheme(choice === 'system' ? 'unspecified' : choice);
   }, [choice]);
   return null;
