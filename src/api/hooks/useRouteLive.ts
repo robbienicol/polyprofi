@@ -1,6 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
 import { useIsFocused } from 'expo-router';
-import { useMemo } from 'react';
 
 import { fetchPolymarketMarketsBySlug } from '@/api/client/polymarket-market-data';
 import { fetchOutcomeHistory, fetchStockHistory, type PriceSeries } from '@/api/client/price-history';
@@ -60,7 +59,7 @@ export interface RouteLive {
  * Keys are per symbol / token, so ten cards on VOO share one request.
  */
 export function useRouteLive(route: Route): { live: RouteLive | null; loading: boolean } {
-  const feed = useMemo(() => routeFeed(route), [route]);
+  const feed = routeFeed(route);
   // Polls only while its screen is in front: a tab left behind stays mounted, and
   // twelve cards ticking on a screen nobody is looking at is wasted requests.
   const focused = useIsFocused();
@@ -82,12 +81,7 @@ export function useRouteLive(route: Route): { live: RouteLive | null; loading: b
     enabled: feed?.kind === 'quote' || !!tokenId,
     refetchInterval: focused ? (feed?.kind === 'quote' ? 15 * SECOND : MINUTE) : false,
     staleTime: 10 * SECOND,
-    queryFn: () => {
-      const now = Date.now();
-      return feed?.kind === 'quote'
-        ? fetchStockHistory(feed.symbol, '1D', now, now)
-        : fetchOutcomeHistory(tokenId!, '1W', now, now, 15);
-    },
+    queryFn: () => fetchLiveHistory(feed, tokenId!),
   });
 
   const midpoint = useQuery({
@@ -98,25 +92,39 @@ export function useRouteLive(route: Route): { live: RouteLive | null; loading: b
     queryFn: () => fetchMidpoint(tokenId!),
   });
 
-  const live = useMemo(() => {
-    const base = history.data;
-    if (!feed || !base || base.prices.length < 2) return null;
-    const mid = midpoint.data;
-    const lastTime = base.times[base.times.length - 1];
-    // A midpoint fetched before the history refetch is older than its last print;
-    // laid on the end at its own time it would draw the line backwards.
-    const joined = mid != null
-      ? { ...base, times: [...base.times, Math.max(midpoint.dataUpdatedAt, lastTime + 1)], prices: [...base.prices, mid] }
-      : base;
-    const series = changePoints(joined);
-    const last = series.prices[series.prices.length - 1];
-    const baseline = feed.kind === 'quote' && base.previousClose ? base.previousClose : series.prices[0];
-    return { series, baseline, last, window: feed.kind === 'quote' ? 'today' : '7d', kind: feed.kind };
-  }, [feed, history.data, midpoint.data, midpoint.dataUpdatedAt]);
+  const live = liveSeries(feed, history.data, midpoint.data, midpoint.dataUpdatedAt);
 
   // Loading only while a request is in flight: a symbol Yahoo cannot resolve or a
   // market with no token ends as "no line", not a placeholder that pulses forever.
   return { live, loading: feed != null && live == null && (token.isLoading || history.isLoading) };
+}
+
+/** The history with the live midpoint laid on the end, as the card draws it. */
+function liveSeries(
+  feed: RouteFeed | null,
+  base: PriceSeries | null | undefined,
+  mid: number | null | undefined,
+  midUpdatedAt: number,
+): RouteLive | null {
+  if (!feed || !base || base.prices.length < 2) return null;
+  const lastTime = base.times[base.times.length - 1];
+  // A midpoint fetched before the history refetch is older than its last print;
+  // laid on the end at its own time it would draw the line backwards.
+  const joined = mid != null
+    ? { ...base, times: [...base.times, Math.max(midUpdatedAt, lastTime + 1)], prices: [...base.prices, mid] }
+    : base;
+  const series = changePoints(joined);
+  const last = series.prices[series.prices.length - 1];
+  const baseline = feed.kind === 'quote' && base.previousClose ? base.previousClose : series.prices[0];
+  return { series, baseline, last, window: feed.kind === 'quote' ? 'today' : '7d', kind: feed.kind };
+}
+
+/** Today's quotes for a stock, a week of prints for an outcome — both up to now. */
+function fetchLiveHistory(feed: RouteFeed | null, tokenId: string): Promise<PriceSeries | null> {
+  const now = Date.now();
+  return feed?.kind === 'quote'
+    ? fetchStockHistory(feed.symbol, '1D', now, now)
+    : fetchOutcomeHistory(tokenId, '1W', now, now, 15);
 }
 
 async function fetchMidpoint(tokenId: string): Promise<number | null> {

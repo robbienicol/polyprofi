@@ -1,4 +1,3 @@
-import { useCallback } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { appendSavedRoutesBatch, getSavedRoutesHistory, MAX_SAVED_BATCHES } from '@/api/client/storage';
@@ -36,7 +35,7 @@ export function useSavedRoutes() {
     onSettled: () => queryClient.invalidateQueries({ queryKey: savedRoutesQueryKey() }),
   });
 
-  const saveGeneratedRoutes = useCallback((quizSnapshot: QuizAnswers, routes: Route[], goalId?: string) => {
+  const saveGeneratedRoutes = (quizSnapshot: QuizAnswers, routes: Route[], goalId?: string) => {
     if (routes.length === 0) return;
     saveBatch({
       id: `${Date.now()}`,
@@ -45,7 +44,7 @@ export function useSavedRoutes() {
       routes,
       ...(goalId ? { goalId } : null),
     });
-  }, [saveBatch]);
+  };
 
   return {
     history: history ?? [],

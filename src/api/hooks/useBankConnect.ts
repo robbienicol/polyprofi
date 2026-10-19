@@ -1,6 +1,6 @@
 import { useAuth } from '@clerk/clerk-expo';
 import { useQueryClient } from '@tanstack/react-query';
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 import { Platform } from 'react-native';
 import type { LinkSuccess } from 'react-native-plaid-link-sdk';
 
@@ -41,7 +41,7 @@ export function useBankConnect(): {
   const [linkedCount, setLinkedCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
-  const connect = useCallback(async () => {
+  const connect = async () => {
     if (connecting) return;
     setConnecting(true);
     setError(null);
@@ -96,7 +96,7 @@ export function useBankConnect(): {
     } finally {
       setConnecting(false);
     }
-  }, [connecting, getToken, queryClient]);
+  };
 
   return { connect, connecting, connected, linkedCount, error };
 }

@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 
 import {
   clearSpendingCuts,
@@ -60,7 +60,7 @@ export function useSpendingCuts(): {
     onSuccess: () => queryClient.setQueryData(spendingCutsQueryKey(), null),
   });
 
-  const importCsv = useCallback(async (text: string): Promise<boolean> => {
+  const importCsv = async (text: string): Promise<boolean> => {
     setError(null);
     const parsed = parseAppleCardCsv(text);
     if (parsed.error) {
@@ -86,9 +86,9 @@ export function useSpendingCuts(): {
       transactionCount: parsed.transactions.length,
     });
     return true;
-  }, [store]);
+  };
 
-  const pickAndImport = useCallback(async (): Promise<boolean> => {
+  const pickAndImport = async (): Promise<boolean> => {
     setError(null);
     try {
       // Apple's export is text/csv, but a file that has been through Files, Mail or
@@ -107,7 +107,7 @@ export function useSpendingCuts(): {
       setError('Could not read that file.');
       return false;
     }
-  }, [importCsv]);
+  };
 
   return {
     imported: data ?? null,

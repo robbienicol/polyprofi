@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { memo, useEffect, useRef, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -64,14 +64,14 @@ export default function PositionsScreen(): React.ReactElement {
     return () => clearTimeout(timer);
   }, [highlightId, bets.length]);
 
-  const onRefresh = useCallback(async () => {
+  const onRefresh = async () => {
     setRefreshing(true);
     try {
       await progress.refresh();
     } finally {
       setRefreshing(false);
     }
-  }, [progress]);
+  };
 
   const sellAlerts = progress.sellAlerts;
 
@@ -89,26 +89,14 @@ export default function PositionsScreen(): React.ReactElement {
     }
   }, [sellAlerts, bets]);
 
-  const stats = useMemo(() => {
-    // Watched positions never had money in them, so they cannot count as wagered.
-    const wagered = bets
-      .filter((b) => b.status !== 'watching')
-      .reduce((s, b) => s + b.amountWagered, 0);
-    const won = bets.filter((b) => b.status === 'won').reduce((s, b) => s + b.expectedReturn, 0);
-    const lost = bets.filter((b) => b.status === 'lost').reduce((s, b) => s + b.amountWagered, 0);
-    return {
-      wagered,
-      pnl: won - lost + progress.livePnl + progress.projectedPnl,
-      active: bets.filter((b) => b.status === 'active').length,
-    };
-  }, [bets, progress.livePnl, progress.projectedPnl]);
+  const stats = positionStats(bets, progress.livePnl + progress.projectedPnl);
 
   const pnlPositive = stats.pnl >= 0;
   const showSpinner = refreshing || progress.isRefreshing;
   // Foreground-only polling (useBetMonitoring) means prices simply stop moving
   // while the app is closed — reopening after a day away can otherwise show a
   // stale "Live data · 9:41 AM" with no hint that it's yesterday's 9:41 AM.
-  const dataAgeMs = progress.updatedAt ? Date.now() - progress.updatedAt.getTime() : null;
+  const dataAgeMs = progress.updatedAt ? msSince(progress.updatedAt) : null;
   const isStale = dataAgeMs != null && dataAgeMs > 24 * 60 * 60 * 1000;
 
   return (
@@ -543,4 +531,24 @@ function StatusBadge({
       <ThemedText style={{ fontSize: 11, fontWeight: '700', color }}>{label}</ThemedText>
     </View>
   );
+}
+
+/** How long ago `date` was, read at render time. */
+function msSince(date: Date): number {
+  return Date.now() - date.getTime();
+}
+
+/** Money in, profit so far (settled plus open) and open count. */
+function positionStats(bets: TrackedBet[], openPnl: number) {
+  // Watched positions never had money in them, so they cannot count as wagered.
+  const wagered = bets
+    .filter((b) => b.status !== 'watching')
+    .reduce((s, b) => s + b.amountWagered, 0);
+  const won = bets.filter((b) => b.status === 'won').reduce((s, b) => s + b.expectedReturn, 0);
+  const lost = bets.filter((b) => b.status === 'lost').reduce((s, b) => s + b.amountWagered, 0);
+  return {
+    wagered,
+    pnl: won - lost + openPnl,
+    active: bets.filter((b) => b.status === 'active').length,
+  };
 }

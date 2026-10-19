@@ -1,6 +1,6 @@
 import { useAuth } from '@clerk/clerk-expo';
 import { useRouter, type Href } from 'expo-router';
-import React, { useCallback, useState } from 'react';
+import React, { useState } from 'react';
 import { View } from 'react-native';
 
 import { useEarlyAccess } from '@/api/hooks/useEarlyAccess';
@@ -21,7 +21,7 @@ export default function EarlyAccessScreen(): React.ReactElement {
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
 
-  const handleSubmit = useCallback(() => {
+  const handleSubmit = () => {
     if (isGranting) return;
     if (!isValidEarlyAccessCode(code)) {
       setError('That code isn’t right. Check it and try again.');
@@ -31,7 +31,7 @@ export default function EarlyAccessScreen(): React.ReactElement {
     grantEarlyAccess(undefined, {
       onSuccess: () => router.replace('/' as Href),
     });
-  }, [code, grantEarlyAccess, isGranting, router]);
+  };
 
   return (
     <AuthScreen

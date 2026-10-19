@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { useDeferredValue, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -60,6 +60,19 @@ const DEFAULT_FILTERS: Filters = {
 };
 
 const NO_ROUTES: Route[] = [];
+
+/** `base` plus whatever in `extra` it doesn't already hold, by id. The same array when nothing is new. */
+function appendNew(base: Route[], extra: Route[]): Route[] {
+  if (extra.length === 0) return base;
+  const known = new Set(base.map((route) => route.id));
+  const fresh = extra.filter((route) => !known.has(route.id));
+  return fresh.length === 0 ? base : [...base, ...fresh];
+}
+
+/** A unique id for something created now: a tracked position or a preview batch. */
+function stampedId(prefix: string): string {
+  return `${prefix}-${Date.now()}`;
+}
 /** Cards mounted at a time. Each carries a live chart, so fewer at once is a faster list. */
 const PAGE_SIZE = 12;
 
@@ -104,10 +117,9 @@ function RoutesScreen(): React.ReactElement {
   const [targetDrag, setTargetDrag] = useState<{ base: number; value: number } | null>(null);
   const targetOverride = baseParams && targetDrag && targetDrag.base === baseParams.target ? targetDrag.value : null;
   // Everything that scores, sizes or labels routes reads this one.
-  const sessionParams = useMemo<RouteParams | null>(
-    () => (baseParams && targetOverride != null ? { ...baseParams, target: targetOverride } : baseParams),
-    [baseParams, targetOverride],
-  );
+  const sessionParams: RouteParams | null = baseParams && targetOverride != null
+    ? { ...baseParams, target: targetOverride }
+    : baseParams;
   // The goal these routes belong to: the one the quiz handed over, else the one
   // the shown batch was saved for. Every position taken here inherits it. A goal
   // that has since been swept away is dropped rather than left dangling on a
@@ -123,16 +135,9 @@ function RoutesScreen(): React.ReactElement {
   const [recentRoutes, setRecentRoutes] = useState<Route[] | null>(null);
   const shouldFetch = baseParams !== null && (isGenerating || manualRefresh);
   const { routes: fetchedRoutes, isLoading, isFetching, error, refresh } = useRoutes(baseParams, { enabled: shouldFetch });
-  // Memoised because the keyword-search pool below derives from it: a fresh array
-  // every render would rebuild that pool every render.
-  const generatedRoutes = useMemo(
-    // A pull-to-refresh keeps the list it already has on screen until the new one
-    // arrives; only a fresh search starts from an empty, loading list.
-    () => (isGenerating || (manualRefresh && fetchedRoutes.length > 0)
-      ? fetchedRoutes
-      : viewedBatch?.routes ?? recentRoutes ?? latestBatch?.routes ?? []),
-    [isGenerating, manualRefresh, fetchedRoutes, viewedBatch?.routes, recentRoutes, latestBatch?.routes],
-  );
+  const generatedRoutes = isGenerating || (manualRefresh && fetchedRoutes.length > 0)
+    ? fetchedRoutes
+    : viewedBatch?.routes ?? recentRoutes ?? latestBatch?.routes ?? [];
   // Spending cuts are built here rather than fetched with the rest: they come from a
   // statement held on this device, so they never went to the server that generated the
   // pool, and they are re-derived against whichever goal is on screen instead of being
@@ -142,19 +147,16 @@ function RoutesScreen(): React.ReactElement {
   // Card rewards come the same way, from the accounts linked through Plaid: which
   // card each dollar went on, against which card would have paid more for it.
   const { profile: cardProfile } = useCardRewards();
-  const routes = useMemo(() => {
-    if (!sessionParams) return generatedRoutes;
-    const deadlineDays = timeframeCalendarDays(sessionParams.timeframe);
-    const cutRoutes = importedCuts && importedCuts.cuts.length > 0
-      ? buildSpendingCutRoutes({ cuts: importedCuts.cuts, target: sessionParams.target, deadlineDays })
-      : [];
-    const cardRoutes = cardProfile
-      ? buildCardRewardRoutes({ profile: cardProfile, target: sessionParams.target, deadlineDays })
-      : [];
-    if (cutRoutes.length === 0 && cardRoutes.length === 0) return generatedRoutes;
-    const known = new Set(generatedRoutes.map((route) => route.id));
-    return [...generatedRoutes, ...[...cutRoutes, ...cardRoutes].filter((route) => !known.has(route.id))];
-  }, [cardProfile, generatedRoutes, importedCuts, sessionParams]);
+  const routes = sessionParams
+    ? appendNew(generatedRoutes, [
+      ...(importedCuts && importedCuts.cuts.length > 0
+        ? buildSpendingCutRoutes({ cuts: importedCuts.cuts, target: sessionParams.target, deadlineDays: timeframeCalendarDays(sessionParams.timeframe) })
+        : []),
+      ...(cardProfile
+        ? buildCardRewardRoutes({ profile: cardProfile, target: sessionParams.target, deadlineDays: timeframeCalendarDays(sessionParams.timeframe) })
+        : []),
+    ])
+    : generatedRoutes;
 
   const [trackingId, setTrackingId] = useState<string | null>(null);
   const [trackingAmount, setTrackingAmount] = useState('');
@@ -228,17 +230,10 @@ function RoutesScreen(): React.ReactElement {
   // a hundred markets matching neither. The strict local match is what the list
   // actually shows, so it is also what gets merged and counted: a "149 pulled in"
   // line above an empty list is worse than no line at all.
-  const searchRoutes = useMemo(
-    () => (keyword
+  const searchRoutes = keyword
       ? [...predictionSearch.routes, ...assetSearch.routes].filter((route) => routeMatchesKeyword(route, keyword))
-      : []),
-    [keyword, predictionSearch.routes, assetSearch.routes],
-  );
-  const searchPool = useMemo(() => {
-    if (searchRoutes.length === 0) return routes;
-    const known = new Set(routes.map((route) => route.id));
-    return [...routes, ...searchRoutes.filter((route) => !known.has(route.id))];
-  }, [routes, searchRoutes]);
+      : [];
+  const searchPool = appendNew(routes, searchRoutes);
 
   // The user's own weighting of the four score components. Held in preferences, not
   // screen state: someone who has said they cannot afford to lose the stake means it
@@ -268,10 +263,6 @@ function RoutesScreen(): React.ReactElement {
     filters.groupByChance,
   ].filter(Boolean).length;
 
-  // Memoised: this rescores, scores and ranks the entire pool, and it used to run on
-  // every render — including every event the investment slider fires while being
-  // dragged, which is what made that slider feel unresponsive.
-  //
   // Deferred: a chip, a sort or a slider answers at once, and the re-rank renders
   // behind it instead of holding the tap until the whole list has been rebuilt.
   const deferredParams = useDeferredValue(sessionParams);
@@ -282,12 +273,9 @@ function RoutesScreen(): React.ReactElement {
     || deferredInvestment !== displayedInvestment
     || deferredFilters !== filters
     || deferredMaxLoss !== displayedMaxLoss;
-  const results = useMemo(
-    () => (deferredParams
+  const results = deferredParams
       ? buildRouteResults(searchPool, deferredParams, deferredInvestment, deferredFilters, scoreWeights, deferredMaxLoss)
-      : null),
-    [searchPool, deferredParams, deferredInvestment, deferredFilters, scoreWeights, deferredMaxLoss],
-  );
+      : null;
 
   // Stable handlers, so RouteCard's memo holds: a chip tap re-renders this screen, and
   // fresh closures per card re-rendered all twelve cards before the chip could light
@@ -305,7 +293,7 @@ function RoutesScreen(): React.ReactElement {
         // merged in live and never saved, so history alone cannot find them.
         if (sessionParams) {
           setPreview({
-            id: `preview-${Date.now()}`,
+            id: stampedId('preview'),
             generatedAt: new Date().toISOString(),
             quizSnapshot: sessionParams,
             routes: searchPool,
@@ -319,8 +307,8 @@ function RoutesScreen(): React.ReactElement {
   // A new search can take a while on a slow network; say so instead of looking stuck.
   useSlowToast(isGenerating && isLoading, 'Still pricing routes — live markets are slow right now…', 10_000);
   useSlowToast(keyword !== '' && (predictionSearch.isSearching || assetSearch.isSearching), 'Still searching every market…', 5_000);
-  const trackCard = useCallback((route: Route) => cardActions.current?.track(route), []);
-  const openCard = useCallback((route: Route) => cardActions.current?.open(route), []);
+  const trackCard = (route: Route) => cardActions.current?.track(route);
+  const openCard = (route: Route) => cardActions.current?.open(route);
   const ranked = results?.ranked ?? [];
   const filtered = results?.filtered ?? [];
   const goalReach = results?.goalReach ?? null;
@@ -430,7 +418,7 @@ function RoutesScreen(): React.ReactElement {
    */
   function confirmCardRewards(route: Route, plan: NonNullable<Route['cardRewards']>): void {
     trackBet({
-      id: `${route.id}-${Date.now()}`,
+      id: stampedId(route.id),
       goalId: sessionGoalId,
       category: route.category,
       emoji: route.emoji,
@@ -490,7 +478,7 @@ function RoutesScreen(): React.ReactElement {
     const listedStake = results?.selectedStake(route) ?? referenceStake;
     const [atAmount = route] = rescoreForStake([route], listedStake, amount, sessionParams?.target ?? 0);
     trackBet({
-      id: `${route.id}-${Date.now()}`,
+      id: stampedId(route.id),
       // The position works toward the goal this search was run for.
       goalId: sessionGoalId,
       category: route.category,

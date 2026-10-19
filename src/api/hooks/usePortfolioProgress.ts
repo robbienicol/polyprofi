@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { fetchTrackedAssetQuotes } from '@/api/client/portfolio-live';
 import {
@@ -31,7 +31,7 @@ const resolvingIds = new Set<string>();
  */
 export function usePortfolioMarketInputs() {
   const { bets, isLoading: betsLoading, resolveBet } = useTrackedBets();
-  const allActive = useMemo(() => bets.filter((bet) => bet.status === 'active'), [bets]);
+  const allActive = bets.filter((bet) => bet.status === 'active');
   const monitoring = useBetMonitoring(allActive.length > 0);
   const [now, setNow] = useState(() => Date.now());
 
@@ -59,13 +59,10 @@ export function usePortfolioMarketInputs() {
     return () => clearInterval(timer);
   }, []);
 
-  const symbols = useMemo(
-    () => [...new Set(allActive
+  const symbols = [...new Set(allActive
       .filter((bet) => isStockOrEtfCategory(bet.category))
       .map((bet) => stockIdentity(bet).symbol)
-      .filter((symbol): symbol is string => Boolean(symbol)))],
-    [allActive]
-  );
+      .filter((symbol): symbol is string => Boolean(symbol)))];
 
   const quotesQuery = useQuery({
     queryKey: ['TRACKED_ASSET_QUOTES', ...symbols],
@@ -76,13 +73,13 @@ export function usePortfolioMarketInputs() {
     refetchInterval: symbols.length > 0 ? 15_000 : false,
   });
 
-  const refresh = useCallback(async () => {
+  const refresh = async () => {
     setNow(Date.now());
     await Promise.all([
       monitoring.refetch(),
       symbols.length > 0 ? quotesQuery.refetch() : Promise.resolve(),
     ]);
-  }, [monitoring, quotesQuery, symbols.length]);
+  };
 
   return {
     allBets: bets,
@@ -118,7 +115,7 @@ export function usePortfolioProgress(fallbackBalance: number, options: Portfolio
   const queryClient = useQueryClient();
   const market = usePortfolioMarketInputs();
   const { allActive, betsLoading, now, quotes, statusById } = market;
-  const active = useMemo(() => (scopeToBets ? scopeToBets(allActive) : allActive), [allActive, scopeToBets]);
+  const active = scopeToBets ? scopeToBets(allActive) : allActive;
 
   const historyQuery = useQuery({
     queryKey: PROGRESS_QUERY_KEY,
@@ -128,15 +125,13 @@ export function usePortfolioProgress(fallbackBalance: number, options: Portfolio
     ...deviceQuery,
   });
 
-  const snapshot = useMemo(() => {
-    return calculatePortfolioProgress({
-      active,
-      fallbackBalance,
-      statusesById: statusById,
-      quotes,
-      now,
-    });
-  }, [active, fallbackBalance, statusById, now, quotes]);
+  const snapshot = calculatePortfolioProgress({
+    active,
+    fallbackBalance,
+    statusesById: statusById,
+    quotes,
+    now,
+  });
 
   useEffect(() => {
     if (!recordHistory || betsLoading || historyQuery.isLoading || snapshot.basisValue <= 0) return;

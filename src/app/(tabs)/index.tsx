@@ -1,6 +1,6 @@
 import { useUser } from '@clerk/clerk-expo';
 import { useRouter, type Href } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -84,20 +84,17 @@ function HomeScreen(): React.ReactElement {
   // Reached goals drop off: this asks what is left to earn, and a finished goal has
   // nothing. Closest to done first, so the one worth another route is at the top;
   // open-ended goals have no fraction and sort last on their own.
-  const openGoals = useMemo(
-    () => goals
+  const openGoals = goals
       .filter((goal) => !goal.achievedAt)
       .map((goal) => ({ goal, progress: goalsProgress.progressFor(goal.id) }))
       .sort((a, b) => (
         goalProgressFraction(b.progress.netGain, b.goal) - goalProgressFraction(a.progress.netGain, a.goal)
-      )),
-    [goals, goalsProgress],
-  );
+      ));
   const shownGoals = openGoals.slice(0, 3);
 
-  const activeBets = useMemo(() => bets.filter((bet) => bet.status === 'active'), [bets]);
+  const activeBets = bets.filter((bet) => bet.status === 'active');
   // Now, as the header shows it. The chart ends on exactly this point.
-  const livePoint = useMemo<PortfolioProgressPoint | null>(() => (
+  const livePoint: PortfolioProgressPoint | null = (
     progress.activeCount > 0
       ? {
         time: progress.updatedAt?.getTime() ?? progress.observedAt,
@@ -107,7 +104,7 @@ function HomeScreen(): React.ReactElement {
         projectedPnl: progress.projectedPnl,
       }
       : null
-  ), [progress.activeCount, progress.basisValue, progress.livePnl, progress.observedAt, progress.projectedPnl, progress.updatedAt, progress.value]);
+  );
 
   // Drawn from each holding's own price history, not from the moments the app was open.
   const { series } = usePortfolioSeries({

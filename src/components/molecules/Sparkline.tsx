@@ -1,5 +1,5 @@
 import { ArrowDown, ArrowUp, Minus } from 'lucide-react-native';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { LayoutChangeEvent, View } from 'react-native';
 import Animated, {
   Easing,
@@ -41,36 +41,7 @@ export function Sparkline({ live, height = 44, strokeWidth = 1.75 }: { live: Rou
   const color = useChartColor().line;
   const gradientId = 'spark-fill';
 
-  const chart = useMemo(() => {
-    if (width <= 0 || prices.length < 2) return null;
-    const lo = Math.min(...prices, live.baseline);
-    const hi = Math.max(...prices, live.baseline);
-    const span = hi - lo || 1;
-    const drawW = width - PAD_RIGHT;
-    // By time, not by index: with only the moves kept, equal spacing would stretch
-    // a quiet day as wide as a busy hour.
-    const t0 = times[0];
-    const tSpan = times[times.length - 1] - t0 || 1;
-    const x = (index: number) => ((times[index] - t0) / tSpan) * drawW;
-    const y = (value: number) => PAD_Y + (1 - (value - lo) / span) * (height - PAD_Y * 2);
-    const xs = prices.map((_, index) => x(index));
-    const ys = prices.map(y);
-    const points = xs.map((px, index) => `${px.toFixed(1)},${ys[index].toFixed(1)}`);
-    const line = `M${points.join('L')}`;
-    let length = 0;
-    for (let index = 1; index < xs.length; index += 1) {
-      length += Math.hypot(xs[index] - xs[index - 1], ys[index] - ys[index - 1]);
-    }
-    return {
-      line,
-      length: Math.ceil(length) + 1,
-      area: `${line}L${drawW.toFixed(1)},${height}L0,${height}Z`,
-      baseY: y(live.baseline),
-      endX: x(prices.length - 1),
-      endY: y(prices[prices.length - 1]),
-      drawW,
-    };
-  }, [height, live.baseline, prices, times, width]);
+  const chart = sparkGeometry(prices, times, live.baseline, width, height);
 
   const pulse = useSharedValue(0);
   useEffect(() => {
@@ -234,4 +205,36 @@ export function SparklinePlaceholder({ height = 44 }: { height?: number }) {
       <View style={{ height: 2, borderRadius: 1, backgroundColor: theme.border }} />
     </Animated.View>
   );
+}
+
+/** Path, length and end point of the sparkline, in canvas pixels. Null when there is nothing to draw. */
+function sparkGeometry(prices: number[], times: number[], baseline: number, width: number, height: number) {
+  if (width <= 0 || prices.length < 2) return null;
+  const lo = Math.min(...prices, baseline);
+  const hi = Math.max(...prices, baseline);
+  const span = hi - lo || 1;
+  const drawW = width - PAD_RIGHT;
+  // By time, not by index: with only the moves kept, equal spacing would stretch
+  // a quiet day as wide as a busy hour.
+  const t0 = times[0];
+  const tSpan = times[times.length - 1] - t0 || 1;
+  const x = (index: number) => ((times[index] - t0) / tSpan) * drawW;
+  const y = (value: number) => PAD_Y + (1 - (value - lo) / span) * (height - PAD_Y * 2);
+  const xs = prices.map((_, index) => x(index));
+  const ys = prices.map(y);
+  const points = xs.map((px, index) => `${px.toFixed(1)},${ys[index].toFixed(1)}`);
+  const line = `M${points.join('L')}`;
+  let length = 0;
+  for (let index = 1; index < xs.length; index += 1) {
+    length += Math.hypot(xs[index] - xs[index - 1], ys[index] - ys[index - 1]);
+  }
+  return {
+    line,
+    length: Math.ceil(length) + 1,
+    area: `${line}L${drawW.toFixed(1)},${height}L0,${height}Z`,
+    baseY: y(baseline),
+    endX: x(prices.length - 1),
+    endY: y(prices[prices.length - 1]),
+    drawW,
+  };
 }

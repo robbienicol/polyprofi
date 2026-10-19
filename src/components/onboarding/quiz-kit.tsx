@@ -8,7 +8,7 @@
  * pages read as one screen changing its mind rather than twelve screens.
  */
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Pressable, View } from 'react-native';
 
 import { Icon } from '@/components/ui/Icon';
@@ -41,7 +41,7 @@ export interface Speech {
  * to read back never waits on it.
  */
 export function useSpokenLine(line: string | null | undefined, id: string): Speech {
-  const words = useMemo(() => (line ? line.split(' ').filter(Boolean) : []), [line]);
+  const words = line ? line.split(' ').filter(Boolean) : [];
   // Depended on by length rather than by the array: the copy object is rebuilt
   // on every tap, and restarting the line each time would make it stutter.
   const count = words.length;

@@ -1,5 +1,5 @@
 import { useRouter, type Href } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Animated, Easing, Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -32,7 +32,7 @@ export default function PlanReadyScreen(): React.ReactElement {
 
   // Through `index`, not straight to goal setup: a retake from Settings already has
   // goals, and `index` is what knows where each user belongs next.
-  const next = useCallback(() => router.replace('/' as Href), [router]);
+  const next = () => router.replace('/' as Href);
 
   return (
     <View className="flex-1" style={{ backgroundColor: theme.background }}>

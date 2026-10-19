@@ -1,5 +1,5 @@
 import { Stack, useFocusEffect, useRouter, type Href } from 'expo-router';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -90,7 +90,7 @@ export default function BuildingPlanScreen(): React.ReactElement {
   const { update: updatePreferences } = usePreferences();
 
   const answers = profile.answers;
-  const tasks = useMemo(() => buildTasks(answers), [answers]);
+  const tasks = buildTasks(answers);
 
   // Fired once. The bars are the cover for this write, not a substitute for it —
   // if it fails the funnel still moves on, and index.tsx will route the user
@@ -127,15 +127,15 @@ export default function BuildingPlanScreen(): React.ReactElement {
   // already built and moves straight on, instead of parking on a fully-loaded
   // screen with no button and nothing left to wait for.
   const finished = useRef(false);
-  const done = useCallback(() => {
+  const done = () => {
     finished.current = true;
     router.replace('/plan-ready' as Href);
-  }, [router]);
+  };
 
   useFocusEffect(
-    useCallback(() => {
+    () => {
       if (finished.current) done();
-    }, [done])
+    }
   );
 
   return (

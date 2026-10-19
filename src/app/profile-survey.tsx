@@ -1,5 +1,5 @@
 import { useRouter, type Href } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Animated, Easing, Linking, Modal, Pressable, ScrollView, TextInput, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -107,13 +107,13 @@ function SurveyForm({
   // Skips past any page whose PAGE_VISIBLE predicate says it doesn't apply —
   // bank_connect chief among them, reachable only by toggling "Cut spending"
   // on the markets page just before it.
-  const advance = useCallback(() => {
+  const advance = () => {
     let next = index + 1;
     while (next < PAGE_IDS.length - 1 && !isPageVisible(PAGE_IDS[next], answers)) next++;
     setIndex(Math.min(PAGE_IDS.length - 1, next));
-  }, [index, answers]);
+  };
 
-  const back = useCallback(() => {
+  const back = () => {
     // A retake opened from Settings can be backed out of from its first page.
     if (index === 0) {
       if (router.canGoBack()) router.back();
@@ -122,28 +122,28 @@ function SurveyForm({
     let prev = index - 1;
     while (prev > 0 && !isPageVisible(PAGE_IDS[prev], answers)) prev--;
     setIndex(Math.max(0, prev));
-  }, [index, answers, router]);
+  };
 
-  const nearby = useCallback((target: number) => Math.abs(target - index) <= RENDER_WINDOW, [index]);
+  const nearby = (target: number) => Math.abs(target - index) <= RENDER_WINDOW;
 
   /* --------------------------------------------------------------- answers */
 
-  const set = useCallback(<K extends keyof SurveyAnswers>(key: K, value: SurveyAnswers[K]) => {
+  const set = <K extends keyof SurveyAnswers>(key: K, value: SurveyAnswers[K]) => {
     setAnswers((current) => ({ ...current, [key]: value }));
-  }, []);
+  };
 
   /** Multi-select toggle for either of the two string-list answers still asked. */
-  const toggleIn = useCallback((key: 'markets' | 'avoidPlatforms', value: string) => {
+  const toggleIn = (key: 'markets' | 'avoidPlatforms', value: string) => {
     setAnswers((current) => {
       const list = current[key];
       const next = list.includes(value) ? list.filter((item) => item !== value) : [...list, value];
       return { ...current, [key]: next };
     });
-  }, []);
+  };
 
   /* ----------------------------------------------------------- permissions */
 
-  const enableNotifications = useCallback(async () => {
+  const enableNotifications = async () => {
     if (askingPermission) return;
     setAskingPermission(true);
     // The OS sheet is modal and sits there until it is answered — nothing may
@@ -152,16 +152,16 @@ function SurveyForm({
     setAskingPermission(false);
     setNotifications(granted ? 'enabled' : 'skipped');
     advance();
-  }, [advance, askingPermission]);
+  };
 
-  const skipNotifications = useCallback(() => {
+  const skipNotifications = () => {
     setNotifications('skipped');
     advance();
-  }, [advance]);
+  };
 
   /* --------------------------------------------------------------- finish */
 
-  const finish = useCallback(() => {
+  const finish = () => {
     if (submitting) return;
     setSubmitting(true);
     // The answers are handed to the build screen rather than saved here: that
@@ -170,7 +170,7 @@ function SurveyForm({
     void patchProfileAsync({ answers, notifications })
       .then(() => router.replace('/building-plan' as Href))
       .catch(() => setSubmitting(false));
-  }, [answers, notifications, patchProfileAsync, router, submitting]);
+  };
 
   /* ----------------------------------------------------------------- chrome */
 

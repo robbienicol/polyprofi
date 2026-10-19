@@ -1,6 +1,6 @@
 import { useSignIn } from '@clerk/clerk-expo';
 import { useRouter, type Href } from 'expo-router';
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { TextInput, View } from 'react-native';
 
 import {
@@ -41,7 +41,7 @@ export default function SignInScreen(): React.ReactElement {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleSignIn = useCallback(async () => {
+  const handleSignIn = async () => {
     if (!isLoaded || loading) return;
     setLoading(true);
     setError('');
@@ -110,15 +110,15 @@ export default function SignInScreen(): React.ReactElement {
     } finally {
       setLoading(false);
     }
-  }, [isLoaded, loading, signIn, email, password, setActive, router]);
+  };
 
-  const handleDevLogin = useCallback(async () => {
+  const handleDevLogin = async () => {
     setError('');
     const message = await runDevLogin();
     if (message) setError(message);
-  }, [runDevLogin]);
+  };
 
-  const handleSecondFactor = useCallback(async () => {
+  const handleSecondFactor = async () => {
     if (!isLoaded || !secondFactor || loading) return;
     setLoading(true);
     setError('');
@@ -136,7 +136,7 @@ export default function SignInScreen(): React.ReactElement {
     } finally {
       setLoading(false);
     }
-  }, [isLoaded, secondFactor, loading, signIn, code, setActive]);
+  };
 
   if (secondFactor) {
     return (

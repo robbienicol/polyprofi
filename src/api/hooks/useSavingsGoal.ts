@@ -1,6 +1,5 @@
 import { useAuth } from '@clerk/clerk-expo';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback } from 'react';
 
 import {
   getSavingsGoalState,
@@ -33,6 +32,13 @@ function parseSavingsGoalPayload(value: unknown): SavingsGoalState | LegacySavin
 
 /** Goal writes run one at a time — see mutateState. Module-level so every hook instance shares it. */
 let goalWriteQueue: Promise<unknown> = Promise.resolve();
+
+/** Runs `write` after every write already queued. */
+function enqueueGoalWrite<T>(write: () => Promise<T>): Promise<T> {
+  const run = goalWriteQueue.then(write, write);
+  goalWriteQueue = run.catch(() => undefined);
+  return run;
+}
 
 const EMPTY_STATE: SavingsGoalState = {
   goals: [],
@@ -119,9 +125,7 @@ export function useSavingsGoal() {
       const next = change(stored ?? EMPTY_STATE);
       return next ? persistState(next) : null;
     };
-    const run = goalWriteQueue.then(write, write);
-    goalWriteQueue = run.catch(() => undefined);
-    return run;
+    return enqueueGoalWrite(write);
   };
 
   const { data, status } = useQuery({
@@ -224,19 +228,13 @@ export function useSavingsGoal() {
     onSuccess: (state) => queryClient.setQueryData(queryKey, state),
   });
 
-  const addGoal = useCallback(
-    (input: SavingsGoalInput, options?: Parameters<typeof addGoalRaw>[1]): void =>
-      addGoalRaw(buildGoal(input), options),
-    [addGoalRaw],
-  );
+  const addGoal = (input: SavingsGoalInput, options?: Parameters<typeof addGoalRaw>[1]): void =>
+      addGoalRaw(buildGoal(input), options);
 
-  const addGoalAsync = useCallback(
-    async (input: SavingsGoalInput): Promise<{ state: SavingsGoalState; goal: SavingsGoal }> => {
+  const addGoalAsync = async (input: SavingsGoalInput): Promise<{ state: SavingsGoalState; goal: SavingsGoal }> => {
       const goal = buildGoal(input);
       return { state: await addGoalRawAsync(goal), goal };
-    },
-    [addGoalRawAsync],
-  );
+    };
 
   // Promote a draft into a real goal. Called when the user acquires against it:
   // committing money is what turns a search into something worth tracking.
@@ -282,7 +280,7 @@ export function useSavingsGoal() {
     },
   });
 
-  const removeGoal = useCallback((goalId: string): void => removeGoals([goalId]), [removeGoals]);
+  const removeGoal = (goalId: string): void => removeGoals([goalId]);
 
   // Mark one goal reached (idempotent) and bump the lifetime count once.
   const { mutate: markAchieved } = useMutation({

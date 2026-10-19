@@ -1,5 +1,4 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback } from 'react';
 
 import { getPreferences, updatePreferences } from '@/api/client/storage';
 import {
@@ -46,8 +45,5 @@ export function usePreferences() {
 /** Formats money in the user's chosen display currency. */
 export function useMoney(): (amount: number, options?: MoneyOptions) => string {
   const { preferences } = usePreferences();
-  return useCallback(
-    (amount: number, options?: MoneyOptions) => formatMoney(amount, preferences.currency, options),
-    [preferences.currency],
-  );
+  return (amount: number, options?: MoneyOptions) => formatMoney(amount, preferences.currency, options);
 }

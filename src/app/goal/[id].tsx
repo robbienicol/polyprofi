@@ -1,5 +1,5 @@
 import { Redirect, useLocalSearchParams, useRouter, type Href } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -48,7 +48,7 @@ export default function GoalDetailScreen(): React.ReactElement {
   const [searching, setSearching] = useState(false);
 
   const goal = allGoals.find((candidate) => candidate.id === id) ?? null;
-  const goalBets = useMemo(() => (id ? betsForGoal(bets, id) : []), [bets, id]);
+  const goalBets = id ? betsForGoal(bets, id) : [];
 
   if (isLoading) return <View style={{ flex: 1, backgroundColor: theme.background }} />;
   // The goal was deleted (or never existed) — the list is the only sane place to be.

@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { View } from 'react-native';
 
 import { useMoney } from '@/api/hooks/usePreferences';
@@ -66,7 +66,7 @@ function InsightCard({
 export function CapitalSplitCard({ bets }: { bets: TrackedBet[] }): React.ReactElement | null {
   const theme = useTheme();
   const money = useMoney();
-  const split = useMemo(() => capitalSplit(bets), [bets]);
+  const split = capitalSplit(bets);
   if (split.staked <= 0) return null;
 
   const bands = [
@@ -148,10 +148,7 @@ export function GoalContributionCard({
 }): React.ReactElement | null {
   const theme = useTheme();
   const money = useMoney();
-  const rows = useMemo(
-    () => goalContributions(bets, (betId) => positionById?.[betId]?.unrealizedPnl ?? 0),
-    [bets, positionById],
-  );
+  const rows = goalContributions(bets, (betId) => positionById?.[betId]?.unrealizedPnl ?? 0);
   if (rows.length === 0) return null;
 
   const totalGain = rows.reduce((sum, row) => sum + row.netGain, 0);
@@ -227,8 +224,8 @@ export function MaturityTimelineCard({
 }): React.ReactElement | null {
   const theme = useTheme();
   const money = useMoney();
-  const averageDays = useMemo(() => averageDaysToMaturity(bets), [bets]);
-  const timeline = useMemo(() => goalTimeline(bets, goals), [bets, goals]);
+  const averageDays = averageDaysToMaturity(bets);
+  const timeline = goalTimeline(bets, goals);
   if (timeline.positions.length === 0 && timeline.deadlines.length === 0) return null;
 
   const horizon = timeline.horizonDays;
@@ -329,7 +326,7 @@ export function CheapestPathCard({
 }): React.ReactElement | null {
   const theme = useTheme();
   const money = useMoney();
-  const paths = useMemo(() => cheapestPaths(bets, conservative), [bets, conservative]);
+  const paths = cheapestPaths(bets, conservative);
   if (paths.length === 0) return null;
 
   const best = paths[0];

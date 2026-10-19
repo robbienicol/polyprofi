@@ -1,5 +1,5 @@
 import { useSignIn } from '@clerk/clerk-expo';
-import React, { useCallback, useState } from 'react';
+import React, { useState } from 'react';
 import { View } from 'react-native';
 
 import {
@@ -24,8 +24,7 @@ export default function ForgotPasswordScreen(): React.ReactElement {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const sendCode = useCallback(
-    async (isResend: boolean) => {
+  const sendCode = async (isResend: boolean) => {
       if (!isLoaded || loading) return;
       setLoading(true);
       setError('');
@@ -42,11 +41,9 @@ export default function ForgotPasswordScreen(): React.ReactElement {
       } finally {
         setLoading(false);
       }
-    },
-    [isLoaded, loading, signIn, email],
-  );
+    };
 
-  const handleReset = useCallback(async () => {
+  const handleReset = async () => {
     if (!isLoaded || loading) return;
     setLoading(true);
     setError('');
@@ -72,7 +69,7 @@ export default function ForgotPasswordScreen(): React.ReactElement {
     } finally {
       setLoading(false);
     }
-  }, [isLoaded, loading, signIn, code, password, setActive]);
+  };
 
   return (
     <AuthScreen

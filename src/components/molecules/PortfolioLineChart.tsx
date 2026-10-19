@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { LayoutChangeEvent, Pressable, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -96,53 +96,7 @@ export function PortfolioLineChart({
   const rising = risingOverride ?? seriesRising(series);
   const color = rising ? Semantic.positive : Semantic.negative;
 
-  const chart = useMemo(() => {
-    const { points, baseline } = series;
-    if (width <= 0 || points.length < 2) return null;
-
-    const plotLeft = PAD_LEFT;
-    const plotRight = width - PAD_RIGHT;
-    const plotWidth = Math.max(1, plotRight - plotLeft);
-
-    const domain = series.xMode === 'time' && series.domain ? series.domain : null;
-    const span = domain ? Math.max(1, domain.end - domain.start) : 1;
-    const xOfTime = (time: number) => plotLeft + ((time - (domain?.start ?? 0)) / span) * plotWidth;
-    const xs = points.map((point, index) => (domain
-      ? Math.min(plotRight, Math.max(plotLeft, xOfTime(point.time)))
-      : plotLeft + (index / (points.length - 1)) * plotWidth));
-
-    const values = points.map((point) => point.value);
-    if (baseline) values.push(baseline.value);
-    const min = Math.min(...values);
-    const max = Math.max(...values);
-    // A flat line sits in the middle rather than on an edge.
-    const spread = Math.max(max - min, Math.max(0.01, Math.abs(max) * 0.0005));
-    const low = min - spread * 0.06;
-    const high = max + spread * 0.06;
-    const yOf = (value: number) => PAD_Y + ((high - value) / (high - low)) * (height - PAD_Y * 2);
-    const ys = points.map((point) => yOf(point.value));
-
-    let d = '';
-    xs.forEach((x, index) => {
-      d += `${index === 0 ? 'M' : 'L'}${x.toFixed(2)},${ys[index].toFixed(2)}`;
-    });
-
-    return {
-      d,
-      xs,
-      ys,
-      baselineY: baseline ? yOf(baseline.value) : null,
-      faded: domain && series.extendedHours
-        ? series.extendedHours.map((spanTime) => {
-          // Out to the canvas edge when the span starts or ends the day, so no
-          // sliver of the padding is left unfaded.
-          const from = spanTime.start <= domain.start ? 0 : xOfTime(spanTime.start);
-          const to = spanTime.end >= domain.end ? width : xOfTime(spanTime.end);
-          return { x: from, width: Math.max(0, to - from) };
-        }).filter((rect) => rect.width > 0)
-        : [],
-    };
-  }, [height, series, width]);
+  const chart = chartGeometry(series, width, height);
 
   /* ---------------------------------------------------------------- live dot */
 
@@ -170,10 +124,10 @@ export function PortfolioLineChart({
   }, [chart, xs, ys]);
 
   const points = series.points;
-  const report = useCallback((index: number) => {
+  const report = (index: number) => {
     setScrubbing(index >= 0);
     onScrub?.(index >= 0 ? points[index] ?? null : null);
-  }, [onScrub, points]);
+  };
 
   // Runs on the UI thread: the cursor tracks the finger at display rate, and only a
   // change of index crosses to JS to update the header.
@@ -328,4 +282,53 @@ export function PortfolioLineChart({
       </View>
     </View>
   );
+}
+
+/** Path, points and faded spans for the plot, in canvas pixels. Null when there is nothing to draw. */
+function chartGeometry(series: ChartSeries, width: number, height: number) {
+  const { points, baseline } = series;
+  if (width <= 0 || points.length < 2) return null;
+
+  const plotLeft = PAD_LEFT;
+  const plotRight = width - PAD_RIGHT;
+  const plotWidth = Math.max(1, plotRight - plotLeft);
+
+  const domain = series.xMode === 'time' && series.domain ? series.domain : null;
+  const span = domain ? Math.max(1, domain.end - domain.start) : 1;
+  const xOfTime = (time: number) => plotLeft + ((time - (domain?.start ?? 0)) / span) * plotWidth;
+  const xs = points.map((point, index) => (domain
+    ? Math.min(plotRight, Math.max(plotLeft, xOfTime(point.time)))
+    : plotLeft + (index / (points.length - 1)) * plotWidth));
+
+  const values = points.map((point) => point.value);
+  if (baseline) values.push(baseline.value);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  // A flat line sits in the middle rather than on an edge.
+  const spread = Math.max(max - min, Math.max(0.01, Math.abs(max) * 0.0005));
+  const low = min - spread * 0.06;
+  const high = max + spread * 0.06;
+  const yOf = (value: number) => PAD_Y + ((high - value) / (high - low)) * (height - PAD_Y * 2);
+  const ys = points.map((point) => yOf(point.value));
+
+  let d = '';
+  xs.forEach((x, index) => {
+    d += `${index === 0 ? 'M' : 'L'}${x.toFixed(2)},${ys[index].toFixed(2)}`;
+  });
+
+  return {
+    d,
+    xs,
+    ys,
+    baselineY: baseline ? yOf(baseline.value) : null,
+    faded: domain && series.extendedHours
+      ? series.extendedHours.map((spanTime) => {
+        // Out to the canvas edge when the span starts or ends the day, so no
+        // sliver of the padding is left unfaded.
+        const from = spanTime.start <= domain.start ? 0 : xOfTime(spanTime.start);
+        const to = spanTime.end >= domain.end ? width : xOfTime(spanTime.end);
+        return { x: from, width: Math.max(0, to - from) };
+      }).filter((rect) => rect.width > 0)
+      : [],
+  };
 }

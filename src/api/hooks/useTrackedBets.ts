@@ -1,5 +1,4 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback } from 'react';
 
 import { getTrackedBets, saveTrackedBets } from '@/api/client/storage';
 import { deviceQuery } from '@/api/query-client';
@@ -105,13 +104,13 @@ export function useTrackedBets() {
    * every Add. `onSuccess` runs on the tap; a failed write puts the list back and
    * says so.
    */
-  const trackBet = useCallback((bet: TrackedBet, options?: { onSuccess?: () => void }) => {
+  const trackBet = (bet: TrackedBet, options?: { onSuccess?: () => void }) => {
     addBetMutation(bet, {
       onError: () => toast.error('Could not save that to your plan. Try again.'),
     });
     options?.onSuccess?.();
     toast.success('Added to your plan');
-  }, [addBetMutation]);
+  };
 
   const { mutate: resolveBet } = useMutation({
     mutationFn: ({ id, status }: { id: string; status: TrackedBet['status'] }) =>

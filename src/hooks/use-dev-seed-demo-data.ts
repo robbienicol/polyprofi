@@ -1,6 +1,6 @@
 import { useAuth } from '@clerk/clerk-expo';
 import { useQueryClient } from '@tanstack/react-query';
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 
 import { clearSpendingCuts, saveSpendingCuts, saveTrackedBets, setSavingsGoalState } from '@/api/client/storage';
 import { apiBaseUrl } from '@/lib/api-base-url';
@@ -221,7 +221,7 @@ export function useDevSeedDemoData(): {
   const queryClient = useQueryClient();
   const [loading, setLoading] = useState(false);
 
-  const pushGoals = useCallback(async (state: SavingsGoalState) => {
+  const pushGoals = async (state: SavingsGoalState) => {
     await setSavingsGoalState(state, isSignedIn ? userId ?? undefined : undefined);
     if (isSignedIn) {
       const token = await getToken();
@@ -232,9 +232,9 @@ export function useDevSeedDemoData(): {
       }).catch(() => {});
     }
     await queryClient.invalidateQueries({ queryKey: ['SAVINGS_GOAL', isSignedIn ? userId : 'local'] });
-  }, [getToken, isSignedIn, queryClient, userId]);
+  };
 
-  const run = useCallback(async () => {
+  const run = async () => {
     if (!__DEV__ || loading) return;
     setLoading(true);
     try {
@@ -248,9 +248,9 @@ export function useDevSeedDemoData(): {
     } finally {
       setLoading(false);
     }
-  }, [loading, pushGoals, queryClient]);
+  };
 
-  const clear = useCallback(async () => {
+  const clear = async () => {
     if (!__DEV__ || loading) return;
     setLoading(true);
     try {
@@ -262,7 +262,7 @@ export function useDevSeedDemoData(): {
     } finally {
       setLoading(false);
     }
-  }, [loading, pushGoals, queryClient]);
+  };
 
   return { available: __DEV__, loading, run, clear };
 }

@@ -1,4 +1,3 @@
-import { useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { deviceQuery } from '@/api/query-client';
@@ -32,9 +31,9 @@ export function useRoutePreview() {
     ...deviceQuery,
   });
 
-  const setPreview = useCallback((batch: SavedRoutesBatch) => {
+  const setPreview = (batch: SavedRoutesBatch) => {
     queryClient.setQueryData(routePreviewQueryKey(), batch);
-  }, [queryClient]);
+  };
 
   return { preview: data ?? null, setPreview };
 }
@@ -46,7 +45,7 @@ export function useRoutePreview() {
  */
 export function useSetRoutePreview() {
   const queryClient = useQueryClient();
-  return useCallback((batch: SavedRoutesBatch) => {
+  return (batch: SavedRoutesBatch) => {
     queryClient.setQueryData(routePreviewQueryKey(), batch);
-  }, [queryClient]);
+  };
 }

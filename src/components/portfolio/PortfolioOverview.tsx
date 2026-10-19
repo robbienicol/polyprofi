@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { Pressable, View } from 'react-native';
 
 import { useMoney } from '@/api/hooks/usePreferences';
@@ -185,10 +185,10 @@ export function PortfolioOverview({
   const [metric, setMetric] = useState<AllocationMetric>('share');
   const [valueView, setValueView] = useState<ValueView>('now');
 
-  const activeBets = useMemo(() => bets.filter((bet) => bet.status === 'active'), [bets]);
-  const stats = useMemo(() => portfolioStats(bets, conservative), [bets, conservative]);
-  const rows = useMemo(() => buildAllocationRows(bets, fallbackCash, conservative), [bets, conservative, fallbackCash]);
-  const outcomes = useMemo(() => outcomeRange(bets), [bets]);
+  const activeBets = bets.filter((bet) => bet.status === 'active');
+  const stats = portfolioStats(bets, conservative);
+  const rows = buildAllocationRows(bets, fallbackCash, conservative);
+  const outcomes = outcomeRange(bets);
   // Break-even only gets a mark when it actually falls on the bar.
   const breakEvenPosition = outcomes.best > outcomes.worst
     && outcomes.staked >= outcomes.worst

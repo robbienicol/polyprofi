@@ -1,5 +1,4 @@
 import { useQuery } from '@tanstack/react-query';
-import { useMemo } from 'react';
 
 import { fetchAllBetStatuses } from '@/api/client/bet-monitor';
 import { useTrackedBets } from '@/api/hooks/useTrackedBets';
@@ -21,12 +20,12 @@ export function useBetMonitoring(enabled = true) {
     refetchInterval: enabled && activeIds.length > 0 ? 60_000 : false,
   });
 
-  const statusById = useMemo(() => (data ?? []).reduce<Record<string, BetLiveStatus>>((acc, s) => {
+  const statusById = (data ?? []).reduce<Record<string, BetLiveStatus>>((acc, s) => {
     acc[s.betId] = s;
     return acc;
-  }, {}), [data]);
+  }, {});
 
-  const sellAlerts = useMemo(() => (data ?? []).filter((s) => s.sellRecommended), [data]);
+  const sellAlerts = (data ?? []).filter((s) => s.sellRecommended);
 
   return {
     statuses: data ?? [],

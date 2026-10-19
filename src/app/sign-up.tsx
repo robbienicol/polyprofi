@@ -1,6 +1,6 @@
 import { useSignUp } from '@clerk/clerk-expo';
 import { useRouter, type Href } from 'expo-router';
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { TextInput, View } from 'react-native';
 
 import {
@@ -28,7 +28,7 @@ export default function SignUpScreen(): React.ReactElement {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleSignUp = useCallback(async () => {
+  const handleSignUp = async () => {
     if (!isLoaded || loading) return;
     setLoading(true);
     setError('');
@@ -60,9 +60,9 @@ export default function SignUpScreen(): React.ReactElement {
     } finally {
       setLoading(false);
     }
-  }, [isLoaded, loading, signUp, email, password, setActive]);
+  };
 
-  const handleVerify = useCallback(async () => {
+  const handleVerify = async () => {
     if (!isLoaded || loading) return;
     setLoading(true);
     setError('');
@@ -82,9 +82,9 @@ export default function SignUpScreen(): React.ReactElement {
     } finally {
       setLoading(false);
     }
-  }, [isLoaded, loading, signUp, code, setActive]);
+  };
 
-  const handleResend = useCallback(async () => {
+  const handleResend = async () => {
     if (!isLoaded || loading) return;
     setLoading(true);
     setError('');
@@ -97,7 +97,7 @@ export default function SignUpScreen(): React.ReactElement {
     } finally {
       setLoading(false);
     }
-  }, [isLoaded, loading, signUp]);
+  };
 
   if (step === 'verify') {
     return (

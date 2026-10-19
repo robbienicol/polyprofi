@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 
 /**
  * Pull-to-refresh that spins only for a pull. Tied to a query's isFetching, the
@@ -7,12 +7,12 @@ import { useCallback, useState } from 'react';
  */
 export function usePullRefresh(refresh: () => unknown): { refreshing: boolean; onRefresh: () => void } {
   const [refreshing, setRefreshing] = useState(false);
-  const onRefresh = useCallback(() => {
+  const onRefresh = () => {
     setRefreshing(true);
     void Promise.resolve()
       .then(refresh)
       .catch(() => undefined)
       .finally(() => setRefreshing(false));
-  }, [refresh]);
+  };
   return { refreshing, onRefresh };
 }

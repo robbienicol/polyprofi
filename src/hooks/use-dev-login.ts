@@ -1,6 +1,6 @@
 import { useSignIn, useSignUp } from '@clerk/clerk-expo';
 import { useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 
 import { clerkErrorMessage } from '@/lib/clerk-errors';
 import { DEV_LOGIN } from '@/lib/dev-login';
@@ -22,7 +22,7 @@ export function useDevLogin(): {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
 
-  const run = useCallback(async (): Promise<string | null> => {
+  const run = async (): Promise<string | null> => {
     if (!DEV_LOGIN) return 'Set EXPO_PUBLIC_DEV_LOGIN_EMAIL and _PASSWORD in .env first.';
     if (!signInLoaded || !signUpLoaded) return 'Auth is still loading — try again in a second.';
 
@@ -61,7 +61,7 @@ export function useDevLogin(): {
     } finally {
       setLoading(false);
     }
-  }, [signInLoaded, signUpLoaded, signIn, signUp, setActive, router]);
+  };
 
   return { available: DEV_LOGIN !== null, loading, run };
 }

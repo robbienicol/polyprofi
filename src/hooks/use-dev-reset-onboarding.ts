@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter, type Href } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 
 import { resetOnboardingForDev } from '@/api/client/storage';
 
@@ -23,7 +23,7 @@ export function useDevResetOnboarding(): {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
 
-  const run = useCallback(async () => {
+  const run = async () => {
     if (!__DEV__ || loading) return;
     setLoading(true);
     try {
@@ -35,7 +35,7 @@ export function useDevResetOnboarding(): {
     } finally {
       setLoading(false);
     }
-  }, [loading, queryClient, router]);
+  };
 
   return { available: __DEV__, loading, run };
 }

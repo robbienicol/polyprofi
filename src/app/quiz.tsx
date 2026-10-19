@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform, Pressable, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -209,7 +209,7 @@ function QuizForm({
   const investCeiling = investValue || investmentCeiling;
   const attachedLabel = goalAttached ? goalLabelShown : null;
 
-  const submit = useCallback(() => {
+  const submit = () => {
     if (targetValue <= 0 || isSaving) return;
     Haptic.press();
     Keyboard.dismiss();
@@ -266,7 +266,7 @@ function QuizForm({
       Haptic.error();
       setIsSaving(false);
     });
-  }, [targetValue, isSaving, goalAttached, startingGoal, newGoalSeed, addGoalAsync, timeframe, saveAnswers, prefill?.riskTolerance, defaultRiskTolerance, categories, excludedCategories, preferredPlatforms, investCeiling, router]);
+  };
 
   return (
     <View className="flex-1" style={{ backgroundColor: theme.background }}>

@@ -1,5 +1,5 @@
 import { Redirect, useRouter, type Href } from 'expo-router';
-import React, { useCallback } from 'react';
+import React from 'react';
 import { ActivityIndicator, Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -25,19 +25,19 @@ export default function PaywallScreen(): React.ReactElement {
   const { subscribe, isSubscribing } = useSubscription();
   const { quizAnswers } = useQuizAnswers();
 
-  const handleSubscribe = useCallback(() => {
+  const handleSubscribe = () => {
     subscribe(undefined, {
       onSuccess: () => {
         if (quizAnswers) router.replace('/(tabs)/routes?generate=1');
         else router.replace('/(tabs)/routes');
       },
     });
-  }, [subscribe, router, quizAnswers]);
+  };
 
-  const handleClose = useCallback(() => {
+  const handleClose = () => {
     if (router.canGoBack()) router.back();
     else router.replace('/(tabs)/routes');
-  }, [router]);
+  };
 
   // Paywall is disabled — there's no real payment behind it yet (see
   // FEATURE_FLAGS.paywallEnabled). Bounce out instead of rendering it.

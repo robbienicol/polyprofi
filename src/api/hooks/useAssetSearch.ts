@@ -1,5 +1,4 @@
 import { useQuery } from '@tanstack/react-query';
-import { useMemo } from 'react';
 
 import { timeframeCalendarDays } from '@/api/client/playbook';
 import { fetchStockQuotes } from '@/api/client/market-quotes';
@@ -23,7 +22,7 @@ import type { Route, RouteParams } from '@/types/routes';
  */
 export function useAssetSearch(keyword: string, params: RouteParams | null) {
   const settled = useDebounced(keyword.trim());
-  const symbols = useMemo(() => matchAssetSymbols(settled), [settled]);
+  const symbols = matchAssetSymbols(settled);
   const symbolKey = symbols.join(',');
   const enabled = symbols.length > 0 && params !== null;
 

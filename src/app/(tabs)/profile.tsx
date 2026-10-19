@@ -3,7 +3,7 @@ import { useAuth, useUser } from '@clerk/clerk-expo';
 import Constants from 'expo-constants';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter, type Href } from 'expo-router';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { ActivityIndicator, Alert, Linking, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -68,47 +68,37 @@ function SettingsScreen(): React.ReactElement {
   const [currencyOpen, setCurrencyOpen] = useState(false);
   const devSeed = useDevSeedDemoData();
 
-  const togglePlatform = useCallback(
-    (platform: AcquisitionPlatform, enabled: boolean) => {
+  const togglePlatform = (platform: AcquisitionPlatform, enabled: boolean) => {
       const next = enabled
         ? ACQUISITION_PLATFORMS.map((entry) => entry.value).filter(
             (value) => value === platform || preferences.preferredPlatforms.includes(value))
         : preferences.preferredPlatforms.filter((value) => value !== platform);
       update({ preferredPlatforms: next });
-    },
-    [preferences.preferredPlatforms, update],
-  );
+    };
 
-  const initials = useMemo(() => {
-    const first = user?.firstName?.[0] ?? '';
-    const last = user?.lastName?.[0] ?? '';
-    return (first + last || user?.primaryEmailAddress?.emailAddress?.[0] || 'P').toUpperCase();
-  }, [user]);
+  const initials = ((user?.firstName?.[0] ?? '') + (user?.lastName?.[0] ?? '') || user?.primaryEmailAddress?.emailAddress?.[0] || 'P').toUpperCase();
   const version = Constants.expoConfig?.version ?? '1.0.0';
-  const memberSince = useMemo(() => {
-    const created = user?.createdAt;
-    return created
-      ? new Date(created).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })
-      : null;
-  }, [user?.createdAt]);
+  const memberSince = user?.createdAt
+    ? new Date(user.createdAt).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })
+    : null;
 
   const queryClient = useQueryClient();
-  const handleSignOut = useCallback(async () => {
+  const handleSignOut = async () => {
     await signOut();
     // The cache outlives the session (gcTime), so the next account to sign in on this
     // phone would otherwise be served this one's data from memory.
     queryClient.clear();
     router.replace('/sign-in');
-  }, [queryClient, signOut, router]);
+  };
 
-  const confirmSignOut = useCallback(() => {
+  const confirmSignOut = () => {
     Alert.alert('Sign out', 'You can sign back in at any time.', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Sign out', style: 'destructive', onPress: handleSignOut },
     ]);
-  }, [handleSignOut]);
+  };
 
-  const performDelete = useCallback(async () => {
+  const performDelete = async () => {
     setDeleteError('');
     try {
       await deleteAccount();
@@ -124,9 +114,9 @@ function SettingsScreen(): React.ReactElement {
     // whoever signs up next without a relaunch.
     queryClient.clear();
     router.replace('/sign-in');
-  }, [deleteAccount, queryClient, signOut, router]);
+  };
 
-  const handleDeleteAccount = useCallback(() => {
+  const handleDeleteAccount = () => {
     Alert.alert(
       'Delete account',
       'This permanently deletes your account, profile, and everything saved on this device. This can’t be undone.',
@@ -135,12 +125,11 @@ function SettingsScreen(): React.ReactElement {
         { text: 'Delete', style: 'destructive', onPress: performDelete },
       ],
     );
-  }, [performDelete]);
+  };
 
   // A stored "on" that the OS will never deliver is worse than an honest off, so
   // a declined permission prompt flips the switch straight back.
-  const enableNotification = useCallback(
-    async (key: 'positionAlerts' | 'weeklyReminder', next: boolean) => {
+  const enableNotification = async (key: 'positionAlerts' | 'weeklyReminder', next: boolean) => {
       if (!next) {
         update({ [key]: false });
         if (key === 'weeklyReminder') void syncWeeklyReminder(false);
@@ -161,13 +150,11 @@ function SettingsScreen(): React.ReactElement {
         return;
       }
       if (key === 'weeklyReminder') void syncWeeklyReminder(true);
-    },
-    [update],
-  );
+    };
 
-  const contactSupport = useCallback(() => {
+  const contactSupport = () => {
     void Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=Pathey%20support%20(v${version})`);
-  }, [version]);
+  };
 
   return (
     <View className="flex-1" style={{ backgroundColor: theme.background }}>

@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
-import React, { useCallback, useMemo } from 'react';
+import React from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -35,7 +35,7 @@ function PortfolioScreen(): React.ReactElement {
   // Goals ticked on the Goals tab. Absent means the whole portfolio, which is what
   // this screen is for; a selection narrows every number on it to those goals.
   const { goalIds } = useLocalSearchParams<{ goalIds?: string }>();
-  const selectedGoalIds = useMemo(() => new Set(parseGoalIds(goalIds)), [goalIds]);
+  const selectedGoalIds = new Set(parseGoalIds(goalIds));
   // Back to the list to change the selection, carrying it so the boxes are already
   // ticked. Choosing goals belongs where the goals are; this screen only reports on
   // whichever ones were picked.
@@ -46,14 +46,8 @@ function PortfolioScreen(): React.ReactElement {
     router.push(`/(tabs)/goals?selected=${[...selectedGoalIds].join(',')}` as Href);
   };
   const scoped = selectedGoalIds.size > 0;
-  const goals = useMemo(
-    () => (scoped ? allGoals.filter((goal) => selectedGoalIds.has(goal.id)) : allGoals),
-    [allGoals, scoped, selectedGoalIds],
-  );
-  const bets = useMemo(
-    () => (scoped ? allBets.filter((bet) => bet.goalId != null && selectedGoalIds.has(bet.goalId)) : allBets),
-    [allBets, scoped, selectedGoalIds],
-  );
+  const goals = scoped ? allGoals.filter((goal) => selectedGoalIds.has(goal.id)) : allGoals;
+  const bets = scoped ? allBets.filter((bet) => bet.goalId != null && selectedGoalIds.has(bet.goalId)) : allBets;
   const goalsProgress = useGoalsProgress(goals);
 
   const latestSearch = history[0] ?? null;
@@ -61,19 +55,16 @@ function PortfolioScreen(): React.ReactElement {
   // The same measurement Home shows, so the two screens can't disagree about what
   // the portfolio is worth. A scoped view values only the selected goals' positions
   // and never writes to the stored history, which is the whole portfolio's series.
-  const scopeToBets = useCallback(
-    (candidates: typeof allBets) => candidates.filter(
+  const scopeToBets = (candidates: typeof allBets) => candidates.filter(
       (bet) => bet.goalId != null && selectedGoalIds.has(bet.goalId),
-    ),
-    [selectedGoalIds],
-  );
+    );
   const progress = usePortfolioProgress(
     fallbackCash,
     scoped ? { scopeToBets, recordHistory: false } : {},
   );
-  const activeBets = useMemo(() => bets.filter((bet) => bet.status === 'active'), [bets]);
+  const activeBets = bets.filter((bet) => bet.status === 'active');
   const staked = activeBets.reduce((sum, bet) => sum + bet.amountWagered, 0);
-  const chart = useMemo(() => ({
+  const chart = {
     live: progress.activeCount > 0
       ? {
         time: progress.updatedAt?.getTime() ?? progress.observedAt,
@@ -85,7 +76,7 @@ function PortfolioScreen(): React.ReactElement {
       : null,
     // The stored series is the whole portfolio's; a goal-scoped view must not borrow it.
     recorded: scoped ? undefined : progress.points,
-  }), [progress.activeCount, progress.basisValue, progress.livePnl, progress.observedAt, progress.points, progress.projectedPnl, progress.updatedAt, progress.value, scoped]);
+  };
 
   // What this portfolio is worth if every goal lands: what's staked plus what the
   // goals still need. Goals own the targets now, so there is no second target to

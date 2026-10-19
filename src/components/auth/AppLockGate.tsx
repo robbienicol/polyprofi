@@ -1,5 +1,5 @@
 import { useAuth } from '@clerk/clerk-expo';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -33,12 +33,14 @@ export function AppLockGate({ children }: { children: React.ReactNode }): React.
   const promptedRef = useRef(false);
   const backgroundedAt = useRef<number | null>(null);
 
-  const attemptUnlock = useCallback(async () => {
+  const attemptUnlock = async () => {
     setAuthenticating(true);
     const success = await authenticateWithBiometrics();
     setAuthenticating(false);
     if (success) setUnlocked(true);
-  }, []);
+  };
+  // The prompt fires off a state change, not off the function's identity.
+  const promptUnlock = useEffectEvent(() => void attemptUnlock());
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
@@ -63,9 +65,9 @@ export function AppLockGate({ children }: { children: React.ReactNode }): React.
   useEffect(() => {
     if (shouldLock && !unlocked && !promptedRef.current) {
       promptedRef.current = true;
-      attemptUnlock();
+      promptUnlock();
     }
-  }, [shouldLock, unlocked, attemptUnlock]);
+  }, [shouldLock, unlocked]);
 
   // The app stays mounted underneath the lock and the lock covers it, rather than
   // replacing it. Swapping the children out unmounted the whole navigator, so an

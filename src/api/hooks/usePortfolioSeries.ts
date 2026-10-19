@@ -1,5 +1,5 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 
 import { fetchMarketsForBets } from '@/api/client/bet-monitor';
 import {
@@ -49,14 +49,11 @@ export function usePortfolioSeries({
   positionById: Record<string, PositionValuation>;
   recorded?: PortfolioProgressPoint[];
 }): { series: ChartSeries; isLoading: boolean } {
-  const symbols = useMemo(
-    () => [...new Set(bets
+  const symbols = [...new Set(bets
       .filter((bet) => isStockOrEtfCategory(bet.category))
       .map((bet) => stockIdentity(bet).symbol)
-      .filter((symbol): symbol is string => Boolean(symbol)))].sort(),
-    [bets],
-  );
-  const predictionBets = useMemo(() => bets.filter(isPredictionMarketBet), [bets]);
+      .filter((symbol): symbol is string => Boolean(symbol)))].sort();
+  const predictionBets = bets.filter(isPredictionMarketBet);
   const predictionKey = predictionBets.map((bet) => bet.id).sort().join(',');
 
   // Which CLOB token each prediction position holds. Markets do not change tokens,
@@ -79,10 +76,7 @@ export function usePortfolioSeries({
   const tokens = tokensQuery.data;
 
   // Rounded to the minute so a re-render does not mint a new query key.
-  const since = useMemo(() => {
-    const times = bets.map((bet) => Date.parse(bet.createdAt)).filter(Number.isFinite);
-    return times.length > 0 ? Math.floor(Math.min(...times) / MINUTE) * MINUTE : 0;
-  }, [bets]);
+  const since = earliestMinute(bets);
 
   const historyQuery = useQuery({
     queryKey: ['PORTFOLIO_PRICE_HISTORY', range, symbols.join(','), JSON.stringify(tokens ?? {}), since],
@@ -115,7 +109,7 @@ export function usePortfolioSeries({
 
   const history = historyQuery.data;
   const fetchedAt = historyQuery.dataUpdatedAt;
-  const built = useMemo(() => buildPortfolioSeries({
+  const built = buildPortfolioSeries({
     range,
     bets,
     // Placeholder data from the previous range would lay the wrong bars on this one's axis.
@@ -126,14 +120,23 @@ export function usePortfolioSeries({
     liveTail: tail,
     recorded,
     now: Math.max(live?.time ?? 0, fetchedAt),
-  }), [bets, fetchedAt, history, live, positionById, range, recorded, tail]);
+  });
 
   // While a new range is loading, the placeholder is the previous range's bars —
   // keep showing the last chart that was actually drawn from them.
   const switching = historyQuery.isPlaceholderData && history?.range !== range;
-  const [settled, setSettled] = useState<ChartSeries | null>(null);
-  if (!switching && settled !== built) setSettled(built);
-  const series = switching && settled ? settled : built;
+  // Keyed on what the chart was drawn from, not on the object: identity is not
+  // stable across a render-phase re-run, and comparing it looped forever on mount.
+  const builtKey = `${range}|${fetchedAt}|${live?.time ?? 0}|${bets.length}`;
+  const [settled, setSettled] = useState<{ key: string; series: ChartSeries } | null>(null);
+  if (!switching && settled?.key !== builtKey) setSettled({ key: builtKey, series: built });
+  const series = switching && settled ? settled.series : built;
 
   return { series, isLoading: historyQuery.isLoading || switching };
+}
+
+/** When the oldest position was opened, rounded to the minute so a re-render does not mint a new query key. */
+function earliestMinute(bets: { createdAt: string }[]): number {
+  const times = bets.map((bet) => Date.parse(bet.createdAt)).filter(Number.isFinite);
+  return times.length > 0 ? Math.floor(Math.min(...times) / MINUTE) * MINUTE : 0;
 }
