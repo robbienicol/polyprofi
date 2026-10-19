@@ -4,58 +4,32 @@ import React, { useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { useGoalsProgress, type GoalProgress } from '@/api/hooks/useGoalProgress';
+import { useGoalsProgress } from '@/api/hooks/useGoalProgress';
 import { usePortfolioProgress } from '@/api/hooks/usePortfolioProgress';
 import { usePortfolioSeries } from '@/api/hooks/usePortfolioSeries';
 import { useDefaultSearch } from '@/api/hooks/useDefaultSearch';
-import { useMoney } from '@/api/hooks/usePreferences';
 import { useQuizAnswers } from '@/api/hooks/useQuizAnswers';
 import type { PortfolioProgressPoint } from '@/api/client/storage';
 import { useSavedRoutes } from '@/api/hooks/useSavedRoutes';
 import { useSavingsGoal } from '@/api/hooks/useSavingsGoal';
 import { useTrackedBets } from '@/api/hooks/useTrackedBets';
-import {
-  PortfolioLineChart,
-  PortfolioRange,
-  rangeLabel,
-} from '@/components/molecules/PortfolioLineChart';
-import { MetricInfo } from '@/components/ui/MetricInfo';
+import type { PortfolioRange } from '@/components/molecules/PortfolioLineChart';
+import { GoalTrack } from '@/components/portfolio/HomeGoalTrack';
+import { HomeValueCard } from '@/components/portfolio/HomeValueCard';
 import { Icon } from '@/components/ui/Icon';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, OnBrand, Radius, Semantic, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { describeSearch } from '@/lib/quiz-profile';
 import { cashFlowAdjustedChange } from '@/lib/portfolio-progress';
-import { goalProgressFraction, goalRemaining, isOpenEnded } from '@/lib/savings-goal';
+import { goalProgressFraction } from '@/lib/savings-goal';
 import { withTabSkeleton } from '@/components/ui/with-tab-skeleton';
 import { usePullRefresh } from '@/hooks/use-pull-refresh';
-import { Bone, Skeleton } from '@/components/ui/loaders';
-import type { SavingsGoal } from '@/types/bets';
-
-const MONO = { fontVariant: ['tabular-nums' as const] };
-
-/** The moment under the finger, written the way a person reads a timestamp. */
-function scrubTime(time: number): string {
-  const date = new Date(time);
-  const sameDay = new Date().toDateString() === date.toDateString();
-  const clock = date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-  return sameDay ? clock : `${date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} · ${clock}`;
-}
-
-function relativeUpdate(date: Date | null): string {
-  if (!date) return 'Waiting for first refresh';
-  const seconds = Math.max(0, Math.round((Date.now() - date.getTime()) / 1_000));
-  if (seconds < 15) return 'Updated just now';
-  if (seconds < 60) return `Updated ${seconds}s ago`;
-  const minutes = Math.round(seconds / 60);
-  return `Updated ${minutes}m ago`;
-}
 
 function HomeScreen(): React.ReactElement {
   const theme = useTheme();
   const router = useRouter();
   const { user } = useUser();
-  const money = useMoney();
   const { bets } = useTrackedBets();
   const { history } = useSavedRoutes();
   const { quizAnswers, saveAnswers } = useQuizAnswers();
@@ -132,19 +106,7 @@ function HomeScreen(): React.ReactElement {
   const adjustedChange = cashFlowAdjustedChange(rangeStartPoint, headPoint);
   const change = adjustedChange.amount;
   const changePct = adjustedChange.percent;
-  const positive = change >= 0;
-  const changeColor = positive ? Semantic.positive : Semantic.negative;
   const greeting = user?.firstName ? `Hey, ${user.firstName}` : 'Welcome back';
-
-  const trackingLabel = progress.livePositions > 0 && progress.projectedPositions > 0
-    ? `${progress.livePositions} live · ${progress.projectedPositions} projected`
-    : progress.livePositions > 0
-      ? `${progress.livePositions} live market${progress.livePositions === 1 ? '' : 's'}`
-      : progress.projectedPositions > 0
-        ? `${progress.projectedPositions} projected position${progress.projectedPositions === 1 ? '' : 's'}`
-        : progress.activeCount > 0
-          ? `${progress.activeCount} position${progress.activeCount === 1 ? '' : 's'} tracked`
-          : 'No positions yet';
 
   const pull = usePullRefresh(progress.refresh);
   // Nothing priced yet and a refresh in flight: the first load, not a refresh.
@@ -173,104 +135,19 @@ function HomeScreen(): React.ReactElement {
             </ThemedText>
           </View>
 
-          <View
-            style={{
-              borderRadius: Radius.xl,
-              backgroundColor: theme.backgroundElevated,
-              borderWidth: 1,
-              borderColor: theme.border,
-              paddingHorizontal: 18,
-              paddingTop: 18,
-              paddingBottom: 14,
-              ...Shadow.card,
-            }}>
-            <View className="flex-row items-center justify-between">
-              <View className="flex-row items-center" style={{ gap: 6 }}>
-                <ThemedText style={{ fontSize: 12, fontWeight: '800', color: theme.textTertiary, letterSpacing: 0.35 }}>
-                  TRACKED VALUE · LIVE
-                </ThemedText>
-                <MetricInfo metric="trackedValue" />
-              </View>
-              <View className="flex-row items-center" style={{ gap: 6 }}>
-                <View style={{
-                  width: 7,
-                  height: 7,
-                  borderRadius: Radius.pill,
-                  backgroundColor: progress.livePositions > 0 ? Semantic.positive : progress.projectedPositions > 0 ? Semantic.caution : theme.textTertiary,
-                }} />
-                <ThemedText style={{ fontSize: 11, fontWeight: '700', color: theme.textSecondary }}>
-                  {trackingLabel}
-                </ThemedText>
-              </View>
-            </View>
-
-            {!firstLoad ? (
-            <ThemedText
-              style={{
-                fontSize: 40,
-                lineHeight: 48,
-                fontWeight: '800',
-                color: theme.text,
-                letterSpacing: -1.4,
-                marginTop: 9,
-                ...MONO,
-              }}>
-              {money(headPoint.value)}
-            </ThemedText>
-            ) : null}
-            {firstLoad ? null : (
-            <View className="flex-row items-center" style={{ gap: 7, marginTop: 2 }}>
-              <ThemedText style={{ fontSize: 14, fontWeight: '800', color: changeColor, ...MONO }}>
-                {money(change, { signed: true })} ({positive ? '+' : '−'}{Math.abs(changePct).toFixed(2)}%)
-              </ThemedText>
-              <ThemedText style={{ fontSize: 12, color: theme.textTertiary }}>
-                {scrubbed ? scrubTime(scrubbed.time) : rangeLabel(range)}
-              </ThemedText>
-            </View>
-
-            )}
-
-            {/* First prices still on their way: the value and line hold their shape
-                as a skeleton instead of showing $0 and a flat line. */}
-            {firstLoad ? (
-              <Skeleton style={{ gap: 10, marginTop: 9 }}>
-                <Bone width="55%" height={40} radius={8} />
-                <Bone width="35%" height={14} />
-                <Bone height={150} radius={10} />
-              </Skeleton>
-            ) : (
-            <View style={{ marginTop: 10 }}>
-              <PortfolioLineChart
-                series={series}
-                range={range}
-                onRangeChange={(next) => {
-                  setScrubbed(null);
-                  setRange(next);
-                }}
-                onScrub={setScrubbed}
-                projected={progress.projectedPositions > 0}
-                rising={rangeRising}
-                surface={theme.backgroundElevated}
-                bleed={18}
-              />
-            </View>
-            )}
-
-            <View
-              className="flex-row items-center justify-between"
-              style={{ borderTopWidth: 1, borderTopColor: theme.border, paddingTop: 12, marginTop: 4 }}>
-              <ThemedText style={{ fontSize: 11, color: theme.textTertiary }}>
-                {progress.isRefreshing ? 'Refreshing market prices…' : relativeUpdate(progress.updatedAt)}
-              </ThemedText>
-              {progress.projectedPositions > 0 ? (
-                <View className="flex-row items-center" style={{ gap: 5 }}>
-                  <View style={{ width: 6, height: 6, borderRadius: 9, borderWidth: 1, borderColor: Semantic.caution }} />
-                  <ThemedText style={{ fontSize: 11, color: Semantic.caution }}>includes projected accrual</ThemedText>
-                  <MetricInfo metric="projectedAccrual" />
-                </View>
-              ) : null}
-            </View>
-          </View>
+          <HomeValueCard
+            progress={progress}
+            series={series}
+            range={range}
+            setRange={setRange}
+            scrubbed={scrubbed}
+            setScrubbed={setScrubbed}
+            headValue={headPoint.value}
+            change={change}
+            changePct={changePct}
+            rangeRising={rangeRising}
+            firstLoad={firstLoad}
+          />
 
           {/* One job on this screen: go make money. Straight to results on the last
               search, else on what onboarding said — the quiz is optional, one row down. */}
@@ -396,87 +273,6 @@ function HomeScreen(): React.ReactElement {
   );
 }
 
-/**
- * One goal, reduced to the only thing Home has to say about it: how far it still is.
- * The Goals tab carries the full card — staked, positions, the tick box — so repeating
- * any of that here would make two screens compete to be the place goals are managed.
- */
-function GoalTrack({
-  goal,
-  progress,
-  onPress,
-}: {
-  goal: SavingsGoal;
-  progress: GoalProgress;
-  onPress: () => void;
-}): React.ReactElement {
-  const theme = useTheme();
-  const money = useMoney();
-  const openEnded = isOpenEnded(goal);
-  const fraction = goalProgressFraction(progress.netGain, goal);
-  const remaining = goalRemaining(progress.netGain, goal);
-  const pct = Math.round(fraction * 100);
-
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={
-        openEnded
-          ? `${goal.label}, open-ended, ${money(progress.netGain, { decimals: 0, signed: true })} in net gains`
-          : `${goal.label}, ${pct} percent there, ${money(remaining, { decimals: 0 })} to go`
-      }
-      className="active:opacity-80"
-      style={{
-        borderRadius: Radius.lg,
-        borderWidth: 1,
-        borderColor: theme.border,
-        backgroundColor: theme.backgroundElevated,
-        paddingHorizontal: 14,
-        paddingVertical: 12,
-        gap: 9,
-      }}>
-      <View className="flex-row items-center" style={{ gap: 10 }}>
-        <Icon glyph={goal.emoji} size={17} color={theme.textSecondary} />
-        <ThemedText
-          style={{ flex: 1, fontSize: 14, fontWeight: '700', color: theme.text, letterSpacing: -0.2 }}
-          numberOfLines={1}>
-          {goal.label}
-        </ThemedText>
-        {/* An open-ended goal has no finish line to be a fraction of, so it reports what
-            it has earned instead of a percentage it can never complete. */}
-        <ThemedText style={{ fontSize: 13, fontWeight: '800', color: theme.text, ...MONO }}>
-          {openEnded
-            ? money(progress.netGain, { decimals: 0, signed: true })
-            : `${money(remaining, { decimals: 0 })} to go`}
-        </ThemedText>
-      </View>
-
-      {openEnded ? null : (
-        <View className="flex-row items-center" style={{ gap: 9 }}>
-          <View
-            className="flex-1"
-            style={{ height: 6, borderRadius: Radius.pill, backgroundColor: theme.backgroundSelected, overflow: 'hidden' }}>
-            {/* Empty stays empty. A minimum-width sliver would draw progress that has
-                not happened, which is exactly the number this screen must not invent. */}
-            {fraction > 0 ? (
-              <View
-                style={{
-                  width: `${Math.max(fraction * 100, 2)}%`,
-                  height: '100%',
-                  borderRadius: Radius.pill,
-                  backgroundColor: Brand[500],
-                }}
-              />
-            ) : null}
-          </View>
-          <ThemedText style={{ fontSize: 11, fontWeight: '800', color: theme.textSecondary, ...MONO }}>
-            {pct}%
-          </ThemedText>
-        </View>
-      )}
-    </Pressable>
-  );
-}
 
 export default withTabSkeleton(HomeScreen, 'home');
+
