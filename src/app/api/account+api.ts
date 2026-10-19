@@ -55,6 +55,8 @@ export async function DELETE(request: Request): Promise<Response> {
   await Promise.all(items.map((item) => removePlaidItem(item.access_token)));
   await sql`DELETE FROM plaid_items WHERE clerk_id = ${userId}`;
   await sql`DELETE FROM user_data WHERE clerk_id = ${userId}`;
+  await sql`DELETE FROM push_tokens WHERE clerk_id = ${userId}`;
+  await sql`DELETE FROM alert_state WHERE clerk_id = ${userId}`;
   await sql`DELETE FROM users WHERE clerk_id = ${userId}`;
   await clerkClient.users.deleteUser(userId);
 

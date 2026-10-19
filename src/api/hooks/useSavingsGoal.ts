@@ -10,7 +10,8 @@ import {
 import { deviceQuery } from '@/api/query-client';
 import { apiBaseUrl } from '@/lib/api-base-url';
 import { isRecord, isSavingsGoalState, responseJson } from '@/lib/runtime-validation';
-import { notifyGoalAchieved } from '@/lib/notifications';
+import { goalReachedMessage } from '@/lib/alert-messages';
+import { notifyAlert } from '@/lib/notifications';
 import { committedGoals, migrateSavingsGoalState, pendingCelebrationGoal } from '@/lib/savings-goal';
 import {
   achieveGoal,
@@ -233,7 +234,7 @@ export function useSavingsGoal() {
     onSuccess: (result) => {
       if (!result) return; // already achieved — nothing transitioned, so don't notify twice
       queryClient.setQueryData(queryKey, result.state);
-      void notifyGoalAchieved(result.goal);
+      void notifyAlert(goalReachedMessage(result.goal));
     },
   });
 

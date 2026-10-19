@@ -1,7 +1,9 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
+import { isPushActive } from '@/api/client/push-registration';
 import { getPreferences } from '@/api/client/storage';
+import type { AlertMessage } from '@/lib/alert-messages';
 
 // Weekly reminder: Sunday 6pm local. One evergreen, on-brand nudge.
 const WEEKLY = {
@@ -102,107 +104,26 @@ export async function scheduleWeeklyReminder(): Promise<void> {
 }
 
 /**
- * Fire once when a savings goal is reached. Carries no deep link on purpose: the
- * congratulations screen is presented from persisted goal state, so it shows on
- * the next app open whether the user taps the notification or not.
- */
-export async function notifyGoalAchieved(goal: {
-  label: string;
-  emoji: string;
-  /** Absent on an open-ended goal — which never reaches a target, so never gets here. */
-  targetAmount?: number;
-}): Promise<void> {
-  try {
-    if (Platform.OS === 'web') return;
-    if (!(await getPreferences()).positionAlerts) return;
-    if (!(await ensurePermission())) return;
-
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: `${goal.emoji} Goal reached — ${goal.label}!`,
-        body: `Your gains just covered your $${(goal.targetAmount ?? 0).toLocaleString()} goal. Open the app to celebrate and pick your next one.`,
-      },
-      trigger: null,
-    });
-  } catch {
-    // skip silently
-  }
-}
-
-/** Fire when a tracked bet hits the user's profit goal — nudge them to sell. */
-export async function notifySellRecommendation(title: string, body: string): Promise<void> {
-  try {
-    if (Platform.OS === 'web') return;
-    if (!(await getPreferences()).positionAlerts) return;
-    if (!(await ensurePermission())) return;
-
-    await Notifications.scheduleNotificationAsync({
-      content: { title, body },
-      trigger: null,
-    });
-  } catch {
-    // skip silently
-  }
-}
-
-/**
- * Fire once a position has been auto-resolved — the market closed or the game
- * ended, so status flipped to won/lost without the user tapping anything.
- */
-export async function notifyPositionResolved(title: string, body: string): Promise<void> {
-  try {
-    if (Platform.OS === 'web') return;
-    if (!(await getPreferences()).positionAlerts) return;
-    if (!(await ensurePermission())) return;
-
-    await Notifications.scheduleNotificationAsync({
-      content: { title, body },
-      trigger: null,
-    });
-  } catch {
-    // skip silently
-  }
-}
-
-/**
- * The one piece of good news for today: a position that has climbed into a new
- * band, or a goal that has passed a milestone.
+ * Shows an alert on this device right now — position, goal or good news. The words
+ * come from @/lib/alert-messages, shared with the server's push notifications.
  *
- * Both carry a deep link, because the whole point is to land on the thing that
- * moved rather than on a home screen that makes them go looking for it. The
- * `celebrate` flag rides along so the destination knows this arrival was good
- * news and can ask for a rating on the back of it — asking at any other moment
- * is asking a stranger for a favour.
+ * Stands down when the server holds this device's push token: it sends the same
+ * alerts while the app is closed, and the same alert must never arrive twice.
  */
-export async function notifyPositionGain({ betId, title, body }: {
-  betId: string;
-  title: string;
-  body: string;
-}): Promise<void> {
-  await sendAlert({ title, body, url: `/positions?betId=${encodeURIComponent(betId)}&celebrate=1` });
-}
-
-export async function notifyGoalMilestone({ goalId, title, body }: {
-  goalId: string;
-  title: string;
-  body: string;
-}): Promise<void> {
-  await sendAlert({ title, body, url: `/goal/${encodeURIComponent(goalId)}?celebrate=1` });
-}
-
-async function sendAlert({ title, body, url }: { title: string; body: string; url: string }): Promise<void> {
+export async function notifyAlert({ title, body, url }: AlertMessage): Promise<void> {
   try {
     if (Platform.OS === 'web') return;
+    if (await isPushActive()) return;
     if (!(await getPreferences()).positionAlerts) return;
     if (!(await ensurePermission())) return;
 
     await Notifications.scheduleNotificationAsync({
       // `data.url` is what the observer in _layout.tsx routes on — the same
-      // channel a tapped notification has always used.
-      content: { title, body, data: { url } },
+      // channel a tapped push notification uses.
+      content: { title, body, ...(url ? { data: { url } } : null) },
       trigger: null,
     });
   } catch {
-    // skip silently
+    // notifications unavailable on this device/build — skip silently
   }
 }

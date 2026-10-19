@@ -29,6 +29,7 @@ import { AppLockGate } from '@/components/auth/AppLockGate';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { getQueryClient } from '@/api/query-client';
+import { registerForPush } from '@/api/client/push-registration';
 import { pullUserData, setSyncSession } from '@/api/client/user-data-sync';
 import { clerkTokenCache } from '@/lib/clerk-cache';
 import { useGainAlerts } from '@/api/hooks/useGainAlerts';
@@ -143,6 +144,23 @@ function UserDataSync(): null {
 }
 
 /**
+ * Hands this device's push token to the server once per sign-in, so alerts arrive
+ * with the app closed. Retried hourly: permission granted later in Settings or a
+ * failed first attempt are picked up without a relaunch.
+ */
+function PushRegistration(): null {
+  const { isLoaded, isSignedIn, userId, getToken } = useAuth();
+  useQuery({
+    queryKey: ['PUSH_REGISTRATION', userId],
+    enabled: isLoaded && !!isSignedIn && !!userId,
+    queryFn: () => registerForPush(getToken),
+    staleTime: 60 * 60 * 1000,
+    refetchInterval: 60 * 60 * 1000,
+  });
+  return null;
+}
+
+/**
  * Which screens exist depends on whether there is a session, so the back stack can
  * never hold the wrong side. Signing in drops the auth screens from history (back
  * after sign-up used to land on sign-in while still signed in, and signing in again
@@ -242,6 +260,7 @@ export default function RootLayout(): React.ReactElement | null {
                 <GoalCelebrationGate />
                 <GoalHousekeeping />
                 <UserDataSync />
+                <PushRegistration />
                 <OfflineBanner />
                 <ToastHost />
                 <AppearanceSync />

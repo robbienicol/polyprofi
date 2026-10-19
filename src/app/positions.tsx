@@ -11,7 +11,8 @@ import { BetCard } from '@/components/portfolio/PositionBetCard';
 import { Icon } from '@/components/ui/Icon';
 import { ThemedText } from '@/components/themed-text';
 import { MetricInfo } from '@/components/ui/MetricInfo';
-import { notifySellRecommendation } from '@/lib/notifications';
+import { sellMessage } from '@/lib/alert-messages';
+import { notifyAlert } from '@/lib/notifications';
 import { useCelebrationArrival } from '@/hooks/use-celebration-arrival';
 import { Brand, Radius, Semantic, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -64,12 +65,7 @@ export default function PositionsScreen(): React.ReactElement {
       if (notifiedRef.current.has(alert.betId)) continue;
       notifiedRef.current.add(alert.betId);
       const bet = bets.find((b) => b.id === alert.betId);
-      notifySellRecommendation(
-        'Goal hit — sell now',
-        bet
-          ? `Your ${bet.category} position is up $${alert.unrealizedPnl.toFixed(0)}. Lock in your $${alert.profitGoal} target on ${bet.platform}.`
-          : `You're up $${alert.unrealizedPnl.toFixed(0)} — sell to lock in your profit.`
-      );
+      void notifyAlert(sellMessage(alert, bet));
     }
   }, [sellAlerts, bets]);
 

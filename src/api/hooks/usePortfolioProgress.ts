@@ -12,7 +12,8 @@ import { deviceQuery } from '@/api/query-client';
 import { useBetMonitoring } from '@/api/hooks/useBetMonitoring';
 import { useTrackedBets } from '@/api/hooks/useTrackedBets';
 import { calculatePortfolioProgress, stockIdentity } from '@/lib/portfolio-progress';
-import { notifyPositionResolved } from '@/lib/notifications';
+import { resolvedMessage } from '@/lib/alert-messages';
+import { notifyAlert } from '@/lib/notifications';
 import { isStockOrEtfCategory } from '@/lib/tracked-assets';
 import type { TrackedBet } from '@/types/bets';
 
@@ -48,11 +49,7 @@ export function usePortfolioMarketInputs() {
       if (!status?.resolvedStatus || resolvingIds.has(bet.id)) continue;
       resolvingIds.add(bet.id);
       resolveBet({ id: bet.id, status: status.resolvedStatus });
-      const verb = status.resolvedStatus === 'won' ? 'won' : "didn't hit";
-      void notifyPositionResolved(
-        `${bet.emoji} Position resolved`,
-        `${bet.description.length > 80 ? `${bet.description.slice(0, 80)}…` : bet.description} — you ${verb}.`,
-      );
+      void notifyAlert(resolvedMessage(bet, status.resolvedStatus));
     }
   }, [allActive, monitoring.statusById, resolveBet]);
 

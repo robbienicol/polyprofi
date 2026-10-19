@@ -22,6 +22,7 @@ import {
 import { Brand, Semantic } from '@/constants/theme';
 import { useDevSeedDemoData } from '@/hooks/use-dev-seed-demo-data';
 import { useTheme } from '@/hooks/use-theme';
+import { useSignOut } from '@/hooks/use-sign-out';
 import { requestAppRating } from '@/lib/app-rating';
 import { requestNotificationPermission, syncWeeklyReminder } from '@/lib/notifications';
 import { ACQUISITION_PLATFORMS, APPEARANCE_OPTIONS } from '@/lib/preferences';
@@ -34,6 +35,7 @@ function SettingsScreen(): React.ReactElement {
   const theme = useTheme();
   const router = useRouter();
   const { signOut } = useAuth();
+  const signOutOfAccount = useSignOut();
   const { preferences, update } = usePreferences();
   const {
     isAvailable: biometricAvailable,
@@ -56,7 +58,7 @@ function SettingsScreen(): React.ReactElement {
 
   const queryClient = useQueryClient();
   const handleSignOut = async () => {
-    await signOut();
+    await signOutOfAccount();
     // The cache outlives the session (gcTime), so the next account to sign in on this
     // phone would otherwise be served this one's data from memory.
     queryClient.clear();

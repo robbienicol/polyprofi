@@ -8,7 +8,8 @@ import { usePortfolioProgress } from '@/api/hooks/usePortfolioProgress';
 import { useSavingsGoal } from '@/api/hooks/useSavingsGoal';
 import { useTrackedBets } from '@/api/hooks/useTrackedBets';
 import { EMPTY_LEDGER, selectAlert, recordAlert, type AlertCandidate, type AlertLedger, type GoalSnapshot } from '@/lib/gain-alerts';
-import { notifyGoalMilestone, notifyPositionGain } from '@/lib/notifications';
+import { goodNewsMessage } from '@/lib/alert-messages';
+import { notifyAlert } from '@/lib/notifications';
 import type { TrackedBet } from '@/types/bets';
 
 /**
@@ -81,31 +82,10 @@ export function useGainAlerts(): void {
   }, [positionById, allGoals, byGoalId, bets, ledger, recordSent]);
 }
 
-async function send(
+function send(
   candidate: AlertCandidate,
   bets: TrackedBet[],
   goals: { id: string; label: string; emoji: string }[],
 ): Promise<void> {
-  if (candidate.kind === 'position') {
-    const bet = bets.find((entry) => entry.id === candidate.betId);
-    const gain = Math.round(candidate.gain).toLocaleString();
-    await notifyPositionGain({
-      betId: candidate.betId,
-      title: `${bet?.emoji ?? '📈'} Up $${gain}`,
-      body: bet
-        ? `Your ${bet.category} position is up ${Math.round(candidate.returnPct)}%. Tap to see where it stands.`
-        : `One of your positions is up ${Math.round(candidate.returnPct)}%. Tap to see where it stands.`,
-    });
-    return;
-  }
-
-  const goal = goals.find((entry) => entry.id === candidate.goalId);
-  const remaining = Math.max(0, Math.round(candidate.targetAmount - candidate.netGain)).toLocaleString();
-  await notifyGoalMilestone({
-    goalId: candidate.goalId,
-    title: `${goal?.emoji ?? '🎯'} ${candidate.milestone}% of the way there`,
-    body: goal
-      ? `${goal.label} is $${remaining} away. Tap to see what got you here.`
-      : `You are $${remaining} from your goal. Tap to see what got you here.`,
-  });
+  return notifyAlert(goodNewsMessage(candidate, bets, goals));
 }

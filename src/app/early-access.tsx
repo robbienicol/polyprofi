@@ -1,4 +1,3 @@
-import { useAuth } from '@clerk/clerk-expo';
 import { useRouter, type Href } from 'expo-router';
 import React, { useState } from 'react';
 import { View } from 'react-native';
@@ -8,6 +7,7 @@ import { AuthButton, AuthError, AuthScreen, AuthTextButton } from '@/components/
 import { AuthTextInput } from '@/components/auth/AuthTextInput';
 import { ThemedText } from '@/components/themed-text';
 import { isValidEarlyAccessCode } from '@/lib/early-access';
+import { useSignOut } from '@/hooks/use-sign-out';
 
 /**
  * Invite wall. Sits between sign-in and the rest of the app during early access:
@@ -15,7 +15,7 @@ import { isValidEarlyAccessCode } from '@/lib/early-access';
  */
 export default function EarlyAccessScreen(): React.ReactElement {
   const router = useRouter();
-  const { signOut } = useAuth();
+  const signOut = useSignOut();
   const { grantEarlyAccess, isGranting } = useEarlyAccess();
 
   const [code, setCode] = useState('');

@@ -23,7 +23,7 @@ export const GAIN_TIERS: readonly number[] = [10, 25, 50, 100];
 
 /**
  * Goal-progress milestones, in percent of target. 100 is deliberately absent:
- * `notifyGoalAchieved` and the celebration screen own that moment.
+ * `goalReachedMessage` and the celebration screen own that moment.
  */
 export const GOAL_MILESTONES: readonly number[] = [25, 50, 75];
 
@@ -231,7 +231,7 @@ export function __selfCheck(): void {
       positions: [], goals: [{ goalId: 'g1', netGain: 600, targetAmount: 600 }],
       ledger: { ...EMPTY_LEDGER, goalMilestone: { g1: 75 } }, now,
     }) === null,
-    'reaching the goal outright is left to notifyGoalAchieved, not doubled up here',
+    'reaching the goal outright is left to goalReachedMessage, not doubled up here',
   );
   console.assert(
     milestoneCandidates([{ goalId: 'g', netGain: 10, targetAmount: 0 }], EMPTY_LEDGER).length === 0,

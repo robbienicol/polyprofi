@@ -24,4 +24,6 @@ export const KEYS = {
   PROFILE_COMPLETE_OWNER: 'polyprofit:profileCompleteOwner',
   ALERT_LEDGER: 'polyprofit:alertLedger',
   SPENDING_CUTS: 'polyprofit:spendingCuts',
+  /** The Expo push token our server holds for this device; present means the server sends alerts. */
+  PUSH_TOKEN: 'polyprofit:pushToken',
 } as const;
