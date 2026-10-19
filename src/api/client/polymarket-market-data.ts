@@ -36,8 +36,15 @@ export async function fetchPolymarketUniverse(limit = 240): Promise<PolymarketEn
   return (await fetchPolymarketSnapshot(limit)).universe;
 }
 
-export async function fetchPolymarketSnapshot(universeLimit = 240): Promise<PolymarketSnapshot> {
-  const raw = await fetchSharedPolymarketRaw();
+/**
+ * `fresh` skips the per-day memory cache. The server wants that: it caches the snapshot
+ * itself for minutes, and a day-old copy held in a long-lived instance would pin prices.
+ */
+export async function fetchPolymarketSnapshot(
+  universeLimit = 240,
+  { fresh = false }: { fresh?: boolean } = {},
+): Promise<PolymarketSnapshot> {
+  const raw = fresh ? await fetchPolymarketRaw() : await fetchSharedPolymarketRaw();
   const context = selectPolymarketContext(raw);
   const universe = selectPolymarketUniverse(raw, universeLimit);
   console.log(`[market-data:polymarket] ${raw.length} fetched, ${context.length} context, ${universe.length} universe`);

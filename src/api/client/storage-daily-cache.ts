@@ -3,43 +3,16 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { KEYS } from '@/api/client/storage-keys';
 import type { GenericMatch } from '@/lib/kalshi-market-match';
 import type { SportsMatch } from '@/lib/sports-market-match';
-import { Route } from '@/types/routes';
 import {
   isArrayOf,
   isGenericMatch,
   isRecordOf,
-  isRoute,
   isSportsMatch,
   parseJsonAs,
 } from '@/lib/runtime-validation';
 
-// ── Daily avenue pool cache ──────────────────────────────────────────────────
-// The pivot decoupled results from stake, so a generated pool is valid all day.
-// Cache by "YYYY-MM-DD|<goalKey>"; keep only today's entries to bound size.
 function todayKey(): string {
   return new Date().toISOString().slice(0, 10);
-}
-
-export async function getDailyPool(goalKey: string): Promise<Route[] | null> {
-  const raw = await AsyncStorage.getItem(KEYS.DAILY_POOL);
-  if (!raw) return null;
-  const map = parseJsonAs(raw, isRecordOf(isArrayOf(isRoute)));
-  return map?.[`${todayKey()}|${goalKey}`] ?? null;
-}
-
-export async function setDailyPool(goalKey: string, routes: Route[]): Promise<void> {
-  const today = todayKey();
-  let map: Record<string, Route[]> = {};
-  const raw = await AsyncStorage.getItem(KEYS.DAILY_POOL);
-  if (raw) {
-    const prev = parseJsonAs(raw, isRecordOf(isArrayOf(isRoute)));
-    if (prev) {
-      // drop anything not from today
-      for (const k of Object.keys(prev)) if (k.startsWith(`${today}|`)) map[k] = prev[k];
-    }
-  }
-  map[`${today}|${goalKey}`] = routes;
-  await AsyncStorage.setItem(KEYS.DAILY_POOL, JSON.stringify(map));
 }
 
 // ── Daily Kalshi↔Polymarket sports match cache ───────────────────────────────

@@ -1,7 +1,7 @@
 import { useAuth } from '@clerk/clerk-expo';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { fetchRoutes } from '@/api/client/anthropic';
+import { fetchRoutes } from '@/api/client/route-fetch';
 import { Route, RouteParams } from '@/types/routes';
 
 function routesQueryKey(params: RouteParams | null) {
@@ -34,7 +34,7 @@ export function useRoutes(params: RouteParams | null, options?: { enabled?: bool
 
   const refresh = async () => {
     if (!params) return [];
-    const routes = await fetchRoutes(params, { force: true, getToken });
+    const routes = await fetchRoutes(params, { getToken });
     queryClient.setQueryData(queryKey, routes);
     return routes;
   };

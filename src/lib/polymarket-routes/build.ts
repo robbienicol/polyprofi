@@ -5,6 +5,9 @@ import { subtopicForTags, topicForTags } from '@/lib/prediction-topics';
 import { timeframeMaturityLimit } from '@/lib/quiz-profile';
 import { ExitPlan, MarketQualityFacts, Route, RouteParams } from '@/types/routes';
 
+/** The only parts of a search that shape a Polymarket route. */
+type PoolGoal = Pick<RouteParams, 'balance' | 'target' | 'timeframe'>;
+
 type RiskBand = 2 | 3 | 4 | 5;
 
 export interface Candidate {
@@ -58,7 +61,7 @@ function resolvesOn(endDate: string | undefined): string | null {
     : null;
 }
 
-export function toRoute(candidate: Candidate, params: RouteParams, quality: MarketQualityFacts): Route {
+export function toRoute(candidate: Candidate, params: PoolGoal, quality: MarketQualityFacts): Route {
   const { market, outcome, price, probability, riskLevel } = candidate;
   const expectedReturn = Math.round(params.balance * (1 / price - 1));
   const cents = Math.round(price * 100);
@@ -111,7 +114,7 @@ function topicField(market: PolymarketEntry): { predictionTopic?: string; predic
  */
 function toSwingRoute(
   candidate: Candidate,
-  params: RouteParams,
+  params: PoolGoal,
   quality: MarketQualityFacts,
   plan: ExitPlan
 ): Route {
@@ -165,7 +168,7 @@ function toSwingRoute(
 /** The hold route, plus the traded variant of the same contract when one is honest to build. */
 export function routesForCandidate(
   candidate: Candidate,
-  params: RouteParams,
+  params: PoolGoal,
   { brackets = OFFER_BRACKETS }: { brackets?: boolean } = {},
 ): Route[] {
   const quality = polymarketMarketQuality(candidate.market, candidate.outcomeIndex);
@@ -191,7 +194,7 @@ export function routesForCandidate(
  */
 export function buildPolymarketRoutes(
   markets: PolymarketEntry[],
-  params: RouteParams,
+  params: PoolGoal,
   limit = 120
 ): Route[] {
   const candidates: Candidate[] = markets.flatMap((market) =>

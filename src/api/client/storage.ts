@@ -19,8 +19,6 @@ import {
 } from '@/lib/runtime-validation';
 
 export {
-  getDailyPool,
-  setDailyPool,
   getSportsMatches,
   setSportsMatches,
   getGenericMatches,
