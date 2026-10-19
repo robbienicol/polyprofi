@@ -1,58 +1,41 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import type { GenericMatch } from '@/lib/kalshi-market-match';
-import type { SportsMatch } from '@/lib/sports-market-match';
-import { EMPTY_LEDGER, type AlertLedger } from '@/lib/gain-alerts';
+import { KEYS } from '@/api/client/storage-keys';
 import { parsePortfolioHistory, serializePortfolioHistory } from '@/lib/portfolio-history';
 import { sanitizeOnboardingProfile, type OnboardingProfile } from '@/lib/onboarding-profile';
-import type { SpendingCut } from '@/lib/spending-cut-routes';
-import { sanitizePreferences, type Preferences } from '@/lib/preferences';
 import { migrateSavingsGoalState } from '@/lib/savings-goal';
 import { QuizAnswers, SavingsGoalState, TrackedBet } from '@/types/bets';
-import { noteLocalWrite, SYNCED_STORAGE_KEYS } from '@/api/client/user-data-sync';
-import { Route, SavedRoutesBatch } from '@/types/routes';
+import { noteLocalWrite } from '@/api/client/user-data-sync';
+import { SavedRoutesBatch } from '@/types/routes';
 import {
   isArrayOf,
-  isGenericMatch,
   isPortfolioProgressPoint,
   isQuizAnswers,
-  isRecord,
-  isRecordOf,
-  isRoute,
   isSavedRoutesBatch,
-  isSpendingCut,
   isSavingsGoalState,
-  isSportsMatch,
   isTrackedBet,
   parseJson,
   parseJsonAs,
 } from '@/lib/runtime-validation';
 
-// Keep the pre-rebrand namespace so an app update retains existing user data.
-const KEYS = {
-  SUBSCRIBED: 'polyprofit:subscribed',
-  QUIZ: 'polyprofit:quiz',
-  QUIZ_OWNER: 'polyprofit:quizOwner',
-  BETS: SYNCED_STORAGE_KEYS.bets,
-  ONBOARDING: 'polyprofit:onboardingComplete',
-  EARLY_ACCESS: 'polyprofit:earlyAccessGranted',
-  SAVED_ROUTES: SYNCED_STORAGE_KEYS.savedRoutes,
-  DAILY_POOL: 'polyprofit:dailyPool',
-  PORTFOLIO_PROGRESS: SYNCED_STORAGE_KEYS.portfolioProgress,
-  SAVINGS_GOAL: 'polyprofit:savingsGoal',
-  SAVINGS_GOAL_OWNER: 'polyprofit:savingsGoalOwner',
-  SAVINGS_GOAL_UNSYNCED: 'polyprofit:savingsGoalUnsynced',
-  SPORTS_MATCHES: 'polyprofit:sportsMatches',
-  GENERIC_MATCHES: 'polyprofit:genericMatches',
-  BIOMETRIC_LOCK: 'polyprofit:biometricLockEnabled',
-  PREFERENCES: SYNCED_STORAGE_KEYS.preferences,
-  ONBOARDING_PROFILE: SYNCED_STORAGE_KEYS.onboardingProfile,
-  DEV_REPLAY_FUNNEL: 'polyprofit:devReplayFunnel',
-  PROFILE_COMPLETE: 'polyprofit:profileComplete',
-  PROFILE_COMPLETE_OWNER: 'polyprofit:profileCompleteOwner',
-  ALERT_LEDGER: 'polyprofit:alertLedger',
-  SPENDING_CUTS: 'polyprofit:spendingCuts',
-} as const;
+export {
+  getDailyPool,
+  setDailyPool,
+  getSportsMatches,
+  setSportsMatches,
+  getGenericMatches,
+  setGenericMatches,
+} from '@/api/client/storage-daily-cache';
+export {
+  getAlertLedger,
+  saveAlertLedger,
+  getPreferences,
+  updatePreferences,
+  getSpendingCuts,
+  saveSpendingCuts,
+  clearSpendingCuts,
+  type ImportedSpendingCuts,
+} from '@/api/client/storage-settings';
 
 /** How many generated batches the device keeps. Exported so the optimistic
  * cache write in useSavedRoutes trims to exactly what the disk will hold. */
@@ -64,61 +47,6 @@ export interface PortfolioProgressPoint {
   basisValue: number;
   livePnl: number;
   projectedPnl: number;
-}
-
-// ── Daily avenue pool cache ──────────────────────────────────────────────────
-// The pivot decoupled results from stake, so a generated pool is valid all day.
-// Cache by "YYYY-MM-DD|<goalKey>"; keep only today's entries to bound size.
-function todayKey(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-export async function getDailyPool(goalKey: string): Promise<Route[] | null> {
-  const raw = await AsyncStorage.getItem(KEYS.DAILY_POOL);
-  if (!raw) return null;
-  const map = parseJsonAs(raw, isRecordOf(isArrayOf(isRoute)));
-  return map?.[`${todayKey()}|${goalKey}`] ?? null;
-}
-
-export async function setDailyPool(goalKey: string, routes: Route[]): Promise<void> {
-  const today = todayKey();
-  let map: Record<string, Route[]> = {};
-  const raw = await AsyncStorage.getItem(KEYS.DAILY_POOL);
-  if (raw) {
-    const prev = parseJsonAs(raw, isRecordOf(isArrayOf(isRoute)));
-    if (prev) {
-      // drop anything not from today
-      for (const k of Object.keys(prev)) if (k.startsWith(`${today}|`)) map[k] = prev[k];
-    }
-  }
-  map[`${today}|${goalKey}`] = routes;
-  await AsyncStorage.setItem(KEYS.DAILY_POOL, JSON.stringify(map));
-}
-
-// ── Daily Kalshi↔Polymarket sports match cache ───────────────────────────────
-// The pairing (not the price) is what's expensive to compute, and it's stable
-// for the whole trading day — so it's cached once per day, not per user/goal.
-export async function getSportsMatches(): Promise<SportsMatch[] | null> {
-  const raw = await AsyncStorage.getItem(KEYS.SPORTS_MATCHES);
-  if (!raw) return null;
-  const cached = parseJsonAs(raw, isRecordOf(isArrayOf(isSportsMatch)));
-  return cached?.[todayKey()] ?? null;
-}
-
-export async function setSportsMatches(matches: SportsMatch[]): Promise<void> {
-  await AsyncStorage.setItem(KEYS.SPORTS_MATCHES, JSON.stringify({ [todayKey()]: matches }));
-}
-
-// ── Daily Kalshi↔Polymarket generic (non-sports) match cache ────────────────
-export async function getGenericMatches(): Promise<GenericMatch[] | null> {
-  const raw = await AsyncStorage.getItem(KEYS.GENERIC_MATCHES);
-  if (!raw) return null;
-  const cached = parseJsonAs(raw, isRecordOf(isArrayOf(isGenericMatch)));
-  return cached?.[todayKey()] ?? null;
-}
-
-export async function setGenericMatches(matches: GenericMatch[]): Promise<void> {
-  await AsyncStorage.setItem(KEYS.GENERIC_MATCHES, JSON.stringify({ [todayKey()]: matches }));
 }
 
 export async function getSubscribed(): Promise<boolean> {
@@ -341,86 +269,4 @@ export async function getBiometricLockEnabled(): Promise<boolean> {
 
 export async function setBiometricLockEnabled(enabled: boolean): Promise<void> {
   await AsyncStorage.setItem(KEYS.BIOMETRIC_LOCK, String(enabled));
-}
-
-// ── Settings ─────────────────────────────────────────────────────────────────
-// One blob, sanitized on read, so a new setting needs no key and no migration.
-
-/**
- * What good news has already been pushed. Local-only and deliberately so: it
- * exists to stop the same alert firing twice on this device, and a fresh install
- * announcing a milestone again is a far smaller problem than a server round-trip
- * on every price refresh.
- */
-export async function getAlertLedger(): Promise<AlertLedger> {
-  const raw = await AsyncStorage.getItem(KEYS.ALERT_LEDGER);
-  const parsed = raw ? parseJson(raw) : null;
-  if (!isRecord(parsed)) return EMPTY_LEDGER;
-  return {
-    lastSentDay: typeof parsed.lastSentDay === 'string' ? parsed.lastSentDay : null,
-    betTier: numberMap(parsed.betTier),
-    goalMilestone: numberMap(parsed.goalMilestone),
-  };
-}
-
-export async function saveAlertLedger(ledger: AlertLedger): Promise<void> {
-  await AsyncStorage.setItem(KEYS.ALERT_LEDGER, JSON.stringify(ledger));
-}
-
-/** Drops anything that is not a plain id → number pair, so a corrupt blob cannot
- *  make a tier comparison return NaN and re-announce everything. */
-function numberMap(value: unknown): Record<string, number> {
-  if (!isRecord(value)) return {};
-  const entries = Object.entries(value)
-    .filter((entry): entry is [string, number] => typeof entry[1] === 'number' && Number.isFinite(entry[1]));
-  return Object.fromEntries(entries);
-}
-
-export async function getPreferences(): Promise<Preferences> {
-  const raw = await AsyncStorage.getItem(KEYS.PREFERENCES);
-  return sanitizePreferences(raw ? parseJson(raw) : null);
-}
-
-/** Merge a patch over what's stored and return the resulting full object. */
-export async function updatePreferences(patch: Partial<Preferences>): Promise<Preferences> {
-  const next = sanitizePreferences({ ...(await getPreferences()), ...patch });
-  await AsyncStorage.setItem(KEYS.PREFERENCES, JSON.stringify(next));
-  await noteLocalWrite('preferences');
-  return next;
-}
-
-/**
- * What the last statement import found. The cuts are kept, the statement is not:
- * detection already consumed the rows, and there is no second question worth
- * holding thousands of individual charges on the device to answer. Device-local
- * for the same reason — nothing here is ever sent to a server.
- */
-export interface ImportedSpendingCuts {
-  cuts: SpendingCut[];
-  /** When the import ran, epoch ms — shown as "imported 3 Mar". */
-  importedAt: number;
-  /** Distinct calendar months the statement covered, for the "one month" warning. */
-  monthsCovered: number;
-  /** Spending rows read. A count only, never the rows. */
-  transactionCount: number;
-}
-
-export async function getSpendingCuts(): Promise<ImportedSpendingCuts | null> {
-  const raw = await AsyncStorage.getItem(KEYS.SPENDING_CUTS);
-  const parsed = raw ? parseJson(raw) : null;
-  if (!isRecord(parsed) || !isArrayOf(isSpendingCut)(parsed.cuts)) return null;
-  return {
-    cuts: parsed.cuts,
-    importedAt: typeof parsed.importedAt === 'number' ? parsed.importedAt : 0,
-    monthsCovered: typeof parsed.monthsCovered === 'number' ? parsed.monthsCovered : 0,
-    transactionCount: typeof parsed.transactionCount === 'number' ? parsed.transactionCount : 0,
-  };
-}
-
-export async function saveSpendingCuts(imported: ImportedSpendingCuts): Promise<void> {
-  await AsyncStorage.setItem(KEYS.SPENDING_CUTS, JSON.stringify(imported));
-}
-
-export async function clearSpendingCuts(): Promise<void> {
-  await AsyncStorage.removeItem(KEYS.SPENDING_CUTS);
 }

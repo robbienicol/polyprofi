@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useAuth, useUser } from '@clerk/clerk-expo';
+import { useAuth } from '@clerk/clerk-expo';
 import Constants from 'expo-constants';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter, type Href } from 'expo-router';
@@ -7,14 +7,11 @@ import React, { useState } from 'react';
 import { ActivityIndicator, Alert, Linking, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { useBankConnect } from '@/api/hooks/useBankConnect';
-import { useOnboardingProfile } from '@/api/hooks/useOnboardingProfile';
 import { useBiometricLock } from '@/api/hooks/useBiometricLock';
 import { useDeleteAccount } from '@/api/hooks/useDeleteAccount';
 import { usePreferences } from '@/api/hooks/usePreferences';
-import { useSavingsGoal } from '@/api/hooks/useSavingsGoal';
-import { useSpendingCuts } from '@/api/hooks/useSpendingCuts';
-import { useUserProfile } from '@/api/hooks/useUserProfile';
+import { AccountCard } from '@/components/settings/AccountCard';
+import { MoneySection } from '@/components/settings/MoneySection';
 import { ThemedText } from '@/components/themed-text';
 import {
   SettingsChoiceRow,
@@ -22,28 +19,21 @@ import {
   SettingsSection,
   SettingsSwitchRow,
 } from '@/components/ui/settings';
-import { Brand, OnBrand, Radius, Semantic, Shadow } from '@/constants/theme';
+import { Brand, Semantic } from '@/constants/theme';
 import { useDevSeedDemoData } from '@/hooks/use-dev-seed-demo-data';
 import { useTheme } from '@/hooks/use-theme';
 import { requestAppRating } from '@/lib/app-rating';
 import { requestNotificationPermission, syncWeeklyReminder } from '@/lib/notifications';
-import { ACQUISITION_PLATFORMS, APPEARANCE_OPTIONS, CURRENCIES, currencyMeta, type CurrencyCode } from '@/lib/preferences';
+import { ACQUISITION_PLATFORMS, APPEARANCE_OPTIONS } from '@/lib/preferences';
 import { withTabSkeleton } from '@/components/ui/with-tab-skeleton';
 import type { AcquisitionPlatform } from '@/types/bets';
 
 const SUPPORT_EMAIL = 'team@usepathey.com';
 
-const CURRENCY_OPTIONS = CURRENCIES.map((entry) => ({
-  value: entry.code as CurrencyCode,
-  label: `${entry.symbol} ${entry.code}`,
-}));
-
 function SettingsScreen(): React.ReactElement {
   const theme = useTheme();
   const router = useRouter();
-  const { user } = useUser();
   const { signOut } = useAuth();
-  const { goals, achievedCount } = useSavingsGoal();
   const { preferences, update } = usePreferences();
   const {
     isAvailable: biometricAvailable,
@@ -51,21 +41,7 @@ function SettingsScreen(): React.ReactElement {
     setEnabled: setBiometricEnabled,
   } = useBiometricLock();
   const { deleteAccount, isDeleting } = useDeleteAccount();
-  const { profile, checkFailed: profileUnreachable } = useUserProfile();
-  const { profile: onboarding } = useOnboardingProfile();
-  const bank = useBankConnect();
-  const { imported: importedCuts } = useSpendingCuts();
-  // The stored answer is the durable one; the hook only knows about a connection
-  // made on this mount, and the profile read is what survives a relaunch. The quiz's
-  // own record is the fallback when the server can't be reached, so an offline
-  // Settings screen doesn't offer a second Plaid link for a bank already connected.
-  const bankConnected =
-    profile?.bankConnected === true || bank.connected || onboarding.answers.bankConnected;
-  // Unknown rather than "not connected" when the profile couldn't be read: the row
-  // says so instead of inviting a duplicate connection.
-  const bankStatusUnknown = !bankConnected && profileUnreachable;
   const [deleteError, setDeleteError] = useState('');
-  const [currencyOpen, setCurrencyOpen] = useState(false);
   const devSeed = useDevSeedDemoData();
 
   const togglePlatform = (platform: AcquisitionPlatform, enabled: boolean) => {
@@ -76,11 +52,7 @@ function SettingsScreen(): React.ReactElement {
       update({ preferredPlatforms: next });
     };
 
-  const initials = ((user?.firstName?.[0] ?? '') + (user?.lastName?.[0] ?? '') || user?.primaryEmailAddress?.emailAddress?.[0] || 'P').toUpperCase();
   const version = Constants.expoConfig?.version ?? '1.0.0';
-  const memberSince = user?.createdAt
-    ? new Date(user.createdAt).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })
-    : null;
 
   const queryClient = useQueryClient();
   const handleSignOut = async () => {
@@ -170,133 +142,10 @@ function SettingsScreen(): React.ReactElement {
           </View>
 
           {/* Account */}
-          <View
-            style={{
-              borderRadius: Radius.xl,
-              backgroundColor: theme.backgroundElevated,
-              borderWidth: 1,
-              borderColor: theme.border,
-              padding: 16,
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 14,
-              ...Shadow.card,
-            }}>
-            <View
-              style={{
-                width: 54,
-                height: 54,
-                borderRadius: Radius.lg,
-                backgroundColor: Brand[500],
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}>
-              <ThemedText style={{ fontSize: 20, fontWeight: '900', color: OnBrand }}>{initials}</ThemedText>
-            </View>
-            <View className="flex-1" style={{ gap: 3 }}>
-              <ThemedText style={{ fontSize: 18, fontWeight: '800', color: theme.text, letterSpacing: -0.3 }} numberOfLines={1}>
-                {user?.fullName || user?.firstName || 'Pathey user'}
-              </ThemedText>
-              <ThemedText style={{ fontSize: 12, color: theme.textTertiary }} numberOfLines={1}>
-                {user?.primaryEmailAddress?.emailAddress ?? 'Signed in'}
-              </ThemedText>
-              {memberSince ? (
-                <View
-                  className="self-start"
-                  style={{
-                    marginTop: 3,
-                    paddingHorizontal: 8,
-                    paddingVertical: 3,
-                    borderRadius: Radius.pill,
-                    backgroundColor: theme.backgroundSelected,
-                  }}>
-                  <ThemedText style={{ fontSize: 10, fontWeight: '800', letterSpacing: 0.6, color: theme.textSecondary }}>
-                    {`MEMBER SINCE ${memberSince.toUpperCase()}`}
-                  </ThemedText>
-                </View>
-              ) : null}
-            </View>
-          </View>
+          <AccountCard />
 
           {/* Money */}
-          <SettingsSection
-            title="Money"
-            footer="Currency changes how amounts are written. Market prices are quoted in USD and are not converted.">
-            <SettingsRow
-              icon="💱"
-              label="Display currency"
-              value={`${currencyMeta(preferences.currency).symbol} ${preferences.currency}`}
-              onPress={() => setCurrencyOpen((open) => !open)}
-              accessory={
-                <ThemedText style={{ fontSize: 15, color: theme.textTertiary }}>
-                  {currencyOpen ? '▴' : '▾'}
-                </ThemedText>
-              }
-            />
-            {currencyOpen ? (
-              <SettingsChoiceRow
-                options={CURRENCY_OPTIONS}
-                selected={preferences.currency}
-                onSelect={(currency) => update({ currency })}
-              />
-            ) : null}
-            <SettingsRow
-              icon="🏦"
-              label="Bank account"
-              description={
-                bank.error
-                  ? bank.error
-                  : bankStatusUnknown
-                    ? "Couldn't check your connection. Try again when you're back online."
-                    : bankConnected
-                    ? 'Connected — real spending counts alongside every pick'
-                    : 'Weighs real spending — a subscription, a coffee habit — alongside every pick'
-              }
-              chevron={!bankConnected && !bankStatusUnknown}
-              disabled={bank.connecting || bankStatusUnknown}
-              onPress={bankConnected || bankStatusUnknown ? undefined : () => void bank.connect()}
-              accessory={
-                bankConnected ? (
-                  <ThemedText style={{ fontSize: 13, fontWeight: '800', color: Brand[500] }}>Connected</ThemedText>
-                ) : (
-                  <ThemedText style={{ fontSize: 13, fontWeight: '800', color: Brand[500] }}>
-                    {bank.connecting ? 'Connecting…' : bankStatusUnknown ? '—' : 'Connect'}
-                  </ThemedText>
-                )
-              }
-            />
-            {/* Under bank connect, not beside it: an Apple Card is the account Plaid
-                covers worst, and this is the same signal arriving by the only road
-                that works for it. */}
-            <SettingsRow
-              icon="📄"
-              label="Apple Card statement"
-              description={
-                importedCuts
-                  ? `${importedCuts.cuts.length} cuts from ${importedCuts.monthsCovered} months of spending`
-                  : 'Import a CSV export — finds what repeats and scores it as routes'
-              }
-              onPress={() => router.push('/import-statement')}
-              accessory={
-                <ThemedText style={{ fontSize: 13, fontWeight: '800', color: Brand[500] }}>
-                  {importedCuts ? 'Imported' : 'Import'}
-                </ThemedText>
-              }
-            />
-            <SettingsRow
-              icon={goals[0]?.emoji ?? '🎯'}
-              label="Goals"
-              description={
-                goals.length === 0
-                  ? 'None yet'
-                  : goals.length === 1
-                    ? goals[0].label
-                    : `${goals[0].label} + ${goals.length - 1} more`
-              }
-              value={achievedCount > 0 ? `${achievedCount} reached` : undefined}
-              onPress={() => router.push('/(tabs)/goals')}
-            />
-          </SettingsSection>
+          <MoneySection preferences={preferences} update={update} />
 
           {/* Where routes can be placed — applied to every search */}
           <SettingsSection

@@ -11,13 +11,20 @@ import { deviceQuery } from '@/api/query-client';
 import { apiBaseUrl } from '@/lib/api-base-url';
 import { isRecord, isSavingsGoalState, responseJson } from '@/lib/runtime-validation';
 import { notifyGoalAchieved } from '@/lib/notifications';
+import { committedGoals, migrateSavingsGoalState, pendingCelebrationGoal } from '@/lib/savings-goal';
 import {
-  committedGoals,
-  GOAL_ACCOUNTING_VERSION,
-  migrateSavingsGoalState,
-  pendingCelebrationGoal,
-} from '@/lib/savings-goal';
+  achieveGoal,
+  addGoalTo,
+  buildGoal,
+  celebrateGoal,
+  confirmDraft,
+  dropGoals,
+  EMPTY_STATE,
+  type SavingsGoalInput,
+} from '@/api/hooks/savings-goal-transforms';
 import type { LegacySavingsGoalState, SavingsGoal, SavingsGoalState } from '@/types/bets';
+
+export type { SavingsGoalInput } from '@/api/hooks/savings-goal-transforms';
 
 function savingsGoalQueryKey(userId: string | null | undefined) {
   return ['SAVINGS_GOAL', userId ?? 'local'] as const;
@@ -38,36 +45,6 @@ function enqueueGoalWrite<T>(write: () => Promise<T>): Promise<T> {
   const run = goalWriteQueue.then(write, write);
   goalWriteQueue = run.catch(() => undefined);
   return run;
-}
-
-const EMPTY_STATE: SavingsGoalState = {
-  goals: [],
-  achievedCount: 0,
-  accountingVersion: GOAL_ACCOUNTING_VERSION,
-};
-
-export interface SavingsGoalInput {
-  label: string;
-  emoji: string;
-  /** Omitted for an open-ended goal ("just grow my money"), which has no finish line. */
-  targetAmount?: number;
-  /** Set for a goal a route search named but nothing has been acquired against yet. */
-  draft?: boolean;
-  /** ISO deadline from the search, after which an unused draft is swept away. */
-  deadline?: string;
-}
-
-function buildGoal(input: SavingsGoalInput): SavingsGoal {
-  const target = input.targetAmount != null ? Math.max(1, Math.round(input.targetAmount)) : undefined;
-  return {
-    id: `goal-${Date.now()}`,
-    label: input.label.trim(),
-    emoji: input.emoji,
-    ...(target != null ? { targetAmount: target } : null),
-    ...(input.draft ? { draft: true } : null),
-    ...(input.deadline ? { deadline: input.deadline } : null),
-    createdAt: new Date().toISOString(),
-  };
 }
 
 export function useSavingsGoal() {
@@ -204,27 +181,17 @@ export function useSavingsGoal() {
     };
   }
 
-  // Add a goal. Existing goals and their positions stay put.
-  //
   // The goal is built by the caller-facing wrapper below rather than inside
   // mutationFn, so the row the cache shows immediately carries the same id the
   // one written to disk does — the quiz navigates on that id.
   const { mutate: addGoalRaw, mutateAsync: addGoalRawAsync } = useMutation({
     mutationFn: async (goal: SavingsGoal): Promise<SavingsGoalState> => {
-      const state = await mutateState((prev) => ({
-        ...prev,
-        goals: [...prev.goals, goal],
-        accountingVersion: GOAL_ACCOUNTING_VERSION,
-      }));
+      const state = await mutateState((prev) => addGoalTo(prev, goal));
       // mutateState only returns null when the change function declines, which
       // adding never does.
       return state as SavingsGoalState;
     },
-    ...optimistic<SavingsGoal>((prev, goal) => ({
-      ...prev,
-      goals: [...prev.goals, goal],
-      accountingVersion: GOAL_ACCOUNTING_VERSION,
-    })),
+    ...optimistic<SavingsGoal>(addGoalTo),
     onSuccess: (state) => queryClient.setQueryData(queryKey, state),
   });
 
@@ -236,80 +203,33 @@ export function useSavingsGoal() {
       return { state: await addGoalRawAsync(goal), goal };
     };
 
-  // Promote a draft into a real goal. Called when the user acquires against it:
-  // committing money is what turns a search into something worth tracking.
+  const writeCache = (next: SavingsGoalState | null) => {
+    if (next) queryClient.setQueryData(queryKey, next);
+  };
+
   const { mutate: confirmGoal } = useMutation({
     mutationFn: async (goalId: string): Promise<SavingsGoalState | null> =>
-      mutateState((prev) => {
-        const target = prev.goals.find((goal) => goal.id === goalId);
-        if (!target?.draft) return null;
-        const confirmed = { ...target };
-        delete confirmed.draft;
-        return { ...prev, goals: prev.goals.map((goal) => (goal.id === goalId ? confirmed : goal)) };
-      }),
-    ...optimistic<string>((prev, goalId) => {
-      const target = prev.goals.find((goal) => goal.id === goalId);
-      if (!target?.draft) return null;
-      const confirmed = { ...target };
-      delete confirmed.draft;
-      return { ...prev, goals: prev.goals.map((goal) => (goal.id === goalId ? confirmed : goal)) };
-    }),
-    onSuccess: (next) => {
-      if (next) queryClient.setQueryData(queryKey, next);
-    },
+      mutateState((prev) => confirmDraft(prev, goalId)),
+    ...optimistic<string>(confirmDraft),
+    onSuccess: writeCache,
   });
-
-  // Drop goals. Their positions are reassigned by the caller before this runs —
-  // see reassignBets in useTrackedBets — so nothing is left pointing at nothing.
-  //
-  // Takes a list rather than one id: every write here is a read-modify-write against
-  // storage, so removing three goals with three calls can interleave and resurrect
-  // the ones whose read happened before the others' writes landed.
-  const dropGoals = (prev: SavingsGoalState, goalIds: string[]): SavingsGoalState | null => {
-    const drop = new Set(goalIds);
-    const goals = prev.goals.filter((goal) => !drop.has(goal.id));
-    return goals.length === prev.goals.length ? null : { ...prev, goals };
-  };
 
   const { mutate: removeGoals } = useMutation({
     mutationFn: async (goalIds: string[]): Promise<SavingsGoalState | null> =>
       mutateState((prev) => dropGoals(prev, goalIds)),
     ...optimistic<string[]>(dropGoals),
-    onSuccess: (next) => {
-      if (next) queryClient.setQueryData(queryKey, next);
-    },
+    onSuccess: writeCache,
   });
 
   const removeGoal = (goalId: string): void => removeGoals([goalId]);
 
-  // Mark one goal reached (idempotent) and bump the lifetime count once.
   const { mutate: markAchieved } = useMutation({
     mutationFn: async (goalId: string): Promise<{ state: SavingsGoalState; goal: SavingsGoal } | null> => {
-      let achieved: SavingsGoal | null = null;
-      const next = await mutateState((prev) => {
-        const target = prev.goals.find((goal) => goal.id === goalId);
-        if (!target || target.achievedAt) return null;
-        achieved = { ...target, achievedAt: new Date().toISOString() };
-        return {
-          ...prev,
-          goals: prev.goals.map((goal) => (goal.id === goalId ? achieved! : goal)),
-          achievedCount: prev.achievedCount + 1,
-          accountingVersion: GOAL_ACCOUNTING_VERSION,
-        };
-      });
+      const next = await mutateState((prev) => achieveGoal(prev, goalId));
+      const achieved = next?.goals.find((goal) => goal.id === goalId);
       return next && achieved ? { state: next, goal: achieved } : null;
     },
-    ...optimistic<string>((prev, goalId) => {
-      const target = prev.goals.find((goal) => goal.id === goalId);
-      if (!target || target.achievedAt) return null;
-      const achieved = { ...target, achievedAt: new Date().toISOString() };
-      return {
-        ...prev,
-        goals: prev.goals.map((goal) => (goal.id === goalId ? achieved : goal)),
-        achievedCount: prev.achievedCount + 1,
-        accountingVersion: GOAL_ACCOUNTING_VERSION,
-      };
-    }),
+    ...optimistic<string>(achieveGoal),
     onSuccess: (result) => {
       if (!result) return; // already achieved — nothing transitioned, so don't notify twice
       queryClient.setQueryData(queryKey, result.state);
@@ -317,24 +237,11 @@ export function useSavingsGoal() {
     },
   });
 
-  // Record that the congratulations screen has been shown, so it shows once.
   const { mutate: markCelebrated } = useMutation({
     mutationFn: async (goalId: string): Promise<SavingsGoalState | null> =>
-      mutateState((prev) => {
-        const target = prev.goals.find((goal) => goal.id === goalId);
-        if (!target?.achievedAt || target.celebratedAt) return null;
-        const celebrated = { ...target, celebratedAt: new Date().toISOString() };
-        return { ...prev, goals: prev.goals.map((goal) => (goal.id === goalId ? celebrated : goal)) };
-      }),
-    ...optimistic<string>((prev, goalId) => {
-      const target = prev.goals.find((goal) => goal.id === goalId);
-      if (!target?.achievedAt || target.celebratedAt) return null;
-      const celebrated = { ...target, celebratedAt: new Date().toISOString() };
-      return { ...prev, goals: prev.goals.map((goal) => (goal.id === goalId ? celebrated : goal)) };
-    }),
-    onSuccess: (next) => {
-      if (next) queryClient.setQueryData(queryKey, next);
-    },
+      mutateState((prev) => celebrateGoal(prev, goalId)),
+    ...optimistic<string>(celebrateGoal),
+    onSuccess: writeCache,
   });
 
   const committed = committedGoals(state.goals);
