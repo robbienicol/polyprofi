@@ -33,6 +33,16 @@ export function parseJsonAs<T>(raw: string, validator: Validator<T>): T | null {
   return validator(parsed) ? parsed : null;
 }
 
+/** A non-empty string, or null for anything else (missing, blank, wrong type). */
+export function stringOrNull(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+/** The strings in a list, dropping anything else; [] when it isn't a list at all. */
+export function stringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+}
+
 export function isRecord(value: unknown): value is JsonRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

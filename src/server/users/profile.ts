@@ -1,4 +1,4 @@
-import { isRecord } from '@/lib/runtime-validation';
+import { isRecord, stringList, stringOrNull } from '@/lib/runtime-validation';
 import { HttpError, withAuth } from '@/server/shared/http';
 import { profileFor, upsertProfile, type ProfileRow } from '@/server/users/queries';
 
@@ -28,13 +28,6 @@ function toPayload(row: ProfileRow | undefined): UserProfilePayload {
   };
 }
 
-function stringOrNull(value: unknown): string | null {
-  return typeof value === 'string' && value.length > 0 ? value : null;
-}
-
-function stringArray(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
-}
 
 export const getProfile = withAuth('profile', async (_request, userId) => {
   return Response.json(toPayload(await profileFor(userId)));
@@ -49,7 +42,7 @@ export const saveProfile = withAuth('profile', async (request, userId) => {
     country: stringOrNull(body.country),
     financialGoal: stringOrNull(body.financialGoal),
     investingExperience: stringOrNull(body.investingExperience),
-    marketsInterested: stringArray(body.marketsInterested),
+    marketsInterested: stringList(body.marketsInterested),
     signupReason: stringOrNull(body.signupReason),
     investmentAmount: stringOrNull(body.investmentAmount),
     bankConnected: body.bankConnected === true,

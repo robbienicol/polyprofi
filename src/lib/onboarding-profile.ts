@@ -12,6 +12,7 @@
  * builder, and the screens can all depend on it without a cycle.
  */
 
+import { isRecord, stringList, stringOrNull } from '@/lib/runtime-validation';
 import { RESIDENCE_CODES, type ResidenceCode } from '@/lib/us-states';
 
 /** How someone says they'd react to a position going against them. */
@@ -132,10 +133,6 @@ export const DEFAULT_ONBOARDING_PROFILE: OnboardingProfile = {
 /** Longest name we'll render inline in a sentence before it starts wrapping headlines. */
 const MAX_NAME_LENGTH = 24;
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
 function oneOf<T extends string>(value: unknown, allowed: readonly T[]): T | null {
   return typeof value === 'string' && (allowed as readonly string[]).includes(value) ? (value as T) : null;
 }
@@ -152,13 +149,6 @@ export function sanitizeOnboardingProfile(value: unknown): OnboardingProfile {
   };
 }
 
-function strings(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
-}
-
-function stringOrNull(value: unknown): string | null {
-  return typeof value === 'string' && value.length > 0 ? value : null;
-}
 
 function sanitizeAnswers(value: unknown): SurveyAnswers {
   if (!isRecord(value)) return EMPTY_ANSWERS;
@@ -177,9 +167,9 @@ function sanitizeAnswers(value: unknown): SurveyAnswers {
       value.lossReaction,
       LOSS_REACTIONS.map((item) => item.value)
     ),
-    markets: strings(value.markets),
-    avoidMarkets: strings(value.avoidMarkets),
-    avoidPlatforms: strings(value.avoidPlatforms),
+    markets: stringList(value.markets),
+    avoidMarkets: stringList(value.avoidMarkets),
+    avoidPlatforms: stringList(value.avoidPlatforms),
     bankConnected: value.bankConnected === true,
     residenceState: oneOf(value.residenceState, RESIDENCE_CODES),
   };

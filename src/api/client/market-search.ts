@@ -3,7 +3,7 @@ import { fetchStockQuotes } from '@/api/client/market-quotes';
 import { searchPolymarketByKeyword } from '@/api/client/polymarket-market-data';
 import { matchAssetSymbols } from '@/lib/asset-search';
 import type { PoolGoal } from '@/lib/route-pool';
-import { isRecord, isRoute } from '@/lib/runtime-validation';
+import { isRecord, isRoute, stringList } from '@/lib/runtime-validation';
 import { assetSearchRoutes, predictionSearchRoutes, type SearchResults } from '@/lib/search-routes';
 
 /**
@@ -18,9 +18,7 @@ function resultsFrom(payload: unknown): SearchResults | null {
   return {
     prediction: payload.prediction.filter(isRoute),
     assets: payload.assets.filter(isRoute),
-    matchedSymbols: Array.isArray(payload.matchedSymbols)
-      ? payload.matchedSymbols.filter((symbol): symbol is string => typeof symbol === 'string')
-      : [],
+    matchedSymbols: stringList(payload.matchedSymbols),
   };
 }
 
