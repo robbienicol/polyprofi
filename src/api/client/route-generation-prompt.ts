@@ -1,8 +1,19 @@
-import { formatPlaybook, getPlaybook } from '@/api/client/playbook';
-import { isLongHorizon } from '@/lib/quiz-profile';
-import type { RouteParams } from '@/types/routes';
+import type { RawPick } from '@/types/picks';
 
-interface RoutePromptBlocks {
+/**
+ * The prompt for the once-a-day AI prediction-market slate.
+ *
+ * It holds nothing about any one user. The model reads the day's Polymarket leads
+ * and live prices and writes a broad slate of contracts, safe to risky, short to
+ * long; each user's search then prices, filters and ranks that slate for their own
+ * amount, deadline and risk on the device. That is what lets one generation a day
+ * serve every search, where the old prompt carried the user's goal and so cost a
+ * fresh GPT-4o call per search setting per phone.
+ *
+ * Only prediction markets: stocks, ETFs, savings and treasuries are built
+ * deterministically from live quotes and never pass through the model.
+ */
+export interface SlatePromptBlocks {
   picks: string;
   polymarket: string;
   popularPolymarket: string;
@@ -10,63 +21,20 @@ interface RoutePromptBlocks {
   taggedPolymarket: string;
   metaculusEdges: string;
   whaleTrades: string;
-  stocks: string;
-  treasury: string;
 }
 
-interface RoutePromptInput {
-  params: RouteParams;
-  timeframeLabel: string;
-  returnPct: number;
-  horizonTradingDays: number;
-  annualizedReturn: number | null;
-  blocks: RoutePromptBlocks;
-}
+export function buildDailySlatePrompt(blocks: SlatePromptBlocks): { system: string; user: string } {
+  const system = `You are a skeptical quant building PREDICTION-MARKET routes only.
+Every route must trace to a live Polymarket Yes/No price, which is the market-implied probability.
+Trader activity is only a lead — validate every idea against a live contract price.
+Do NOT output stocks, ETFs, or treasuries; those are generated separately.
+You are writing one shared slate for many users with different budgets, deadlines and risk
+appetites, so never assume an amount of money or a goal.`;
 
-export function buildRouteGenerationPrompt(input: RoutePromptInput): { system: string; user: string } {
-  const { params, timeframeLabel, returnPct, horizonTradingDays, annualizedReturn, blocks } = input;
-  const { balance, target, timeframe, riskTolerance, maxRiskLevel, minProbability } = params;
-  const conservativeGoal = annualizedReturn !== null && annualizedReturn <= 10;
-  const conservativeNote = conservativeGoal
-    ? `CONSERVATIVE GOAL: ${annualizedReturn.toFixed(1)}% annualized. Lead with T-bills, HYSA, short-term bonds, then broad index funds. No long shots.`
-    : '';
-  const horizonNote = isLongHorizon(timeframe)
-    ? `LONG TIMEFRAME: Lead with ETFs, T-bills, HYSA, and bonds. Put Polymarket lower unless it clearly beats the safe baseline.`
-    : `SHORT TIMEFRAME: Index funds are not viable for this deadline. Lead with liquid Polymarket contracts and include an exit strategy.`;
-  const riskNote = riskTolerance === 'conservative'
-    ? 'CONSERVATIVE RISK: Polymarket prices must imply at least 80% probability; emphasize capital-preserving routes.'
-    : riskTolerance === 'aggressive'
-      ? 'AGGRESSIVE RISK: Include higher-payout Polymarket contracts with a data-backed edge and state full downside.'
-      : 'BALANCED RISK: Mix mid-probability Polymarket contracts with broad ETFs and safe anchors.';
-  const playbook = formatPlaybook(getPlaybook(returnPct, timeframe), returnPct, timeframeLabel);
-
-  const system = `You are a skeptical quant. Build money routes from hard data only:
-1. Polymarket live Yes/No prices, which are the market-implied probabilities.
-2. Stocks, ETFs, and Treasuries using historical returns, realized volatility, and sourced yields.
-
-Trader activity is only a lead. Every route must trace to a live contract price or a supplied statistical figure. Lead with capital-preserving routes.`;
-
-  const user = `USER GOAL: $${balance} → $${balance + target} (+$${target}) in ${timeframeLabel}
-RETURN NEEDED: ${returnPct.toFixed(1)}%
-RISK TOLERANCE: ${riskTolerance} (maximum risk ${maxRiskLevel}/5, minimum probability ${minProbability}%)
-UNIVERSE: Polymarket, Stocks/ETFs, and Savings/Treasuries only. No sports, crypto, or forex.
-${conservativeNote}
-${horizonNote}
-${riskNote}
-
-CALIBRATED BASELINE (always include)
-${playbook}
-
-POLYMARKET IDEAS (validate every idea against a live price)
+  const user = `POLYMARKET IDEAS (validate every idea against a live price)
 ${blocks.picks}
 
-STOCKS, ETFs, AND TREASURY YIELDS
-${blocks.stocks}
-
-OFFICIAL TREASURY BILL CURVE
-${blocks.treasury}
-
-POLYMARKET ODDS
+POLYMARKET MARKET-IMPLIED PROBABILITIES
 ${blocks.polymarket}
 
 POPULAR POLYMARKET CONTRACTS
@@ -85,19 +53,38 @@ POLYMARKET WHALE TRADES
 ${blocks.whaleTrades}
 
 RULES:
-- Output only these categories: "Polymarket", "Stocks & ETFs", "Savings & Treasuries".
-- Polymarket routes require a live line such as "Yes 62¢"; probability equals that price × 100. Include an exit/sell strategy.
-- Stock/ETF probability must use the supplied P(+target% within horizon) figure.
-- Treasury routes must use supplied yields and maturities that finish by the deadline.
-- Assume the user invests the full $${balance}. Binary profit = stake × (1/price − 1). Treasury profit uses annual yield prorated over maturity.
-- Set meetsTarget true only when expectedReturn is at least $${target}.
-- maturesInDays is calendar days until resolution or payout. For stocks use about ${horizonTradingDays} trading days.
-- Return 20–30 routes ranked safest to riskiest.
+- Output ONLY routes in the "Polymarket" category.
+- Every route needs a live line such as "Yes 62¢"; probability equals that price × 100. Include an entry and exit/sell plan.
+- Cover the range, because users filter this slate by their own risk and deadline:
+  roughly a third safe (probability 80%+), a third balanced (55–80%), a third riskier with a
+  data-backed edge (under 55%); and a mix of contracts resolving within 2 weeks, within 3 months,
+  and later.
+- Never mention a dollar amount, stake or goal in any field.
+- maturesInDays is calendar days until the market resolves.
+- riskLevel is 1 (safest) to 5.
+- Return 15–20 routes ranked safest to riskiest.
+- The emoji field is a key, not decoration: use "🔮" and nothing else.
 
 Return only a JSON array inside <routes> tags with this shape:
 <routes>
-[{"id":"1","category":"Polymarket | Stocks & ETFs | Savings & Treasuries","emoji":"📈","description":"imperative action under 18 words","riskLevel":1,"probability":72,"expectedReturn":25,"lossProfile":"binary or partial","meetsTarget":true,"platform":"specific platform","line":"live Polymarket price or omit","maturesInDays":9,"strategy":"specific entry and exit plan"}]
+[{"id":"1","category":"Polymarket","emoji":"🔮","description":"imperative action under 18 words","riskLevel":2,"probability":72,"lossProfile":"binary","platform":"Polymarket","line":"live Polymarket price e.g. Yes 62¢","maturesInDays":9,"strategy":"specific entry and exit plan"}]
 </routes>`;
 
   return { system, user };
+}
+
+export function formatRawPicks(picks: RawPick[]): string {
+  if (picks.length === 0) return 'No picks fetched; use market data only.';
+  const qualityRank = { high: 0, medium: 1, low: 2 } as const;
+  return [...picks]
+    .sort((a, b) => qualityRank[a.sourceQuality] - qualityRank[b.sourceQuality])
+    .slice(0, 40)
+    .map((pick, index) => `[${index + 1}] (${pick.category}) ${pick.pick}\nReasoning: ${pick.reasoning}\nSource: ${pick.source} [${pick.sourceQuality}]`)
+    .join('\n\n');
+}
+
+export function extractRoutesJson(text: string): string {
+  return text.match(/<routes>([\s\S]*?)<\/routes>/)?.[1]?.trim()
+    ?? text.match(/```json\n?([\s\S]*?)```/)?.[1]?.trim()
+    ?? text.slice(Math.max(0, text.indexOf('[')), text.lastIndexOf(']') + 1);
 }

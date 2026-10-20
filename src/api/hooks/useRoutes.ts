@@ -1,6 +1,7 @@
+import { useAuth } from '@clerk/clerk-expo';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { fetchRoutes } from '@/api/client/anthropic';
+import { fetchRoutes } from '@/api/client/route-fetch';
 import { Route, RouteParams } from '@/types/routes';
 
 function routesQueryKey(params: RouteParams | null) {
@@ -18,12 +19,13 @@ function routesQueryKey(params: RouteParams | null) {
 }
 
 export function useRoutes(params: RouteParams | null, options?: { enabled?: boolean }) {
+  const { getToken } = useAuth();
   const queryClient = useQueryClient();
   const queryKey = routesQueryKey(params);
   const shouldFetch = !!params && (options?.enabled ?? false);
   const { data, status, isFetching, error: queryError } = useQuery<Route[], Error>({
     queryKey,
-    queryFn: () => params ? fetchRoutes(params) : Promise.resolve([]),
+    queryFn: () => params ? fetchRoutes(params, { getToken }) : Promise.resolve([]),
     enabled: shouldFetch,
     staleTime: 5 * 60 * 1000,
     retry: false,
@@ -32,7 +34,7 @@ export function useRoutes(params: RouteParams | null, options?: { enabled?: bool
 
   const refresh = async () => {
     if (!params) return [];
-    const routes = await fetchRoutes(params, { force: true });
+    const routes = await fetchRoutes(params, { getToken });
     queryClient.setQueryData(queryKey, routes);
     return routes;
   };

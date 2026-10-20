@@ -1,4 +1,5 @@
 import { StockQuote } from '@/api/client/market-data';
+import { plainYieldDescription, yieldInstrument } from '@/lib/plain-yield-copy';
 import { isDebtRoute } from '@/lib/route-investment-metrics';
 import { Route } from '@/types/routes';
 
@@ -26,12 +27,6 @@ function sourceForDebtRoute(route: Route, quotes: StockQuote[]): StockQuote | nu
   return null;
 }
 
-function maturityLabel(days: number): string {
-  if (days < 14) return `${days}d`;
-  if (days < 60) return `${Math.round(days / 7)}w`;
-  if (days < 365) return `${Math.round(days / 30)}mo`;
-  return `${(days / 365).toFixed(1)}y`;
-}
 
 export function applySourcedDebtFacts(
   routes: Route[],
@@ -62,7 +57,14 @@ export function applySourcedDebtFacts(
     const yieldLabel = source.yieldLabel ?? 'sourced yield';
     return {
       ...route,
-      description: `Put your $${principal.toLocaleString()} in ${instrument} — ${source.yieldPct.toFixed(2)}% ${yieldLabel} projects +$${projectedProfit} over ${maturityLabel(days)}.`,
+      description: plainYieldDescription({
+        instrument: source.symbol === '^IRX' ? 'tbill' : source.symbol === 'SGOV' ? 'treasury-fund' : yieldInstrument(route),
+        stake: principal,
+        profit: projectedProfit,
+        days,
+        yieldPct: source.yieldPct,
+        name: instrument,
+      }),
       expectedReturn: projectedProfit,
       meetsTarget: projectedProfit >= target,
       strategy: `${route.strategy} Source: ${source.yieldSource} (${yieldLabel} ${source.yieldPct.toFixed(2)}%, as of ${source.yieldAsOf}). Projection: $${principal.toLocaleString()} × ${source.yieldPct.toFixed(2)}% × ${days}/365 days.`,
