@@ -111,7 +111,7 @@ export const METHODOLOGY: Record<ProbabilityMethod, MethodologyCopy> = {
     long:
       'This probability comes from live option prices, not from us. Every option price implies how ' +
       'widely traders expect the stock to move by expiry — its implied volatility. From that spread ' +
-      'we work out the chance the stock finishes past the level this position needs (the standard ' +
+      'we work out the chance the stock finishes past the level, or inside the range, this position needs (the standard ' +
       'Black-Scholes N(d2), using the T-bill rate). Each leg is priced at the ask when you buy and ' +
       'the bid when you sell, so the spread you would actually pay is already in the numbers.',
     caveats: [

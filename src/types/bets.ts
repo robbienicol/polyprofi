@@ -136,6 +136,11 @@ export interface TrackedBet {
   annualYieldPct?: number;
   /** Original route horizon, used to cap projected accrual at maturity. */
   maturesInDays?: number;
+  /**
+   * Copied from the route at track time: whether the stake can go to zero ('binary') or
+   * only fall ('partial'). Lets a covered call count as market risk, not a contract.
+   */
+  lossProfile?: 'binary' | 'partial';
 }
 
 /** Live status from bet-monitor — not persisted. */

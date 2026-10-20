@@ -9,12 +9,19 @@ import { isRecord, responseJson } from '@/lib/runtime-validation';
  */
 
 /**
- * The most liquid optionable names: three index ETFs and the mega-caps with the deepest
- * chains. Liquidity is the selection rule because the builder prices every buy at the
- * ask and every sale at the bid — a thin chain would make every route look worse than
- * the strategy is, or hide a spread the user would actually pay.
+ * The most liquid optionable names. Liquidity is the selection rule because the builder
+ * prices every buy at the ask and every sale at the bid — a thin chain would make every
+ * route look worse than the strategy is, or hide a spread the user would actually pay.
+ *
+ * Two tiers: index ETFs and mega-caps with the deepest chains, then liquid names under
+ * ~$70. Anything that holds 100 shares (covered calls, cash-secured puts, collars) costs
+ * 100× the share price, so without the second tier a small account only ever saw bought
+ * calls and puts — a $12 stock puts those strategies at ~$1,200 a contract.
  */
-const OPTIONS_UNIVERSE = ['SPY', 'QQQ', 'IWM', 'AAPL', 'MSFT', 'NVDA', 'AMZN', 'META', 'GOOGL', 'TSLA', 'JPM', 'AMD'];
+const OPTIONS_UNIVERSE = [
+  'SPY', 'QQQ', 'IWM', 'AAPL', 'MSFT', 'NVDA', 'AMZN', 'META', 'GOOGL', 'TSLA', 'JPM', 'AMD',
+  'F', 'AAL', 'RIVN', 'SOFI', 'T', 'CCL', 'PFE', 'FXI', 'BAC', 'SLV', 'XLF', 'UBER',
+];
 
 /** Goal horizons in calendar days — the same values as timeframeCalendarDays. */
 const HORIZON_DAYS = [1, 7, 30, 90, 365, 1825];
@@ -41,7 +48,7 @@ export async function fetchChains(): Promise<OptionChain[]> {
 }
 
 async function fetchChain(symbol: string): Promise<OptionChain | null> {
-  const response = await fetch(`https://cdn.cboe.com/api/global/delayed_quotes/options/${symbol}.json`, {
+  const response = await fetch(`https://cdn-api.cboe.com/api/global/delayed_quotes/options/${symbol}.json`, {
     headers: { Accept: 'application/json' },
   });
   if (!response.ok) throw new Error(`CBOE ${response.status}`);
@@ -97,7 +104,7 @@ function readContract(raw: unknown, symbol: string, spot: number): { date: strin
   if (bid <= 0 || ask <= bid || iv <= 0 || openInterest < MIN_OPEN_INTEREST) return null;
   if ((ask - bid) / mid > MAX_RELATIVE_SPREAD) return null;
   if (strike < spot * 0.5 || strike > spot * 1.6) return null;
-  // The builder only ever picks strikes between ~0.20 and ~0.50 delta.
+  // The builder only ever picks strikes between ~0.10 (condor wings) and ~0.50 delta.
   const absDelta = Math.abs(numberOr(raw.delta));
   if (absDelta < 0.08 || absDelta > 0.65) return null;
   return {

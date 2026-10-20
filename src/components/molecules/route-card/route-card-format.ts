@@ -1,6 +1,7 @@
 import { routeFeed } from '@/api/hooks/useRouteLive';
 import { CategoryScale, Colors, RiskScale } from '@/constants/theme';
 import type { GoalOdds } from '@/lib/goal-odds';
+import { winCondition } from '@/lib/options-routes';
 import type { Route } from '@/types/routes';
 
 const RISK_LABELS = ['Very safe', 'Safe', 'Moderate', 'Aggressive', 'Very aggressive'] as const;
@@ -107,9 +108,12 @@ export function recommendedPlay(route: Route): string {
     switch (option.strategy) {
       case 'long-call': return `Buy ${ticker} call`;
       case 'long-put': return `Buy ${ticker} put`;
-      case 'bull-call-spread': return `${ticker} call spread`;
+      case 'bull-call-spread':
+      case 'bear-put-spread':
+      case 'iron-condor': return `${ticker} ${winCondition(option)}`;
       case 'cash-secured-put': return `Sell ${ticker} put`;
       case 'covered-call': return `${ticker} covered call`;
+      case 'collar': return `${ticker} collar`;
     }
   }
   const feed = routeFeed(route);

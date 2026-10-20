@@ -24,7 +24,10 @@ export type RiskShape =
 const BINARY = /sports|polymarket|parlay|option|prediction|call|put|spread/i;
 const PROTECTED = /treasur|savings|hysa|bond|\bcd\b|cash|money market/i;
 
-export function riskShapeFor(category: string): RiskShape {
+export function riskShapeFor(category: string, lossProfile?: TrackedBet['lossProfile']): RiskShape {
+  // Covered calls, cash-secured puts and collars hold (or must buy) the shares: a fall
+  // is a fall, not a wipeout, so they sit with stocks rather than with contracts.
+  if (lossProfile === 'partial' && /option/i.test(category)) return 'market';
   if (BINARY.test(category)) return 'binary';
   if (PROTECTED.test(category)) return 'protected';
   return 'market';
@@ -76,7 +79,7 @@ export function outcomeRange(bets: TrackedBet[], conservative = false): OutcomeR
   let expectedProfit = 0;
 
   for (const bet of active) {
-    const shape = riskShapeFor(bet.category);
+    const shape = riskShapeFor(bet.category, bet.lossProfile);
     staked += bet.amountWagered;
     best += bet.amountWagered + bet.expectedReturn;
     expectedProfit += betEv(bet, conservative);
@@ -119,7 +122,7 @@ export function capitalSplit(bets: TrackedBet[]): CapitalSplit {
   let protectedCapital = 0;
 
   for (const bet of active) {
-    const shape = riskShapeFor(bet.category);
+    const shape = riskShapeFor(bet.category, bet.lossProfile);
     if (shape === 'binary') atRisk += bet.amountWagered;
     else if (shape === 'market') marketExposed += bet.amountWagered;
     else protectedCapital += bet.amountWagered;

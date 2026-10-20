@@ -29,10 +29,14 @@ export function routeSubcategory(route: Route): RouteSubcategory | null {
   }
   if (route.optionPosition) {
     switch (route.optionPosition.strategy) {
-      case 'long-call':
-      case 'bull-call-spread': return { value: 'calls', label: 'Calls', emoji: '📈' };
+      case 'long-call': return { value: 'calls', label: 'Calls', emoji: '📈' };
       case 'long-put': return { value: 'puts', label: 'Puts', emoji: '📉' };
-      default: return { value: 'income', label: 'Income', emoji: '💵' };
+      case 'bull-call-spread':
+      case 'bear-put-spread':
+      case 'iron-condor': return { value: 'levels', label: 'Price levels', emoji: '🎚️' };
+      case 'collar': return { value: 'floored', label: 'With a floor', emoji: '🪂' };
+      case 'cash-secured-put':
+      case 'covered-call': return { value: 'income', label: 'Income', emoji: '💵' };
     }
   }
   const crypto = route.id.match(/^crypto-([a-z0-9]+)$/);

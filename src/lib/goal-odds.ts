@@ -1,3 +1,4 @@
+import { payoffAtExpiry } from '@/lib/options-routes';
 import { probabilityOfTargetMove } from '@/lib/volatility-probability';
 import type { Route } from '@/types/routes';
 
@@ -76,8 +77,19 @@ function isCashLike(route: Route): boolean {
  */
 export function badCaseFraction(route: Route, deadlineDays: number): { fraction: number; kind: BadCaseKind } {
   if (route.noCapitalRequired || isCashLike(route)) return { fraction: 0, kind: 'none' };
-  if (route.optionPosition && route.optionPosition.lotCost > 0) {
-    return { fraction: Math.min(1, route.optionPosition.maxLoss / route.optionPosition.lotCost), kind: 'all' };
+  const option = route.optionPosition;
+  if (option && option.lotCost > 0) {
+    // Covered calls, cash-secured puts and collars hold (or must buy) the shares, so a
+    // fall is a fall, not a wipeout: the same 1-in-20 stretch a fund gets, off the
+    // options market's own IV, run through the position's payoff — so the premium
+    // cushions it and a collar's put floors it.
+    if (route.lossProfile === 'partial' && option.impliedVolatility != null && option.impliedVolatility > 0) {
+      const years = Math.max(1, route.maturesInDays ?? deadlineDays) / 365;
+      const tailPrice = option.underlyingPrice * Math.exp(-TAIL_Z * option.impliedVolatility * Math.sqrt(years));
+      const loss = -payoffAtExpiry(option, tailPrice);
+      return { fraction: Math.max(0, Math.min(1, loss / option.lotCost)), kind: 'tail' };
+    }
+    return { fraction: Math.min(1, option.maxLoss / option.lotCost), kind: 'all' };
   }
   if (route.exitPlan) return { fraction: route.exitPlan.effectiveLossFraction, kind: 'stop' };
   if (route.lossProfile === 'binary') return { fraction: 1, kind: 'all' };
@@ -199,6 +211,23 @@ export function __selfCheck(): void {
   console.assert(sized.badCaseKind === 'tail' && sized.badCase <= 400 && sized.stake === 1000, 'a calm fund can use the whole budget within the cap');
   const tighter = goalOdds(fund, { ...input, maxLoss: 50, requiredStake: 1000 });
   console.assert(tighter.stake < 1000 && tighter.chance < sized.chance, 'a tighter cap means a smaller stake and lower odds');
+
+  // A covered call holds the shares: its bad case is the stock's 1-in-20 fall less the
+  // premium, not the whole stake.
+  const coveredCall: Route = {
+    ...base, category: 'Options', lossProfile: 'partial', maturesInDays: 30,
+    optionPosition: {
+      strategy: 'covered-call', underlying: 'TEST', underlyingPrice: 100, expiry: '2026-10-30', quotedAt: '',
+      legs: [{ action: 'buy', type: 'shares', strike: 100, price: 100 }, { action: 'sell', type: 'call', strike: 105, price: 2 }],
+      lotCost: 9800, winReturnRate: 7 / 98, winLevel: 105, winDirection: 'above', maxLoss: 9800, impliedVolatility: 0.3,
+    },
+  };
+  const covered = badCaseFraction(coveredCall, 30);
+  console.assert(covered.kind === 'tail' && covered.fraction > 0.05 && covered.fraction < 0.2, 'a covered call falls with the stock, cushioned by the premium');
+  const legacy = badCaseFraction({ ...coveredCall, optionPosition: { ...coveredCall.optionPosition!, impliedVolatility: undefined } }, 30);
+  console.assert(legacy.kind === 'all', 'without IV on record it falls back to the max loss');
+  const boughtCall = badCaseFraction({ ...coveredCall, lossProfile: 'binary', optionPosition: { ...coveredCall.optionPosition!, strategy: 'long-call', lotCost: 200, maxLoss: 200 } }, 30);
+  console.assert(boughtCall.kind === 'all' && boughtCall.fraction === 1, 'a bought option can still lose it all');
 
   // A T-bill loses nothing, so the cap never binds; cash-like routes size to the budget.
   const bill: Route = { ...base, category: 'Savings & Treasuries', lossProfile: 'partial', riskLevel: 1, probability: 99 };

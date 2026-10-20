@@ -21,6 +21,7 @@ export function __selfCheck(): void {
   console.assert(riskShapeFor('Polymarket') === 'binary', 'a prediction market is all or nothing');
   console.assert(riskShapeFor('Sports Betting') === 'binary', 'sports is all or nothing');
   console.assert(riskShapeFor('Options') === 'binary', 'options are all or nothing');
+  console.assert(riskShapeFor('Options', 'partial') === 'market', 'a covered call or collar is market risk, not a wipeout');
   console.assert(riskShapeFor('Savings & Treasury') === 'protected', 'savings principal is not market-exposed');
   console.assert(riskShapeFor('Stocks & ETFs') === 'market', 'equities are market-exposed');
   console.assert(riskShapeFor('Crypto') === 'market', 'crypto is market-exposed, not binary');

@@ -127,14 +127,16 @@ export function isRoute(value: unknown): value is Route {
 
 function isOptionPosition(value: unknown): value is NonNullable<Route['optionPosition']> {
   if (!isRecord(value)) return false;
-  return isOneOf(value.strategy, ['long-call', 'long-put', 'bull-call-spread', 'cash-secured-put', 'covered-call'])
+  return isOneOf(value.strategy, ['long-call', 'long-put', 'bull-call-spread', 'bear-put-spread', 'iron-condor', 'cash-secured-put', 'covered-call', 'collar'])
     && typeof value.underlying === 'string'
     && typeof value.expiry === 'string'
     && Array.isArray(value.legs)
     && isFiniteNumber(value.lotCost) && value.lotCost > 0
     && isFiniteNumber(value.winReturnRate)
     && isFiniteNumber(value.winLevel)
-    && isOneOf(value.winDirection, ['above', 'below']);
+    && isOneOf(value.winDirection, ['above', 'below', 'between'])
+    && (value.winDirection !== 'between' || isFiniteNumber(value.winUpper))
+    && isOptional(value.impliedVolatility, isFiniteNumber);
 }
 
 function isCardRewardsFacts(value: unknown): value is NonNullable<Route['cardRewards']> {

@@ -161,7 +161,15 @@ export interface Route {
   annualDriftPct?: number;
 }
 
-export type OptionStrategy = 'long-call' | 'long-put' | 'bull-call-spread' | 'cash-secured-put' | 'covered-call';
+export type OptionStrategy =
+  | 'long-call'
+  | 'long-put'
+  | 'bull-call-spread'
+  | 'bear-put-spread'
+  | 'iron-condor'
+  | 'cash-secured-put'
+  | 'covered-call'
+  | 'collar';
 
 export interface OptionLeg {
   action: 'buy' | 'sell';
@@ -184,10 +192,18 @@ export interface OptionPosition {
   lotCost: number;
   /** Profit per $1 of lotCost when the winning level is reached at expiry. */
   winReturnRate: number;
-  /** Underlying price at expiry at or beyond which the full win is paid. */
+  /** Underlying price at expiry at or beyond which the full win is paid; the lower edge for 'between'. */
   winLevel: number;
-  /** 'above' for bullish and premium-selling strategies, 'below' for a put. */
-  winDirection: 'above' | 'below';
+  /** 'above' for bullish and premium-selling strategies, 'below' for puts, 'between' for a range. */
+  winDirection: 'above' | 'below' | 'between';
+  /** Upper edge of the winning range, set only when `winDirection` is 'between'. */
+  winUpper?: number;
+  /**
+   * Implied volatility of the leg that sets the win level, annualised. Sizes the 1-in-20
+   * bad case for positions that hold or must buy the shares. Absent on routes built
+   * before it was recorded, which fall back to the position's max loss.
+   */
+  impliedVolatility?: number;
   /** Most one lot can lose, in dollars. */
   maxLoss: number;
   /** CBOE snapshot time. */

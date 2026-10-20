@@ -1,10 +1,13 @@
 import type { OptionChain } from '@/api/client/options-chain-types';
 import {
+  bearPutSpread,
   bullCallSpread,
   cashSecuredPut,
+  collar,
   coveredCall,
   daysUntilExpiry,
   expiryForDeadline,
+  ironCondor,
   longOption,
   type Candidate,
 } from '@/lib/options-routes/positions';
@@ -13,9 +16,14 @@ import { probabilityAboveAtExpiry } from '@/lib/volatility-probability';
 import type { Route } from '@/types/routes';
 
 /**
- * Options routes, built from live CBOE chains (see /api/options-chains) — five
- * strategies on each liquid ticker, so ~60 candidates that rank through the same
- * Pathey score as everything else.
+ * Options routes, built from live CBOE chains (see /api/options-chains) — eight
+ * strategies on each liquid ticker, ranked through the same Pathey score as
+ * everything else:
+ *   - Price levels: call and put spreads ("closes above / below $X") and iron
+ *     condors ("closes between $X and $Y") — a prediction market on any stock.
+ *   - Directional: a bought call or put.
+ *   - Shares: cash-secured puts, covered calls, and collars, which put a floor
+ *     under the shares so a loss still returns most of the money.
  *
  * Honesty rules, the same as every other builder:
  *   - Real contracts only. Every leg is a strike and expiry that trades today, bought
@@ -57,8 +65,11 @@ export function buildOptionsRoutes({
       longOption(chain, expiry, 'call'),
       longOption(chain, expiry, 'put'),
       bullCallSpread(chain, expiry),
+      bearPutSpread(chain, expiry),
+      ironCondor(chain, expiry),
       cashSecuredPut(chain, expiry),
       coveredCall(chain, expiry),
+      collar(chain, expiry),
     ];
     return positions.flatMap((candidate) => {
       if (!candidate) return [];
@@ -70,8 +81,19 @@ export function buildOptionsRoutes({
 }
 
 function winProbability(spot: number, candidate: Candidate, years: number, riskFreePct: number): number | null {
-  const { winLevel, winDirection } = candidate.position;
+  const { winLevel, winUpper, winDirection } = candidate.position;
   const above = probabilityAboveAtExpiry(spot, winLevel, candidate.iv, years, riskFreePct);
   if (above == null) return null;
-  return Math.round((winDirection === 'above' ? above : 100 - above) * 10) / 10;
+  if (winDirection === 'between') {
+    // Each edge is read off its own leg's IV, so skew is priced on both sides.
+    const pastUpper = winUpper != null && candidate.upperIv != null
+      ? probabilityAboveAtExpiry(spot, winUpper, candidate.upperIv, years, riskFreePct)
+      : null;
+    return pastUpper == null ? null : roundTenth(Math.max(0, above - pastUpper));
+  }
+  return roundTenth(winDirection === 'above' ? above : 100 - above);
+}
+
+function roundTenth(value: number): number {
+  return Math.round(value * 10) / 10;
 }

@@ -78,6 +78,7 @@ export function trackedPositionFields(route: Route, amount: number, openedAt: st
   assetQuantity?: number;
   costBasis: number;
   positionOpenedAt: string;
+  lossProfile: Route['lossProfile'];
 } {
   const asset = trackedAssetFields(route);
   const costBasis = Math.max(0, amount);
@@ -88,5 +89,6 @@ export function trackedPositionFields(route: Route, amount: number, openedAt: st
       : undefined,
     costBasis,
     positionOpenedAt: openedAt,
+    lossProfile: route.lossProfile,
   };
 }
