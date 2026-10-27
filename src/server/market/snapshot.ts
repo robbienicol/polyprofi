@@ -4,7 +4,7 @@ import { cached } from '@/server/shared/cache';
 
 /**
  * Every piece of public market data a search needs, fetched once and shared by every
- * user: Polymarket (about 6 requests), 39 Yahoo quotes with five years of history each,
+ * user: Polymarket (about 6 requests), 61 Yahoo quotes with five years of history each,
  * the Treasury curve, the SGOV page and Metaculus. On the device that was ~45 requests
  * and megabytes of history per search, per phone. Here it is one cached row.
  *
@@ -17,7 +17,7 @@ export interface MarketSnapshot {
   universe: PolymarketEntry[];
 }
 
-const KEY = 'market-snapshot-v1';
+const KEY = 'market-snapshot-v2';
 const TTL_MS = 10 * 60 * 1000;
 
 async function fetchMarketSnapshot(): Promise<MarketSnapshot> {

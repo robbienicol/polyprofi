@@ -7,6 +7,8 @@ const STOCK_SYMBOLS = [
   'SPY', 'VOO', 'VTI', 'VXUS', 'QQQ', 'DIA', 'IWM', 'BND', 'SGOV', 'SHY', 'TLT', 'GLD', 'SCHD', 'BRK-B',
   'LQD', 'MUB', 'SCHP', 'BNDX',
   'AAPL', 'TSLA', 'NVDA', 'MSFT', 'AMZN', 'META', 'GOOGL', 'V', 'JPM', 'WMT', 'JNJ', 'COST', 'XOM',
+  'KO', 'PG', 'DUK', 'PEP', 'MCD', 'VZ', 'HD', 'UNH', 'LLY', 'DIS', 'NFLX', 'BAC', 'CAT',
+  'AMD', 'AVGO', 'UBER', 'SHOP', 'PLTR', 'COIN', 'HOOD', 'SOFI', 'RIVN',
   'BTC-USD', 'ETH-USD', 'SOL-USD', 'XRP-USD', 'DOGE-USD',
   '^IRX', '^FVX', '^TNX',
 ];

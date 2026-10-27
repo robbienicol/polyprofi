@@ -34,7 +34,7 @@ export interface PoolInputs {
   aiSlate: Route[];
 }
 
-const POOL_VERSION = 'pool-v1';
+const POOL_VERSION = 'pool-v2';
 
 /**
  * One pool per deadline and RETURN BAND, not per dollar target. A $300 and a $305 goal
