@@ -1,101 +1,82 @@
 #!/usr/bin/env node
 
+// App Store screenshots, 6.9" (1320x2868). One short headline over one big
+// phone: dark page, cream app, nothing else to read.
+//
+// Screens are stills pulled from the screen recordings in marketing/captures
+// (the same footage the App Store preview video uses), so the slides and the
+// video always show the same build. Needs ffmpeg and ImageMagick.
+
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 const root = resolve(import.meta.dirname, '..');
-const sourceDir = join(root, 'store-screenshots', 'source-current');
+const captureDir = join(root, 'marketing', 'captures');
 const outputDir = join(root, 'store-screenshots', 'marketing-6.9');
-const generatedBackground = join(sourceDir, 'generated-path-background.png');
-// The brand faces (BRANDING.md): Source Serif 4 sets the headline, Public Sans
-// everything under it. Read straight out of node_modules so the slides use the
-// same files the app bundles.
 const fontDisplay = join(
   root,
   'node_modules/@expo-google-fonts/source-serif-4/700Bold/SourceSerif4_700Bold.ttf',
 );
-const fontBold = join(
-  root,
-  'node_modules/@expo-google-fonts/public-sans/700Bold/PublicSans_700Bold.ttf',
-);
-const fontRegular = join(
-  root,
-  'node_modules/@expo-google-fonts/public-sans/500Medium/PublicSans_500Medium.ttf',
-);
 
-// Palette tokens, mirroring src/constants/theme.ts. Slides alternate cream and
-// near-black; brand clay carries the eyebrow and the rule, and nothing else.
-const CREAM = '#F7F3EC';
+// Palette tokens, mirroring src/constants/theme.ts.
 const NIGHT = '#141312';
-const INK = '#1C1A18';
-const MUTED = '#756F68';
-const MUTED_DARK = '#A79F95';
-const TINT_LIGHT = '#EDE6DA';
-const TINT_DARK = '#24211E';
+const CREAM = '#F7F3EC';
 const BRAND = '#D9653D';
+const APP_BG = '#F5F2EB'; // the app's screen background, sampled from the captures
 
-const light = { background: CREAM, accent: TINT_LIGHT, text: INK, muted: MUTED, glow: BRAND };
-const dark = { background: NIGHT, accent: TINT_DARK, text: CREAM, muted: MUTED_DARK, glow: BRAND };
+const W = 1320;
+const H = 2868;
 
+// Captures are 1206x2622; the status bar is the top 180px.
+const CAP_W = 1206;
+const CAP_H = 2622;
+const STATUS_H = 180;
+// Every slide wears the same status bar so the clock doesn't jump between them.
+const STATUS_FROM = { capture: '03-route-detail', at: 9 };
+
+// Phone: the screen is drawn 1120 wide and runs off the bottom of the page.
+const SCREEN_W = 1120;
+const SCREEN_H = Math.round((CAP_H * SCREEN_W) / CAP_W);
+const BEZEL = 22;
+const PHONE_TOP = 690;
+
+// capture/at: which recording and second to grab. scroll: source pixels to
+// scroll the content up. Only scroll screens without a tab bar, or the bar
+// rides up with the content.
 const slides = [
   {
-    layout: 'hook',
-    output: '00-what-pathey-does.png',
-    source: '02-ranked-routes.png',
-    eyebrow: 'PATHEY',
-    headline: 'Not advice.\nJust the math.',
-    subhead: 'Tell it the goal. It prices every route to it —\nsavings, stocks, crypto, prediction markets.',
-    ...light,
+    output: '01-routes.png',
+    capture: '01-routes-list',
+    at: 0.3,
+    headline: ['Pick a goal.', 'See every route.'],
   },
   {
-    output: '01-how-it-works.png',
-    source: '01-how-it-works.png',
-    eyebrow: 'EVERY ROUTE, SAFEST FIRST',
-    headline: 'Tell it the goal.\nIt finds the route.',
-    subhead: 'Every route, safest first. Scored out of 100,\nand every score opens into its working.',
-    ...dark,
+    output: '02-odds.png',
+    capture: '03-route-detail',
+    at: 9,
+    headline: ['See the odds', 'before you buy.'],
   },
   {
-    output: '02-ranked-routes.png',
-    source: '02-ranked-routes.png',
-    eyebrow: 'RANKED FOR YOUR NUMBER',
-    headline: 'A Roth IRA and a bet\nget the same math.',
-    subhead: 'Sometimes the bet wins. Drag the dials,\nand the list re-ranks for your number.',
-    ...light,
+    output: '03-outcome.png',
+    capture: '03-route-detail',
+    at: 25,
+    scroll: 320,
+    headline: ['The upside.', 'The downside.'],
   },
   {
-    output: '03-goals.png',
-    source: '03-goals.png',
-    eyebrow: 'YOUR NUMBER, YOUR DEADLINE',
-    headline: 'Six months or\nsix years.',
-    subhead: 'The math changes with your goals — and it\nsays so when the goal does not add up.',
-    ...dark,
+    output: '04-score.png',
+    capture: '04-score-weights',
+    at: 40,
+    headline: ['You decide', 'what best means.'],
   },
   {
-    output: '04-portfolio.png',
-    source: '04-portfolio.png',
-    eyebrow: 'ONE LIVE VIEW',
-    headline: 'The whole plan,\npriced today.',
-    subhead: 'Worth now, expected outcomes and the odds\nof hitting the goal, in one live view.',
-    ...light,
-  },
-  {
-    output: '05-positions.png',
-    source: '05-positions.png',
-    eyebrow: 'WHAT COULD GO WRONG',
-    headline: 'An AI coach\nfor every pick.',
-    subhead: 'Including what could go wrong. Track each\nposition live, and record how it closed.',
-    ...dark,
-  },
-  {
-    output: '06-new-goal.png',
-    source: '06-new-goal.png',
-    eyebrow: 'START WITH THE GOAL',
-    headline: 'Not the best recipe.\nThe best compass.',
-    subhead: 'Nobody knows the market.\nEverybody can read a map.',
-    ...light,
+    output: '05-coach.png',
+    capture: '04-score-weights',
+    at: 0.5,
+    scroll: 300,
+    headline: ['Ask what could', 'go wrong.'],
   },
 ];
 
@@ -103,219 +84,80 @@ function magick(args) {
   execFileSync('magick', args, { stdio: 'inherit' });
 }
 
-function buildBackground(slide, path) {
-  if (slide.background === 'generated') {
-    magick([
-      generatedBackground,
-      '-resize',
-      '1320x2868^',
-      '-gravity',
-      'center',
-      '-extent',
-      '1320x2868',
-      '-fill',
-      'rgba(0,0,0,0.08)',
-      '-colorize',
-      '8',
-      path,
-    ]);
-    return;
+function grab(capture, at, path) {
+  execFileSync('ffmpeg', [
+    '-v', 'error', '-y', '-ss', String(at), '-i', join(captureDir, `${capture}.mp4`),
+    '-frames:v', '1', path,
+  ]);
+}
+
+function buildScreen(slide, statusBar, workingDir, path) {
+  const raw = join(workingDir, `${slide.output}-raw.png`);
+  grab(slide.capture, slide.at, raw);
+  const scroll = slide.scroll ?? 0;
+  const content = `${CAP_W}x${CAP_H - STATUS_H - scroll}+0+${STATUS_H + scroll}`;
+  magick([
+    statusBar,
+    '(', raw, '-crop', content, '+repage', ')',
+    '-background', APP_BG, '-append',
+    '-gravity', 'north', '-extent', `${CAP_W}x${CAP_H}`,
+    '-resize', `${SCREEN_W}x${SCREEN_H}!`, path,
+  ]);
+}
+
+function buildPhone(screen, workingDir, path) {
+  const mask = join(workingDir, 'mask.png');
+  const rounded = join(workingDir, 'rounded.png');
+  const fw = SCREEN_W + BEZEL * 2;
+  const fh = SCREEN_H + BEZEL * 2;
+  magick([
+    '-size', `${SCREEN_W}x${SCREEN_H}`, 'xc:none', '-fill', 'white',
+    '-draw', `roundrectangle 0,0 ${SCREEN_W - 1},${SCREEN_H - 1} 150,150`, mask,
+  ]);
+  magick([screen, mask, '-alpha', 'off', '-compose', 'CopyOpacity', '-composite', rounded]);
+  magick([
+    '-size', `${fw}x${fh}`, 'xc:none',
+    '-fill', '#050505', '-stroke', '#3A3631', '-strokewidth', '4',
+    '-draw', `roundrectangle 2,2 ${fw - 3},${fh - 3} 172,172`,
+    rounded, '-geometry', `+${BEZEL}+${BEZEL}`, '-compose', 'over', '-composite',
+    path,
+  ]);
+}
+
+// Largest point size (up to 150) at which every headline line fits the page.
+function headlineSize(lines) {
+  let size = 150;
+  for (const line of lines) {
+    const width = Number(
+      execFileSync('magick', [
+        '-font', fontDisplay, '-pointsize', String(size), '-kerning', '-3',
+        `label:${line}`, '-format', '%w', 'info:',
+      ]).toString(),
+    );
+    if (width > W - 140) size = Math.floor((size * (W - 140)) / width);
   }
-
-  magick([
-    '-size',
-    '1320x2868',
-    `canvas:${slide.background}`,
-    '-fill',
-    slide.accent,
-    '-draw',
-    'circle 1180,180 1490,180',
-    '-draw',
-    'circle 80,2520 460,2520',
-    path,
-  ]);
+  return size;
 }
 
-function buildPhone(source, path) {
-  const screen = path.replace('.png', '-screen.png');
-  const framed = path.replace('.png', '-framed.png');
-  const mask = path.replace('.png', '-mask.png');
-
-  magick([source, '-resize', '930x2022!', '-alpha', 'on', screen]);
-  magick([
-    '-size',
-    '930x2022',
-    'xc:none',
-    '-fill',
-    'white',
-    '-draw',
-    'roundrectangle 0,0 929,2021 78,78',
-    mask,
-  ]);
-  magick([screen, mask, '-alpha', 'off', '-compose', 'CopyOpacity', '-composite', screen]);
-  magick([
-    '-size',
-    '966x2058',
-    'xc:none',
-    '-fill',
-    NIGHT,
-    '-draw',
-    'roundrectangle 0,0 965,2057 94,94',
-    screen,
-    '-geometry',
-    '+18+18',
-    '-compose',
-    'over',
-    '-composite',
-    framed,
-  ]);
-  magick([
-    framed,
-    '(',
-    '+clone',
-    '-channel',
-    'A',
-    '-shadow',
-    '0x28+0+34',
-    ')',
-    '+swap',
-    '-background',
-    'none',
-    '-layers',
-    'merge',
-    '+repage',
-    path,
-  ]);
-}
-
-function renderSlide(slide, workingDir) {
-  const background = join(workingDir, `${slide.output}-background.png`);
+function renderSlide(slide, statusBar, workingDir) {
+  const screen = join(workingDir, `${slide.output}-screen.png`);
   const phone = join(workingDir, `${slide.output}-phone.png`);
-  const source = join(sourceDir, slide.source);
-  const output = join(outputDir, slide.output);
+  buildScreen(slide, statusBar, workingDir, screen);
+  buildPhone(screen, workingDir, phone);
 
-  buildBackground(slide, background);
-  buildPhone(source, phone);
-
-  if (slide.layout === 'hook') {
-    magick([
-      background,
-      '-font',
-      fontBold,
-      '-pointsize',
-      '29',
-      '-kerning',
-      '3.2',
-      '-fill',
-      slide.muted,
-      '-gravity',
-      'northwest',
-      '-annotate',
-      '+86+110',
-      slide.eyebrow,
-      '-font',
-      fontDisplay,
-      '-pointsize',
-      '130',
-      '-kerning',
-      '-3.5',
-      '-interline-spacing',
-      '-15',
-      '-fill',
-      slide.text,
-      '-annotate',
-      '+76+180',
-      slide.headline,
-      '-font',
-      fontRegular,
-      '-pointsize',
-      '37',
-      '-kerning',
-      '-0.5',
-      '-interline-spacing',
-      '4',
-      '-fill',
-      slide.muted,
-      '-annotate',
-      '+82+690',
-      slide.subhead,
-      '-fill',
-      slide.glow,
-      '-draw',
-      'roundrectangle 80,850 330,865 7,7',
-      phone,
-      '-gravity',
-      'north',
-      '-geometry',
-      '+0+930',
-      '-compose',
-      'over',
-      '-composite',
-      '-alpha',
-      'off',
-      '-strip',
-      `PNG24:${output}`,
-    ]);
-    return;
-  }
-
+  const size = headlineSize(slide.headline);
+  const lineHeight = Math.round(size * 1.08);
+  const [first, second] = slide.headline;
   magick([
-    background,
-    '-font',
-    fontBold,
-    '-pointsize',
-    '29',
-    '-kerning',
-    '3.2',
-    '-fill',
-    slide.muted,
-    '-gravity',
-    'northwest',
-    '-annotate',
-    '+86+112',
-    slide.eyebrow,
-    '-font',
-    fontDisplay,
-    '-pointsize',
-    '112',
-    '-kerning',
-    '-2.5',
-    '-interline-spacing',
-    '-12',
-    '-fill',
-    slide.text,
-    '-annotate',
-    '+80+168',
-    slide.headline,
-    '-font',
-    fontRegular,
-    '-pointsize',
-    '38',
-    '-kerning',
-    '-0.4',
-    '-interline-spacing',
-    '2',
-    '-fill',
-    slide.muted,
-    '-annotate',
-    '+84+456',
-    slide.subhead,
-    '-fill',
-    slide.glow,
-    '-draw',
-    'roundrectangle 80,590 250,603 6,6',
-    phone,
-    '-gravity',
-    'north',
-    '-geometry',
-    '+0+650',
-    '-compose',
-    'over',
-    '-composite',
-    '-alpha',
-    'off',
-    '-strip',
-    `PNG24:${output}`,
+    '-size', `${W}x${H}`, `canvas:${NIGHT}`,
+    // A low clay glow behind the top of the phone.
+    '(', '-size', '1500x1500', 'radial-gradient:rgba(217,101,61,0.24)-rgba(217,101,61,0)', ')',
+    '-gravity', 'north', '-geometry', `+0+${PHONE_TOP - 450}`, '-compose', 'over', '-composite',
+    '-font', fontDisplay, '-pointsize', String(size), '-kerning', '-3',
+    '-fill', CREAM, '-annotate', '+0+230', first,
+    '-fill', BRAND, '-annotate', `+0+${230 + lineHeight}`, second,
+    phone, '-gravity', 'north', '-geometry', `+0+${PHONE_TOP}`, '-composite',
+    '-alpha', 'off', '-strip', `PNG24:${join(outputDir, slide.output)}`,
   ]);
 }
 
@@ -323,7 +165,11 @@ mkdirSync(outputDir, { recursive: true });
 const workingDir = mkdtempSync(join(tmpdir(), 'pathey-store-'));
 
 try {
-  for (const slide of slides) renderSlide(slide, workingDir);
+  const statusRaw = join(workingDir, 'status-raw.png');
+  const statusBar = join(workingDir, 'status.png');
+  grab(STATUS_FROM.capture, STATUS_FROM.at, statusRaw);
+  magick([statusRaw, '-crop', `${CAP_W}x${STATUS_H}+0+0`, '+repage', statusBar]);
+  for (const slide of slides) renderSlide(slide, statusBar, workingDir);
 } finally {
   rmSync(workingDir, { recursive: true, force: true });
 }
