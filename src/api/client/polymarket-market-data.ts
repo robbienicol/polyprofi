@@ -1,15 +1,24 @@
 import type { PolymarketEntry } from '@/api/client/market-data-types';
-import { parseJson, responseJson } from '@/lib/runtime-validation';
+import {
+  balancePolymarketUniverse,
+  DAY_MS,
+  HORIZON_LIMITS,
+  polymarketMaturityDays,
+} from '@/api/client/polymarket-maturity';
+import { isRawMarket, parseStringArray, toPolymarketEntry, type RawMarket } from '@/api/client/polymarket-raw';
+import { responseJson } from '@/lib/runtime-validation';
 
-interface RawMarket {
-  question: string;
-  outcomes: string | string[];
-  outcomePrices: string | string[];
-  volumeNum: number | null;
-  liquidityNum?: number | null;
-  slug?: string;
-  endDate?: string;
-}
+export {
+  balancePolymarketUniverse,
+  filterPolymarketMarketsForTimeframe,
+  polymarketMaturityDays,
+} from '@/api/client/polymarket-maturity';
+export {
+  fetchPolymarketMarketsByQuestion,
+  fetchPolymarketMarketsBySlug,
+  polymarketSlugCandidate,
+  searchPolymarketByKeyword,
+} from '@/api/client/polymarket-search';
 
 export interface PolymarketSnapshot {
   context: PolymarketEntry[];
@@ -17,6 +26,7 @@ export interface PolymarketSnapshot {
 }
 
 let rawSnapshotRequest: Promise<RawMarket[]> | null = null;
+let rawSnapshotCache: { day: string; markets: RawMarket[] } | null = null;
 
 export async function fetchPolymarket(): Promise<PolymarketEntry[]> {
   return (await fetchPolymarketSnapshot()).context;
@@ -26,8 +36,15 @@ export async function fetchPolymarketUniverse(limit = 240): Promise<PolymarketEn
   return (await fetchPolymarketSnapshot(limit)).universe;
 }
 
-export async function fetchPolymarketSnapshot(universeLimit = 240): Promise<PolymarketSnapshot> {
-  const raw = await fetchSharedPolymarketRaw();
+/**
+ * `fresh` skips the per-day memory cache. The server wants that: it caches the snapshot
+ * itself for minutes, and a day-old copy held in a long-lived instance would pin prices.
+ */
+export async function fetchPolymarketSnapshot(
+  universeLimit = 240,
+  { fresh = false }: { fresh?: boolean } = {},
+): Promise<PolymarketSnapshot> {
+  const raw = fresh ? await fetchPolymarketRaw() : await fetchSharedPolymarketRaw();
   const context = selectPolymarketContext(raw);
   const universe = selectPolymarketUniverse(raw, universeLimit);
   console.log(`[market-data:polymarket] ${raw.length} fetched, ${context.length} context, ${universe.length} universe`);
@@ -35,10 +52,17 @@ export async function fetchPolymarketSnapshot(universeLimit = 240): Promise<Poly
 }
 
 async function fetchSharedPolymarketRaw(): Promise<RawMarket[]> {
+  const day = new Date().toISOString().slice(0, 10);
+  if (rawSnapshotCache?.day === day) return rawSnapshotCache.markets;
   if (rawSnapshotRequest) return rawSnapshotRequest;
-  rawSnapshotRequest = fetchPolymarketRaw(500).finally(() => {
-    rawSnapshotRequest = null;
-  });
+  rawSnapshotRequest = fetchPolymarketRaw()
+    .then((markets) => {
+      rawSnapshotCache = { day, markets };
+      return markets;
+    })
+    .finally(() => {
+      rawSnapshotRequest = null;
+    });
   return rawSnapshotRequest;
 }
 
@@ -57,56 +81,52 @@ function selectPolymarketContext(raw: RawMarket[]): PolymarketEntry[] {
 }
 
 function selectPolymarketUniverse(raw: RawMarket[], limit: number): PolymarketEntry[] {
-  return raw
+  const valid = raw
     .map(toPolymarketEntry)
     .filter((market) => market.prices.length === 2
       && market.outcomes.length === 2
       && market.volumeM >= 0.001
-      && market.prices.every((price) => Number.isFinite(price) && price >= 0.02 && price <= 0.98))
-    .sort((a, b) => b.volumeM - a.volumeM)
-    .slice(0, limit);
+      && polymarketMaturityDays(market.endDate) != null
+      && market.prices.every((price) => Number.isFinite(price) && price >= 0.02 && price <= 0.98));
+  return balancePolymarketUniverse(valid, limit);
 }
 
-async function fetchPolymarketRaw(limit: number): Promise<RawMarket[]> {
-  const pageSize = 100;
-  const offsets = Array.from({ length: Math.ceil(limit / pageSize) }, (_, index) => index * pageSize);
-  const pages = await Promise.all(offsets.map(async (offset) => {
-    const pageLimit = Math.min(pageSize, limit - offset);
-    const response = await fetch(`https://gamma-api.polymarket.com/markets?active=true&closed=false&limit=${pageLimit}&offset=${offset}`, { headers: { Accept: 'application/json' } });
+async function fetchPolymarketRaw(): Promise<RawMarket[]> {
+  const now = Date.now();
+  // allSettled, not all: one horizon band failing its request must not take the
+  // whole snapshot — and with it the whole route search — down with it.
+  const settled = await Promise.allSettled(HORIZON_LIMITS.map(async (maxDays, index) => {
+    const minDays = index === 0 ? 0 : HORIZON_LIMITS[index - 1];
+    const query = new URLSearchParams({
+      active: 'true',
+      closed: 'false',
+      limit: '100',
+      offset: '0',
+      order: 'volumeNum',
+      ascending: 'false',
+      end_date_min: new Date(now + minDays * DAY_MS).toISOString(),
+      end_date_max: new Date(now + maxDays * DAY_MS).toISOString(),
+      // Topics come from tags, and tags are omitted unless asked for. Sampled
+      // across every maturity band, 100% of markets carry at least one.
+      include_tag: 'true',
+    });
+    const response = await fetch(`https://gamma-api.polymarket.com/markets?${query}`, { headers: { Accept: 'application/json' } });
     if (!response.ok) {
-      console.warn(`[market-data:polymarket] markets offset=${offset}: ${response.status}`);
+      console.warn(`[market-data:polymarket] ${minDays}-${maxDays}d: ${response.status}`);
       return [];
     }
     const value = await responseJson(response);
     return Array.isArray(value) ? value.filter(isRawMarket) : [];
   }));
-  return pages.flat().slice(0, limit);
-}
-
-function toPolymarketEntry(market: RawMarket): PolymarketEntry {
-  const outcomes = parseStringArray(market.outcomes);
-  return {
-    question: market.question,
-    outcomes: outcomes.length > 0 ? outcomes : ['Yes', 'No'],
-    prices: parseStringArray(market.outcomePrices).map(Number),
-    volumeM: (market.volumeNum ?? 0) / 1e6,
-    liquidityM: (market.liquidityNum ?? 0) / 1e6,
-    slug: market.slug,
-    endDate: market.endDate,
-  };
-}
-
-function parseStringArray(value: string | string[]): string[] {
-  if (Array.isArray(value)) return value.map(String);
-  const parsed = parseJson(value);
-  return Array.isArray(parsed) ? parsed.map(String) : [];
-}
-
-function isRawMarket(value: unknown): value is RawMarket {
-  if (typeof value !== 'object' || value === null) return false;
-  const market = value as Record<string, unknown>;
-  return typeof market.question === 'string'
-    && (typeof market.outcomes === 'string' || Array.isArray(market.outcomes))
-    && (typeof market.outcomePrices === 'string' || Array.isArray(market.outcomePrices))
-    && (market.volumeNum === null || typeof market.volumeNum === 'number');
+  const pages = settled.map((result) => {
+    if (result.status === 'fulfilled') return result.value;
+    console.warn(`[market-data:polymarket] page failed: ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`);
+    return [] as RawMarket[];
+  });
+  return [...new Map(
+    pages.flat().map((market) => [
+      market.slug ?? `${market.question}|${market.endDate ?? ''}`,
+      market,
+    ]),
+  ).values()];
 }

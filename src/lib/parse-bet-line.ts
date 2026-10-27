@@ -17,17 +17,10 @@ export function parseEntryPrice(line?: string): number | null {
   return null;
 }
 
-/** Distinctive tokens for matching live ESPN games / Polymarket questions. */
-export function extractMonitorTokens(...parts: (string | undefined)[]): string[] {
-  const STOP = new Set(['fc', 'cf', 'sc', 'afc', 'the', 'club', 'city', 'united', 'real', 'yes', 'moneyline', 'draftkings', 'fanduel', 'polymarket']);
-  const text = parts.filter(Boolean).join(' ').toLowerCase();
-  return [...new Set(
-    text
-      .replace(/[^a-z0-9\s]/g, ' ')
-      .split(/\s+/)
-      .filter((w) => w.length > 2 && !STOP.has(w))
-  )];
-}
+// Removed: extractMonitorTokens. It produced a bag of loose tokens that callers
+// matched as substrings ("win" inside "Twins") with no minimum overlap, which
+// bound positions to unrelated markets and games. Identity resolution now lives
+// in @/lib/bet-monitor-match and matches on slug, exact question, or whole words.
 
 export function isPredictionMarketBet(bet: { category: string; platform: string }): boolean {
   const hay = `${bet.category} ${bet.platform}`.toLowerCase();

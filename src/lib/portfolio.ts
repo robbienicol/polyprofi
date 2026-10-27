@@ -29,6 +29,15 @@ export interface PortfolioStats {
   allocation: ClassAllocation[]; // sorted by staked desc
 }
 
+/** Words for a horizon in days, so an expectation is never shown undated. */
+export function maturityWords(days: number): string {
+  if (days <= 1) return 'a day';
+  if (days < 14) return `${days} days`;
+  if (days < 60) return `${Math.round(days / 7)} weeks`;
+  if (days < 365) return `${Math.round(days / 30)} months`;
+  return `${(days / 365).toFixed(1)} years`;
+}
+
 export function betEv(bet: TrackedBet, conservative: boolean): number {
   const p = bet.probability / 100;
   if (isBinaryCategory(bet.category)) {

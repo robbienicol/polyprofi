@@ -1,235 +1,293 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, View } from 'react-native';
 
-import { useQuizAnswers } from '@/api/hooks/useQuizAnswers';
-import { useRoutes } from '@/api/hooks/useRoutes';
-import { useSavedRoutes } from '@/api/hooks/useSavedRoutes';
-import { useTrackedBets } from '@/api/hooks/useTrackedBets';
-import { NearMissToast } from '@/components/routes/NearMissToast';
-import { RouteFilters } from '@/components/routes/RouteFilters';
+import { useSetRoutePreview } from '@/api/hooks/useRoutePreview';
+import { MoreWaysToSave } from '@/components/routes/MoreWaysToSave';
+import { PortalBar, RouteFilters, SortBar } from '@/components/routes/RouteFilters';
+import { RouteSearchBar } from '@/components/routes/RouteSearchBar';
 import { RoutesHeader } from '@/components/routes/RoutesHeader';
 import { TrackRouteForm } from '@/components/routes/TrackRouteForm';
+import { ChanceGroupHeader } from '@/components/routes/routes-screen/ChanceGroupHeader';
+import { RouteBudgetControls } from '@/components/routes/routes-screen/RouteBudgetControls';
+import { EmptyFiltered, EmptyRoutes, EmptyUncovered, RoutesDisclosure, RoutesError, Screen } from '@/components/routes/routes-screen/RoutesEmptyStates';
+import { CapitalSafeNudge, GoalUnreachable } from '@/components/routes/routes-screen/RoutesNotices';
+import { activeFilterCount, cutActionLabel, DEFAULT_FILTERS, formatBatchLabel, PAGE_SIZE, panelFilterCount, stampedId, timeframeLabel } from '@/components/routes/routes-screen/routes-screen-helpers';
+import { TrackReceipt } from '@/components/routes/routes-screen/TrackReceipt';
+import { useRouteAcquire } from '@/components/routes/routes-screen/use-route-acquire';
+import { useRouteResults } from '@/components/routes/routes-screen/use-route-results';
+import { useRoutesSession } from '@/components/routes/routes-screen/use-routes-session';
 import { RouteCard } from '@/components/molecules/RouteCard';
 import { ThemedText } from '@/components/themed-text';
-import { AnalyzingLoader } from '@/components/ui/loaders';
-import { Accent, Brand, Radius, Shadow } from '@/constants/theme';
-import { useNearMissToast } from '@/hooks/use-near-miss-toast';
-import { useTheme } from '@/hooks/use-theme';
+import { AnalyzingLoader, RoutesScreenSkeleton } from '@/components/ui/loaders';
+import { useSlowToast } from '@/components/ui/Toast';
+import { KEYBOARD_AWARE_SCROLL_PROPS } from '@/constants/keyboard';
+import { Brand, Radius } from '@/constants/theme';
+import { useSemanticText, useTheme } from '@/hooks/use-theme';
 import { scheduleWeeklyReminder } from '@/lib/notifications';
-import { parseEntryPrice } from '@/lib/parse-bet-line';
-import { buildRouteResults } from '@/lib/route-results';
-import type { RouteFilters as Filters } from '@/lib/route-results';
-import { trackedAssetFields } from '@/lib/tracked-assets';
-import type { Route, RouteParams, SavedRoutesBatch } from '@/types/routes';
+import { groupRoutesByChance, predictionFacetsActive } from '@/lib/route-results';
+import { preferredTradeDestination, tradeDestinationLabel } from '@/lib/route-actions';
+import { withTabSkeleton } from '@/components/ui/with-tab-skeleton';
+import type { Route } from '@/types/routes';
 
-const DEFAULT_FILTERS: Filters = {
-  category: null,
-  lossProfile: null,
-  minimumProbability: 0,
-  sort: 'score',
-};
-
-export default function RoutesScreen(): React.ReactElement {
+function RoutesScreen(): React.ReactElement {
   const theme = useTheme();
-  const router = useRouter();
-  const { batchId, generate } = useLocalSearchParams<{ batchId?: string; generate?: string }>();
-  const { quizAnswers } = useQuizAnswers();
-  const { history, saveGeneratedRoutes } = useSavedRoutes();
-  const { trackBet } = useTrackedBets();
-
-  const viewedBatch = batchId ? history.find((batch) => batch.id === batchId) ?? null : null;
-  const latestBatch = history[0] ?? null;
-  const isGenerating = generate === '1';
-  const isHistorical = viewedBatch !== null;
-  const sessionParams: RouteParams | null = isGenerating && quizAnswers
-    ? quizAnswers
-    : viewedBatch?.quizSnapshot ?? latestBatch?.quizSnapshot ?? null;
-
-  const [manualRefresh, setManualRefresh] = useState(false);
-  const [recentRoutes, setRecentRoutes] = useState<Route[] | null>(null);
-  const shouldFetch = sessionParams !== null && (isGenerating || manualRefresh);
-  const { routes: fetchedRoutes, isLoading, isFetching, error, refresh } = useRoutes(sessionParams, { enabled: shouldFetch });
-  const routes = shouldFetch ? fetchedRoutes : viewedBatch?.routes ?? recentRoutes ?? latestBatch?.routes ?? [];
-
-  const [trackingId, setTrackingId] = useState<string | null>(null);
-  const [trackingAmount, setTrackingAmount] = useState('');
-  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
-  const [investment, setInvestment] = useState(0);
-  const [autoSize, setAutoSize] = useState(false);
-  const [visibleCount, setVisibleCount] = useState(30);
-  const savedGeneration = useRef<string | null>(null);
+  const semantic = useSemanticText();
+  const session = useRoutesSession();
+  const { router, quizAnswers, history, viewedBatch, isGenerating, isHistorical, baseParams, sessionParams, sessionGoalId, routes, isLoading, error } = session;
+  const setPreview = useSetRoutePreview();
+  const list = useRouteResults({ baseParams, sessionParams, routes });
+  const { filters, setFiltersAndReset, setInvestmentAndReset, displayedInvestment, referenceStake, results, ranked, filtered, goalReach, moreCuts, keyword, outcome, visibleCount } = list;
+  const acquire = useRouteAcquire({ sessionParams, sessionGoalId, confirmGoal: session.confirmGoal, results, referenceStake });
+  const { trackingId, receipt } = acquire;
 
   useEffect(() => {
     scheduleWeeklyReminder();
   }, []);
 
+  // Collapsed by default so the list is what's on screen once loading ends,
+  // not a stack of controls above it. The count on the toggle is what tells
+  // someone their filters are still applied while it's closed.
+  const [showFilters, setShowFilters] = useState(false);
+
+  // Stable handlers, so RouteCard's memo holds: a chip tap re-renders this screen, and
+  // fresh closures per card re-rendered all twelve cards before the chip could light
+  // up. They read the latest state through a ref instead.
+  const cardActions = useRef<{ track: (route: Route) => void; open: (route: Route) => void } | null>(null);
   useEffect(() => {
-    if (!isGenerating || isLoading || isFetching || !quizAnswers || fetchedRoutes.length === 0) return;
-    const generationKey = `${fetchedRoutes.length}-${fetchedRoutes[0].id}-${quizAnswers.target}-${quizAnswers.timeframe}`;
-    if (savedGeneration.current === generationKey) return;
-    savedGeneration.current = generationKey;
-    setRecentRoutes(fetchedRoutes);
-    saveGeneratedRoutes(quizAnswers, fetchedRoutes);
-    router.replace('/(tabs)/routes');
-  }, [fetchedRoutes, isFetching, isGenerating, isLoading, quizAnswers, router, saveGeneratedRoutes]);
+    cardActions.current = {
+      track: acquire.startTracking,
+      open: (route) => {
+        // Hand the detail screen the list it was tapped from. Search hits are
+        // merged in live and never saved, so history alone cannot find them.
+        if (sessionParams) {
+          setPreview({
+            id: stampedId('preview'),
+            generatedAt: new Date().toISOString(),
+            quizSnapshot: sessionParams,
+            routes: list.searchPool,
+            ...(sessionGoalId ? { goalId: sessionGoalId } : null),
+          });
+        }
+        router.push(`/route/${route.id}?stake=${results?.selectedStake(route) ?? referenceStake}&available=${displayedInvestment}`);
+      },
+    };
+  });
+  // A new search can take a while on a slow network; say so instead of looking stuck.
+  useSlowToast(isGenerating && isLoading, 'Still pricing routes — live markets are slow right now…', 10_000);
+  useSlowToast(keyword !== '' && list.isSearching, 'Still searching every market…', 5_000);
+  const trackCard = (route: Route) => cardActions.current?.track(route);
+  const openCard = (route: Route) => cardActions.current?.open(route);
+  /*
+   * The goal itself does not add up — not a filter problem, not a coverage problem.
+   *
+   * Stated above the list rather than only in place of it, because a list of near-misses
+   * with no verdict on top leaves the user to work out "can I actually do this?" from
+   * thirty cards. Suppressed during a keyword search: the user named a market, and
+   * answering with a verdict on their goal is answering a question they did not ask.
+   */
+  const goalUnreachable = goalReach != null
+    && !goalReach.reachable
+    && goalReach.poolSize > 0
+    && keyword === ''
+    && !isLoading;
 
-  const referenceStake = sessionParams?.balance ?? 1_000;
-  const displayedInvestment = investment || referenceStake;
-
-  function setInvestmentAndReset(amount: number): void {
-    setAutoSize(false);
-    setInvestment(Math.max(0, Math.round(amount)));
-    setVisibleCount(30);
-  }
-  function setAutoSizeAndReset(enabled: boolean): void {
-    setAutoSize(enabled);
-    setVisibleCount(30);
-  }
-  function setFiltersAndReset(next: Filters): void {
-    setFilters(next);
-    setVisibleCount(30);
-  }
-
-  const results = sessionParams
-    ? buildRouteResults(routes, sessionParams, displayedInvestment, autoSize, filters)
-    : null;
-  const ranked = results?.ranked ?? [];
-  const filtered = results?.filtered ?? [];
-  const categories = [...new Set(routes.map((route) => route.category))];
-  const nearMiss = useNearMissToast(routes);
-
-  async function handleRefresh(): Promise<void> {
-    if (isHistorical || !sessionParams) return;
-    setManualRefresh(true);
-    try {
-      const refreshed = await refresh();
-      if (refreshed.length > 0) {
-        setRecentRoutes(refreshed);
-        saveGeneratedRoutes(sessionParams, refreshed);
-      }
-    } finally {
-      setManualRefresh(false);
-    }
-  }
-
-  function confirmTrack(route: Route): void {
-    const predictionMarket = /polymarket|prediction/i.test(`${route.category} ${route.platform}`);
-    const entryPrice = parseEntryPrice(route.line) ?? (predictionMarket && route.probability > 0 ? route.probability / 100 : undefined);
-    trackBet({
-      id: `${route.id}-${Date.now()}`,
-      category: route.category,
-      emoji: route.emoji,
-      description: route.description,
-      platform: route.platform,
-      strategy: route.strategy,
-      riskLevel: route.riskLevel,
-      probability: route.probability,
-      expectedReturn: route.expectedReturn,
-      amountWagered: Number(trackingAmount) || 0,
-      status: 'active',
-      createdAt: new Date().toISOString(),
-      profitGoal: sessionParams?.target || route.expectedReturn,
-      line: route.line,
-      entryPrice,
-      monitorQuery: `${route.description} ${route.line ?? ''}`,
-      ...trackedAssetFields(route),
-    });
-    setTrackingId(null);
-  }
-
-  if (shouldFetch && isLoading && !error) {
+  // The full-screen loader is for a new search. A refresh already has a list to show,
+  // and replacing it with the loader after a cold start read as the screen resetting.
+  if (isGenerating && isLoading && !error) {
     return <Screen><AnalyzingLoader /></Screen>;
   }
+  if (session.quizLoading) {
+    return <Screen><RoutesScreenSkeleton /></Screen>;
+  }
   if (history.length === 0 && !isGenerating && routes.length === 0 && !error) {
-    return <EmptyRoutes onStart={() => router.push('/quiz')} />;
+    return <EmptyRoutes
+      hasSavedQuiz={!!quizAnswers}
+      onStart={() => router.push(quizAnswers ? '/(tabs)/routes?generate=1' : '/quiz')}
+    />;
   }
 
+  // The goal these routes serve, so the header can name what the user is choosing for.
+  const activeGoal = sessionGoalId ? session.allGoals.find((entry) => entry.id === sessionGoalId) ?? null : null;
   const goal = sessionParams ? {
     target: sessionParams.target,
     when: timeframeLabel(sessionParams.timeframe),
+    label: activeGoal?.label ?? null,
+    emoji: activeGoal?.emoji ?? null,
   } : null;
   const visibleRoutes = filtered.slice(0, visibleCount);
+  // The folded cuts sit right under the last cut still in the list, where someone
+  // reading cuts would look for more of them — or at the end when none made it.
+  const lastVisibleCutId = [...visibleRoutes].reverse().find((route) => route.spendingCut)?.id ?? null;
+  const groupedByChance = filters.groupByChance && predictionFacetsActive(filters);
+
+  const renderRoute = (route: Route): React.ReactElement | null => {
+    const destination = preferredTradeDestination(route, sessionParams?.preferredPlatforms);
+    return (
+      <View key={route.id} className="gap-0.5">
+        <RouteCard
+          route={route}
+          requiredInvestment={results?.requiredInvestmentById.get(route.id)}
+          currentInvestment={results?.selectedStake(route)}
+          odds={results?.oddsById.get(route.id) ?? null}
+          target={list.deferredParams?.target ?? null}
+          onTrack={trackingId === null ? trackCard : undefined}
+          onPress={openCard}
+        />
+        {receipt?.routeId === route.id && (
+          <TrackReceipt receipt={receipt} onDone={() => acquire.setReceipt(null)} />
+        )}
+        {trackingId === route.id && (
+          <TrackRouteForm
+            amount={acquire.trackingAmount}
+            destinationLabel={cutActionLabel(route) ?? tradeDestinationLabel(destination)}
+            onAmountChange={acquire.setTrackingAmount}
+            onConfirm={() => acquire.confirmAcquire(route)}
+            onCancel={() => acquire.setTrackingId(null)}
+            cut={route.spendingCut}
+            cardRewards={route.cardRewards}
+            cutPercent={acquire.cutPercent}
+            onCutPercentChange={acquire.setCutPercent}
+          />
+        )}
+      </View>
+    );
+  };
 
   return (
     <Screen>
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerClassName="px-4 pt-6 pb-16 gap-3"
-        refreshControl={<RefreshControl refreshing={(isFetching && !isLoading) || manualRefresh} onRefresh={handleRefresh} tintColor={Brand[500]} />}>
-        {goal && (
+        contentContainerClassName="px-4 pb-16 pt-4 gap-3"
+        {...KEYBOARD_AWARE_SCROLL_PROPS}
+        refreshControl={<RefreshControl refreshing={session.manualRefresh} onRefresh={session.handleRefresh} tintColor={Brand[500]} />}>
+        {/* Scrolls with the list: the screen is for the routes, not the controls. */}
+        {goal && isHistorical && (
           <RoutesHeader
             goal={goal}
             historical={isHistorical}
             batchLabel={isHistorical && viewedBatch ? formatBatchLabel(viewedBatch) : null}
-            amount={displayedInvestment}
-            autoSize={autoSize}
-            referenceStake={referenceStake}
-            routeCount={ranked.length}
-            onAmountChange={setInvestmentAndReset}
-            onAutoSizeChange={setAutoSizeAndReset}
+            routeCount={filtered.length}
             onNewSearch={() => router.push('/quiz')}
             onBackToLatest={() => router.replace('/(tabs)/routes')}
           />
         )}
-        {ranked.length > 0 && <RouteFilters categories={categories} filters={filters} onChange={setFiltersAndReset} />}
-        {error && <RoutesError message={error} onRetry={refresh} />}
-        {visibleRoutes.map((route) => {
-          const scoreBreakdown = results?.scoreById.get(route.id);
-          if (!scoreBreakdown) return null;
-          return (
-            <View key={route.id} className="gap-0.5">
-              <RouteCard
-                route={route}
-                requiredInvestment={results?.requiredInvestmentById.get(route.id)}
-                currentInvestment={results?.selectedStake(route)}
-                scoreBreakdown={scoreBreakdown}
-                onTrack={trackingId === null ? () => { setTrackingId(route.id); setTrackingAmount(''); } : undefined}
-                onPress={() => router.push(`/route/${route.id}?stake=${results?.selectedStake(route) ?? referenceStake}&available=${autoSize ? referenceStake : displayedInvestment}`)}
+        <RouteSearchBar
+          value={filters.keyword}
+          onChange={(nextKeyword) => setFiltersAndReset({ ...filters, keyword: nextKeyword })}
+          isSearching={list.isSearching}
+          pulledInCount={list.searchRoutes.length}
+        />
+        {ranked.length > 0 && (
+          <>
+            <RouteBudgetControls
+              sessionParams={sessionParams}
+              baseParams={baseParams}
+              onTargetChange={(base, amount) => {
+                session.setTargetDrag({ base, value: Math.max(1, Math.round(amount)) });
+                list.setVisibleCount(PAGE_SIZE);
+              }}
+              investment={displayedInvestment}
+              investmentMaximum={list.investmentMaximum}
+              onInvestmentChange={setInvestmentAndReset}
+              maxLoss={list.displayedMaxLoss}
+              onMaxLossChange={list.setMaxLossAndReset}
+            />
+            <PortalBar routes={ranked} filters={filters} onChange={setFiltersAndReset} />
+            <SortBar
+              sort={filters.sort}
+              onSortChange={(sort) => setFiltersAndReset({ ...filters, sort })}
+              filterCount={panelFilterCount(filters)}
+              filtersOpen={showFilters}
+              onToggleFilters={() => setShowFilters((open) => !open)}
+            />
+            {showFilters ? (
+              <RouteFilters
+                filters={filters}
+                routes={ranked}
+                shownCount={filtered.length}
+                onChange={setFiltersAndReset}
+                onDone={() => setShowFilters(false)}
               />
-              {trackingId === route.id && <TrackRouteForm amount={trackingAmount} onAmountChange={setTrackingAmount} onConfirm={() => confirmTrack(route)} onCancel={() => setTrackingId(null)} />}
+            ) : null}
+          </>
+        )}
+        {error && <RoutesError message={error} onRetry={() => void session.handleRefresh()} />}
+        {goalUnreachable && goalReach && sessionParams ? (
+          <GoalUnreachable
+            reach={goalReach}
+            when={timeframeLabel(sessionParams.timeframe)}
+            investing={displayedInvestment}
+            hasFilters={activeFilterCount(filters) > 0}
+            onRaiseInvestment={setInvestmentAndReset}
+            onClearFilters={() => setFiltersAndReset({ ...DEFAULT_FILTERS, keyword: filters.keyword })}
+            onChangeGoal={() => router.push('/quiz')}
+          />
+        ) : null}
+        {list.capitalSafeUnlock != null && sessionParams && !goalUnreachable ? (
+          <CapitalSafeNudge
+            target={sessionParams.target}
+            amount={list.capitalSafeUnlock}
+            onRaiseInvestment={setInvestmentAndReset}
+          />
+        ) : null}
+        {list.isUpdating ? (
+          <View className="flex-row items-center justify-center" style={{ gap: 8, paddingVertical: 4 }}>
+            <ActivityIndicator size="small" color={Brand[500]} />
+            <ThemedText style={{ fontSize: 12, fontWeight: '700', color: theme.textSecondary }}>Updating routes…</ThemedText>
+          </View>
+        ) : null}
+        <View style={{ gap: 12, opacity: list.isUpdating ? 0.45 : 1 }}>
+        {groupedByChance
+          ? groupRoutesByChance(visibleRoutes).map((group) => (
+            <View key={group.floor} className="gap-3">
+              <ChanceGroupHeader label={group.label} routes={group.routes} />
+              {group.routes.map(renderRoute)}
             </View>
-          );
-        })}
+          ))
+          : visibleRoutes.map((route) => (
+            route.id === lastVisibleCutId && moreCuts.length > 0
+              ? (
+                <View key={route.id} className="gap-3">
+                  {renderRoute(route)}
+                  <MoreWaysToSave cuts={moreCuts} renderRoute={renderRoute} />
+                </View>
+              )
+              : renderRoute(route)
+          ))}
+        </View>
+        {moreCuts.length > 0 && (lastVisibleCutId == null || groupedByChance) ? (
+          <MoreWaysToSave cuts={moreCuts} renderRoute={renderRoute} />
+        ) : null}
         {visibleCount < filtered.length && (
-          <Pressable onPress={() => setVisibleCount((count) => count + 30)} className="items-center active:opacity-70" style={{ borderRadius: Radius.md, paddingVertical: 12, borderWidth: 1, borderColor: theme.border, backgroundColor: theme.backgroundElement }}>
-            <ThemedText style={{ fontSize: 13, fontWeight: '800', color: Brand[500] }}>Show 30 more · {filtered.length - visibleCount} remaining</ThemedText>
+          <Pressable
+            onPress={() => list.setVisibleCount((count) => count + PAGE_SIZE)}
+            accessibilityRole="button"
+            accessibilityLabel={`Show ${PAGE_SIZE} more routes. ${filtered.length - visibleCount} remaining.`}
+            className="items-center justify-center active:opacity-70"
+            style={{ borderRadius: Radius.md, minHeight: 48, borderWidth: 1, borderColor: theme.border, backgroundColor: theme.backgroundElement }}>
+            <ThemedText style={{ fontSize: 14, fontWeight: '800', color: semantic.brand }}>Show {Math.min(PAGE_SIZE, filtered.length - visibleCount)} more · {filtered.length - visibleCount} remaining</ThemedText>
           </Pressable>
         )}
-        {filtered.length === 0 && !isLoading && routes.length > 0 && <EmptyFiltered filters={filters} onClear={() => setFiltersAndReset(DEFAULT_FILTERS)} />}
-        {routes.length > 0 && <ThemedText type="small" themeColor="textSecondary" className="text-center" style={{ opacity: 0.4 }}>{isHistorical ? 'Saved search · ' : ''}Pull down to refresh · For entertainment only</ThemedText>}
+        {outcome === 'searching' && filtered.length === 0 && (
+          <ThemedText type="small" themeColor="textSecondary" className="text-center" style={{ paddingVertical: 24 }}>
+            Searching for “{keyword}”…
+          </ThemedText>
+        )}
+        {outcome === 'uncovered' && (
+          <EmptyUncovered keyword={keyword} onClear={() => setFiltersAndReset({ ...filters, keyword: '' })} />
+        )}
+        {!goalUnreachable && (outcome === 'filtered-out' || (outcome === 'idle' && filtered.length === 0 && !isLoading && routes.length > 0)) && (
+          <EmptyFiltered
+            filters={filters}
+            unlockAmount={results?.unlockInvestmentFor(filters.minimumProbability) ?? null}
+            onRaiseInvestment={setInvestmentAndReset}
+            onClear={() => setFiltersAndReset(DEFAULT_FILTERS)}
+          />
+        )}
+        {routes.length > 0 && <RoutesDisclosure historical={isHistorical} />}
       </ScrollView>
-      {nearMiss.visible && nearMiss.route && <NearMissToast route={nearMiss.route} opacity={nearMiss.opacity} onDismiss={nearMiss.dismiss} />}
     </Screen>
   );
 }
 
-function Screen({ children }: React.PropsWithChildren): React.ReactElement {
-  const theme = useTheme();
-  return <View className="flex-1" style={{ backgroundColor: theme.background }}><SafeAreaView className="flex-1">{children}</SafeAreaView></View>;
-}
-
-function EmptyRoutes({ onStart }: { onStart: () => void }): React.ReactElement {
-  const theme = useTheme();
-  return <Screen><View className="flex-1 justify-center px-6"><View className="items-center gap-4 py-10 px-6" style={{ borderRadius: Radius.xl, backgroundColor: theme.backgroundElevated, borderWidth: 1, borderColor: theme.border, ...Shadow.card }}><ThemedText style={{ fontSize: 40 }}>🎯</ThemedText><ThemedText style={{ fontSize: 22, fontWeight: '800', color: theme.text, textAlign: 'center' }}>Find prediction routes</ThemedText><ThemedText className="text-center" style={{ fontSize: 14, color: theme.textSecondary, lineHeight: 21, maxWidth: 300 }}>Set your goal and timeframe — we&apos;ll scan prediction markets and generate routes in one step.</ThemedText><Pressable onPress={onStart} className="self-stretch py-4 items-center active:opacity-85 mt-2" style={{ borderRadius: Radius.lg, backgroundColor: Brand[500], ...Shadow.card }}><ThemedText style={{ fontSize: 16, fontWeight: '800', color: '#06140C' }}>Set goal & search →</ThemedText></Pressable></View></View></Screen>;
-}
-
-function RoutesError({ message, onRetry }: { message: string; onRetry: () => void }): React.ReactElement {
-  const theme = useTheme();
-  return <View className="items-center gap-2 py-10 px-6" style={{ borderRadius: Radius.lg, backgroundColor: Accent.red + '12', borderWidth: 1, borderColor: Accent.red + '30' }}><ThemedText style={{ fontSize: 24 }}>⚠️</ThemedText><ThemedText style={{ fontSize: 14, fontWeight: '700', color: theme.text }}>Couldn&apos;t load routes</ThemedText><ThemedText className="text-center" style={{ fontSize: 13, color: theme.textSecondary }}>{message}</ThemedText><Pressable onPress={onRetry} className="active:opacity-70 mt-1" style={{ borderRadius: Radius.md, paddingHorizontal: 16, paddingVertical: 9, backgroundColor: Brand[500] }}><ThemedText style={{ fontSize: 13, fontWeight: '700', color: '#06140C' }}>Try again</ThemedText></Pressable></View>;
-}
-
-function EmptyFiltered({ filters, onClear }: { filters: Filters; onClear: () => void }): React.ReactElement {
-  return <View className="items-center gap-2 py-8"><ThemedText type="smallBold">{filters.minimumProbability > 0 ? `No routes with ≥ ${filters.minimumProbability}% chance` : `No ${filters.category ?? ''} routes`}</ThemedText><Pressable onPress={onClear} className="active:opacity-60"><ThemedText type="small" style={{ color: Brand[500], fontWeight: '700' }}>Clear filters</ThemedText></Pressable></View>;
-}
-
-function timeframeLabel(timeframe: RouteParams['timeframe']): string {
-  return ({ today: 'today', week: 'this week', month: 'this month', '3months': 'in 3 months', '1year': 'this year', '5years': 'in 5 years' })[timeframe];
-}
-
-function formatBatchLabel(batch: SavedRoutesBatch): string {
-  const generated = new Date(batch.generatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  const percent = batch.quizSnapshot.balance > 0 ? ((batch.quizSnapshot.target / batch.quizSnapshot.balance) * 100).toFixed(0) : '0';
-  return `Saved ${generated} · +${percent}% · ${timeframeLabel(batch.quizSnapshot.timeframe)}`;
-}
+export default withTabSkeleton(RoutesScreen, 'routes');

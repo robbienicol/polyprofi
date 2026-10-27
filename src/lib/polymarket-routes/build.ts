@@ -1,0 +1,267 @@
+import { PolymarketEntry } from '@/api/client/market-data';
+import { polymarketMarketQuality } from '@/lib/polymarket-market-quality';
+import { bracketLossProfile, bracketRiskLevel, buildSwingPlan } from '@/lib/prediction-swing';
+import { subtopicForTags, topicForTags } from '@/lib/prediction-topics';
+import { timeframeMaturityLimit } from '@/lib/quiz-profile';
+import { ExitPlan, MarketQualityFacts, Route, RouteParams } from '@/types/routes';
+
+/** The only parts of a search that shape a Polymarket route. */
+type PoolGoal = Pick<RouteParams, 'balance' | 'target' | 'timeframe'>;
+
+type RiskBand = 2 | 3 | 4 | 5;
+
+export interface Candidate {
+  market: PolymarketEntry;
+  outcomeIndex: number;
+  outcome: string;
+  price: number;
+  probability: number;
+  riskLevel: RiskBand;
+}
+
+export function polymarketRiskLevel(probability: number): RiskBand {
+  if (probability >= 85) return 2;
+  if (probability >= 65) return 3;
+  if (probability >= 35) return 4;
+  return 5;
+}
+
+function fallbackMaturity(timeframe: string): number {
+  return ({ today: 1, week: 7, month: 30, '3months': 90, '1year': 365, '5years': 1825 } as Record<string, number>)[timeframe] ?? 30;
+}
+
+function maturityDays(endDate: string | undefined, timeframe: string): number {
+  if (!endDate) return fallbackMaturity(timeframe);
+  const end = new Date(endDate).getTime();
+  if (!Number.isFinite(end)) return fallbackMaturity(timeframe);
+  return Math.max(1, Math.ceil((end - Date.now()) / 86_400_000));
+}
+
+function stableId(market: PolymarketEntry, outcome: string): string {
+  const base = market.slug || market.question;
+  const safe = `${base}-${outcome}`.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  return `pm-live-${safe.slice(0, 90)}`;
+}
+
+/**
+ * Traded (bracketed) variants of a contract — buy, then sell at a take-profit or bail
+ * at a stop before it resolves. Off: on a market-priced contract a bracket is exactly
+ * zero-EV before costs and negative after (see @/lib/prediction-swing), and its hit
+ * rate is set by where the two exits sit, so a 96¢ favourite showed as a 50% coin flip
+ * and read as a safe way to make money. The hold route says what the price means.
+ */
+export const OFFER_BRACKETS = false;
+
+/** "Dec 31" for a resolution date, or null when the market carries none. */
+function resolvesOn(endDate: string | undefined): string | null {
+  if (!endDate) return null;
+  const time = Date.parse(endDate);
+  return Number.isFinite(time)
+    ? new Date(time).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    : null;
+}
+
+export function toRoute(candidate: Candidate, params: PoolGoal, quality: MarketQualityFacts): Route {
+  const { market, outcome, price, probability, riskLevel } = candidate;
+  const expectedReturn = Math.round(params.balance * (1 / price - 1));
+  const cents = Math.round(price * 100);
+  const gainPct = (1 / price - 1) * 100;
+  const gain = gainPct >= 10 ? `${Math.round(gainPct)}%` : `${Number(gainPct.toFixed(1))}%`;
+  const until = resolvesOn(market.endDate);
+
+  return {
+    id: stableId(market, outcome),
+    category: 'Polymarket',
+    emoji: '🔮',
+    // The prefix "Buy <side> on “<question>” at <n>¢" is parsed back out by the
+    // monitor (betOutcomeSide, quotedQuestion) — keep it intact.
+    description: `Buy ${outcome} on “${market.question}” at ${cents}¢ and hold ${until ? `to ${until}` : 'until it resolves'}: ${probability}% chance you get +${gain}, ${100 - probability}% chance you lose what you put in.`,
+    riskLevel,
+    probability,
+    expectedReturn,
+    platform: 'Polymarket',
+    line: `${outcome} ${cents}¢`,
+    // The exact price, since the line above is rounded to the cent for display.
+    entryPrice: price,
+    maturesInDays: maturityDays(market.endDate, params.timeframe),
+    lossProfile: 'binary',
+    meetsTarget: expectedReturn >= params.target,
+    strategy: `Buy ${outcome} near ${cents}¢ and hold to resolution. Maximum loss is the full $${Math.round(params.balance).toLocaleString()} you put in. No independent edge is assumed; this score uses the live market price and loss profile.`,
+    marketQuality: quality,
+    sourceSlug: market.slug,
+    sourceEndDate: market.endDate,
+    ...topicField(market),
+  };
+}
+
+/** Only set when the market's tags map to a bucket; never guessed. */
+function topicField(market: PolymarketEntry): { predictionTopic?: string; predictionSubtopic?: string } {
+  const tags = market.tagSlugs ?? [];
+  const topic = topicForTags(tags);
+  const subtopic = subtopicForTags(tags, topic);
+  return topic ? { predictionTopic: topic, ...(subtopic ? { predictionSubtopic: subtopic } : null) } : {};
+}
+
+/**
+ * The same contract offered as a *traded* position instead of a held one: buy, then exit
+ * at a pre-committed take-profit or stop rather than waiting for resolution.
+ *
+ * Read the header of @/lib/prediction-swing before touching the copy here. A bracket on a
+ * market-priced contract is exactly zero-EV before costs and strictly negative after, so
+ * this route is never presented as a way to profit from volatility. It exists because the
+ * stop caps the loss, and because it frees the capital long before a contract that
+ * resolves after the user's deadline ever could. Both of those are facts, not forecasts.
+ */
+function toSwingRoute(
+  candidate: Candidate,
+  params: PoolGoal,
+  quality: MarketQualityFacts,
+  plan: ExitPlan
+): Route {
+  const { market, outcome } = candidate;
+  const expectedReturn = Math.round(params.balance * plan.winReturnRate);
+  const riskLevel = bracketRiskLevel(plan.effectiveLossFraction);
+  // Derived, never assumed. A bracket in a thin book has an effectiveLossFraction
+  // near 1 — the stop cannot fill, so the position is all-or-nothing in everything
+  // but name, and badging it "capital preservation" was the label contradicting
+  // the risk level printed next to it on the same card.
+  const lossProfile = bracketLossProfile(plan.effectiveLossFraction);
+  const maxLossPct = Math.round(plan.effectiveLossFraction * 100);
+  const capital = Math.round(params.balance).toLocaleString();
+
+  return {
+    id: `${stableId(market, outcome)}-swing`,
+    category: 'Polymarket',
+    emoji: '🔁',
+    description:
+      `Trade ${outcome} on “${market.question}”: buy near ${plan.entryCents}¢, sell at ` +
+      `${plan.takeProfitCents}¢, stop at ${plan.stopCents}¢ — the stop caps the loss at about ` +
+      (lossProfile === 'partial'
+        ? `${maxLossPct}% of your capital instead of all of it.`
+        : `${maxLossPct}% of your capital — the book is too thin for the stop to be relied on.`),
+    riskLevel,
+    probability: Math.round(plan.successProbability),
+    expectedReturn,
+    platform: 'Polymarket',
+    line: `${outcome} ${plan.entryCents}¢ → ${plan.takeProfitCents}¢`,
+    maturesInDays: plan.expectedExitDays,
+    lossProfile,
+    meetsTarget: expectedReturn >= params.target,
+    strategy:
+      `Buy ${outcome} near ${plan.entryCents}¢ (about ${plan.netEntryCents}¢ after the spread), ` +
+      `sell at ${plan.takeProfitCents}¢, stop out at ${plan.stopCents}¢. ` +
+      `${plan.barrierProbability}% of the time ${plan.takeProfitCents}¢ comes before ${plan.stopCents}¢ — but ` +
+      `you need ${plan.breakevenProbability}% just to break even, so the ${plan.roundTripCostCents}¢ round-trip ` +
+      `spread is a ${Math.abs(plan.costEdgePts).toFixed(1)}-point drag and there is no edge here without a view ` +
+      `the market is wrong. What the plan does buy you: the stop caps the loss near ` +
+      `$${Math.round(params.balance * plan.effectiveLossFraction).toLocaleString()} of your $${capital} ` +
+      `instead of all of it, and the position typically closes in about ${plan.expectedExitDays}d rather ` +
+      `than waiting for the contract to resolve.`,
+    marketQuality: quality,
+    exitPlan: plan,
+    sourceSlug: market.slug,
+    sourceEndDate: market.endDate,
+    ...topicField(market),
+  };
+}
+
+/** The hold route, plus the traded variant of the same contract when one is honest to build. */
+export function routesForCandidate(
+  candidate: Candidate,
+  params: PoolGoal,
+  { brackets = OFFER_BRACKETS }: { brackets?: boolean } = {},
+): Route[] {
+  const quality = polymarketMarketQuality(candidate.market, candidate.outcomeIndex);
+  const hold = toRoute(candidate, params, quality);
+  if (!brackets) return [hold];
+  const plan = buildSwingPlan({
+    quality,
+    priceCents: candidate.price * 100,
+    requiredReturnRate: params.balance > 0 ? params.target / params.balance : 0,
+    daysToResolution: maturityDays(candidate.market.endDate, params.timeframe),
+    deadlineDays: fallbackMaturity(params.timeframe),
+  });
+  return plan == null ? [hold] : [hold, toSwingRoute(candidate, params, quality, plan)];
+}
+
+/**
+ * Turn the live market universe into a balanced exploration pool. Each market
+ * appears once, and quotas keep high-confidence, balanced, and long-shot
+ * contracts represented instead of letting one price band dominate by volume.
+ *
+ * `limit` counts MARKETS, not routes: a market with a two-sided book and some recent
+ * movement contributes both a hold-to-resolution route and a traded (bracketed) one.
+ */
+export function buildPolymarketRoutes(
+  markets: PolymarketEntry[],
+  params: PoolGoal,
+  limit = 120
+): Route[] {
+  const candidates: Candidate[] = markets.flatMap((market) =>
+    market.prices.map((price, index) => {
+      const probability = Math.round(price * 100);
+      return {
+        market,
+        outcomeIndex: index,
+        outcome: market.outcomes[index] ?? (index === 0 ? 'Yes' : 'No'),
+        price,
+        probability,
+        riskLevel: polymarketRiskLevel(probability),
+      };
+    })
+  );
+
+  // Quotas used to be filled purely by volume, and the deadline was only applied
+  // afterwards by filterRoutesForQuiz — so on a short search the highest-volume
+  // (and mostly long-dated) contracts took every slot and were then all discarded,
+  // leaving zero prediction routes while the short-dated markets that would have
+  // qualified were never selected. Resolution date is part of the selection now.
+  const horizon = timeframeMaturityLimit(params.timeframe);
+  const fitCache = new Map<string, boolean>();
+  const fitsHorizon = (candidate: Candidate): boolean => {
+    const key = candidate.market.slug || candidate.market.question;
+    const cached = fitCache.get(key);
+    if (cached !== undefined) return cached;
+    const fits = maturityDays(candidate.market.endDate, params.timeframe) <= horizon;
+    fitCache.set(key, fits);
+    return fits;
+  };
+  // Preference, not exclusion: a long-dated contract can still yield a route that
+  // fits — its bracketed swing exits well before resolution — and a horizon wide
+  // enough for everything must not lose the volume ordering.
+  const byHorizonThenVolume = (a: Candidate, b: Candidate): number =>
+    Number(fitsHorizon(b)) - Number(fitsHorizon(a))
+    || b.market.volumeM - a.market.volumeM
+    || b.probability - a.probability;
+
+  const bands: RiskBand[] = [2, 3, 4, 5];
+  const baseQuota = Math.floor(limit / bands.length);
+  const usedMarkets = new Set<string>();
+  const selected: Candidate[] = [];
+
+  for (const [index, band] of bands.entries()) {
+    const quota = baseQuota + (index < limit % bands.length ? 1 : 0);
+    const choices = candidates
+      .filter((candidate) => candidate.riskLevel === band)
+      .sort(byHorizonThenVolume);
+
+    for (const candidate of choices) {
+      if (selected.filter((item) => item.riskLevel === band).length >= quota) break;
+      if (usedMarkets.has(candidate.market.question)) continue;
+      selected.push(candidate);
+      usedMarkets.add(candidate.market.question);
+    }
+  }
+
+  if (selected.length < limit) {
+    const remaining = [...candidates].sort(byHorizonThenVolume);
+    for (const candidate of remaining) {
+      if (selected.length >= limit) break;
+      if (usedMarkets.has(candidate.market.question)) continue;
+      selected.push(candidate);
+      usedMarkets.add(candidate.market.question);
+    }
+  }
+
+  return selected.flatMap((candidate) => routesForCandidate(candidate, params));
+}

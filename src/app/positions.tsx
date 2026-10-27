@@ -1,74 +1,89 @@
-import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 
-import { useBetMonitoring } from '@/api/hooks/useBetMonitoring';
+import { usePortfolioProgress } from '@/api/hooks/usePortfolioProgress';
+import { useMoney } from '@/api/hooks/usePreferences';
+import { useSavedRoutes } from '@/api/hooks/useSavedRoutes';
 import { useTrackedBets } from '@/api/hooks/useTrackedBets';
+import { BetCard } from '@/components/portfolio/PositionBetCard';
+import { Icon } from '@/components/ui/Icon';
 import { ThemedText } from '@/components/themed-text';
-import { riskColor, riskLabel } from '@/components/molecules/RouteCard';
-import { isPredictionMarketBet } from '@/lib/parse-bet-line';
-import { notifySellRecommendation } from '@/lib/notifications';
-import { Accent, Brand, Radius, Shadow } from '@/constants/theme';
+import { MetricInfo } from '@/components/ui/MetricInfo';
+import { sellMessage } from '@/lib/alert-messages';
+import { notifyAlert } from '@/lib/notifications';
+import { useCelebrationArrival } from '@/hooks/use-celebration-arrival';
+import { Brand, Radius, Semantic, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { BetLiveStatus, TrackedBet } from '@/types/bets';
-
-const MONO = { fontVariant: ['tabular-nums' as const] };
-
-function profitGoalFor(bet: TrackedBet): number {
-  return (bet.profitGoal ?? 0) > 0 ? bet.profitGoal! : bet.expectedReturn;
-}
+import { MONO } from '@/lib/portfolio-format';
+import type { TrackedBet } from '@/types/bets';
 
 export default function PositionsScreen(): React.ReactElement {
   const theme = useTheme();
   const router = useRouter();
+  // Set when a good-news notification brought them here: which position moved,
+  // and whether the arrival is worth asking for a rating on the back of.
+  const { betId: highlightId, celebrate } = useLocalSearchParams<{ betId?: string; celebrate?: string }>();
+  const money = useMoney();
   const { bets, resolveBet, dismissSellAlert } = useTrackedBets();
-  const { statusById, isFetching, refetch, lastUpdated } = useBetMonitoring();
+  const { history } = useSavedRoutes();
+  const fallbackBalance = history[0]?.quizSnapshot.balance ?? 0;
+  const progress = usePortfolioProgress(fallbackBalance);
   const [refreshing, setRefreshing] = useState(false);
   const notifiedRef = useRef<Set<string>>(new Set());
+  const scrollRef = useRef<ScrollView>(null);
+  const highlightY = useRef<number | null>(null);
 
-  const onRefresh = useCallback(async () => {
+  useCelebrationArrival(celebrate === '1');
+
+  // Scroll the named position into view once it has been laid out. Measured
+  // rather than computed: the cards are different heights and the P&L hero above
+  // them changes size with the number of digits in it.
+  useEffect(() => {
+    if (!highlightId) return;
+    const timer = setTimeout(() => {
+      if (highlightY.current == null) return;
+      scrollRef.current?.scrollTo({ y: Math.max(0, highlightY.current - 12), animated: true });
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [highlightId, bets.length]);
+
+  const onRefresh = async () => {
     setRefreshing(true);
     try {
-      await refetch();
+      await progress.refresh();
     } finally {
       setRefreshing(false);
     }
-  }, [refetch]);
+  };
 
-  const sellAlerts = useMemo(
-    () => Object.values(statusById).filter((s) => s.sellRecommended),
-    [statusById]
-  );
+  const sellAlerts = progress.sellAlerts;
 
   useEffect(() => {
     for (const alert of sellAlerts) {
       if (notifiedRef.current.has(alert.betId)) continue;
       notifiedRef.current.add(alert.betId);
       const bet = bets.find((b) => b.id === alert.betId);
-      notifySellRecommendation(
-        'Goal hit — sell now 💰',
-        bet
-          ? `Your ${bet.category} position is up $${alert.unrealizedPnl.toFixed(0)}. Lock in your $${alert.profitGoal} target on ${bet.platform}.`
-          : `You're up $${alert.unrealizedPnl.toFixed(0)} — sell to lock in your profit.`
-      );
+      void notifyAlert(sellMessage(alert, bet));
     }
   }, [sellAlerts, bets]);
 
-  const stats = useMemo(() => {
-    const wagered = bets.reduce((s, b) => s + b.amountWagered, 0);
-    const won = bets.filter((b) => b.status === 'won').reduce((s, b) => s + b.expectedReturn, 0);
-    const lost = bets.filter((b) => b.status === 'lost').reduce((s, b) => s + b.amountWagered, 0);
-    return { wagered, pnl: won - lost, active: bets.filter((b) => b.status === 'active').length };
-  }, [bets]);
+  const stats = positionStats(bets, progress.livePnl + progress.projectedPnl);
 
   const pnlPositive = stats.pnl >= 0;
-  const showSpinner = refreshing || isFetching;
+  const showSpinner = refreshing || progress.isRefreshing;
+  // Foreground-only polling (useBetMonitoring) means prices simply stop moving
+  // while the app is closed — reopening after a day away can otherwise show a
+  // stale "Live data · 9:41 AM" with no hint that it's yesterday's 9:41 AM.
+  const dataAgeMs = progress.updatedAt ? msSince(progress.updatedAt) : null;
+  const isStale = dataAgeMs != null && dataAgeMs > 24 * 60 * 60 * 1000;
 
   return (
     <View className="flex-1" style={{ backgroundColor: theme.background }}>
       <SafeAreaView className="flex-1">
         <ScrollView
+          ref={scrollRef}
           showsVerticalScrollIndicator={false}
           contentContainerClassName="px-4 pt-6 pb-16 gap-3"
           refreshControl={
@@ -84,6 +99,33 @@ export default function PositionsScreen(): React.ReactElement {
 
           {bets.length > 0 ? (
             <>
+              {isStale && stats.active > 0 && (
+                <Pressable
+                  onPress={onRefresh}
+                  accessibilityRole="button"
+                  accessibilityLabel="Refresh live prices"
+                  className="flex-row items-center active:opacity-75"
+                  style={{
+                    borderRadius: Radius.lg,
+                    borderWidth: 1.5,
+                    borderColor: Semantic.caution + '66',
+                    backgroundColor: Semantic.caution + '18',
+                    padding: 12,
+                    gap: 10,
+                  }}>
+                  <Icon glyph="⏳" size={18} color={Semantic.caution} />
+                  <View className="flex-1">
+                    <ThemedText style={{ fontSize: 13, fontWeight: '700', color: theme.text }}>
+                      Prices haven&apos;t updated in over a day
+                    </ThemedText>
+                    <ThemedText style={{ fontSize: 11, color: theme.textSecondary, marginTop: 1 }}>
+                      Tap to refresh and check for anything that resolved while you were away
+                    </ThemedText>
+                  </View>
+                  <ThemedText style={{ fontSize: 13, fontWeight: '800', color: Semantic.caution }}>Refresh</ThemedText>
+                </Pressable>
+              )}
+
               {/* P&L hero */}
               <View
                 style={{
@@ -95,51 +137,61 @@ export default function PositionsScreen(): React.ReactElement {
                   gap: 4,
                   ...Shadow.card,
                 }}>
-                <ThemedText style={{ fontSize: 11, fontWeight: '700', color: theme.textTertiary, letterSpacing: 0.8 }}>
-                  TOTAL P&L
-                </ThemedText>
-                <ThemedText style={{ fontSize: 40, fontWeight: '800', letterSpacing: -1, color: pnlPositive ? Brand[500] : Accent.red, ...MONO }}>
-                  {pnlPositive ? '+' : '−'}${Math.abs(stats.pnl).toFixed(0)}
+                <View className="flex-row items-center" style={{ gap: 6 }}>
+                  <ThemedText style={{ fontSize: 11, fontWeight: '700', color: theme.textTertiary, letterSpacing: 0.8 }}>
+                    TOTAL P&L
+                  </ThemedText>
+                  <MetricInfo metric="totalPnl" />
+                </View>
+                <ThemedText style={{ fontSize: 40, fontWeight: '800', letterSpacing: -1, color: pnlPositive ? Semantic.positive : Semantic.negative, ...MONO }}>
+                  {money(stats.pnl, { decimals: 0, signed: true })}
                 </ThemedText>
                 <View className="flex-row gap-4 mt-2">
                   <View className="flex-row items-center gap-1.5">
-                    <ThemedText style={{ fontSize: 13, color: theme.textSecondary, ...MONO }}>${stats.wagered.toFixed(0)}</ThemedText>
-                    <ThemedText style={{ fontSize: 12, color: theme.textTertiary }}>wagered</ThemedText>
+                    <ThemedText style={{ fontSize: 13, color: theme.textSecondary, ...MONO }}>{money(stats.wagered, { decimals: 0 })}</ThemedText>
+                    <ThemedText style={{ fontSize: 12, color: theme.textTertiary }}>staked</ThemedText>
                   </View>
                   <View className="flex-row items-center gap-1.5">
                     <ThemedText style={{ fontSize: 13, color: theme.textSecondary, ...MONO }}>{stats.active}</ThemedText>
                     <ThemedText style={{ fontSize: 12, color: theme.textTertiary }}>active</ThemedText>
                   </View>
                 </View>
-                {lastUpdated && stats.active > 0 && (
+                {progress.updatedAt && stats.active > 0 && (
                   <ThemedText style={{ fontSize: 11, color: theme.textTertiary, marginTop: 4 }}>
-                    Live data · {lastUpdated.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                    Live data · {progress.updatedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
                   </ThemedText>
                 )}
               </View>
 
               {bets.map((bet) => (
-                <BetCard
+                <View
                   key={bet.id}
-                  bet={bet}
-                  liveStatus={statusById[bet.id]}
-                  onResolve={resolveBet}
-                  onDismissSell={() => dismissSellAlert(bet.id)}
-                />
+                  onLayout={bet.id === highlightId
+                    ? (event) => { highlightY.current = event.nativeEvent.layout.y; }
+                    : undefined}>
+                  <BetCard
+                    bet={bet}
+                    liveStatus={progress.statusById[bet.id]}
+                    valuation={progress.positionById[bet.id]}
+                    highlighted={bet.id === highlightId}
+                    onResolve={resolveBet}
+                    onDismissSell={() => dismissSellAlert(bet.id)}
+                  />
+                </View>
               ))}
 
               <ThemedText type="small" themeColor="textSecondary" className="text-center" style={{ opacity: 0.4 }}>
-                Pull down for live prices & scores · Sell when your goal hits
+                Pull down for live prices · Sell when your goal hits
               </ThemedText>
             </>
           ) : (
             <View className="items-center gap-3 py-24">
               <View style={{ width: 64, height: 64, borderRadius: Radius.xl, backgroundColor: theme.backgroundElement, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: theme.border }}>
-                <ThemedText style={{ fontSize: 30 }}>📋</ThemedText>
+                <Icon glyph="📋" size={28} color={theme.textSecondary} strokeWidth={1.6} />
               </View>
-              <ThemedText style={{ fontSize: 16, fontWeight: '700', color: theme.text }}>No tracked bets yet</ThemedText>
+              <ThemedText style={{ fontSize: 16, fontWeight: '700', color: theme.text }}>No acquired positions yet</ThemedText>
               <ThemedText className="text-center" style={{ fontSize: 13, color: theme.textSecondary, maxWidth: 240 }}>
-                Tap “Track” on any route in your feed to start logging your P&L
+                Tap “Acquire” on any route to choose an amount and open your preferred marketplace
               </ThemedText>
             </View>
           )}
@@ -149,194 +201,22 @@ export default function PositionsScreen(): React.ReactElement {
   );
 }
 
-interface BetCardProps {
-  bet: TrackedBet;
-  liveStatus?: BetLiveStatus;
-  onResolve: (args: { id: string; status: TrackedBet['status'] }) => void;
-  onDismissSell: () => void;
+/** How long ago `date` was, read at render time. */
+function msSince(date: Date): number {
+  return Date.now() - date.getTime();
 }
 
-function BetCardInner({ bet, liveStatus, onResolve, onDismissSell }: BetCardProps): React.ReactElement {
-  const theme = useTheme();
-  const rc = riskColor(bet.riskLevel);
-  const goal = profitGoalFor(bet);
-  const isActive = bet.status === 'active';
-  const showSell = isActive && liveStatus?.sellRecommended;
-  const isPoly = isPredictionMarketBet(bet);
-
-  return (
-    <View className="gap-2">
-      {showSell && liveStatus && (
-        <View
-          style={{
-            borderRadius: Radius.lg,
-            backgroundColor: Accent.gold + '18',
-            borderWidth: 1.5,
-            borderColor: Accent.gold + '66',
-            padding: 14,
-            gap: 10,
-            ...Shadow.float,
-          }}>
-          <View className="flex-row items-center gap-2">
-            <ThemedText style={{ fontSize: 20 }}>💰</ThemedText>
-            <View className="flex-1">
-              <ThemedText style={{ fontSize: 11, fontWeight: '800', color: Accent.gold, letterSpacing: 0.6 }}>
-                SELL NOW — GOAL HIT
-              </ThemedText>
-              <ThemedText style={{ fontSize: 14, fontWeight: '700', color: theme.text, marginTop: 2 }}>
-                Up ${liveStatus.unrealizedPnl.toFixed(0)} · your ${goal} target is reached
-              </ThemedText>
-            </View>
-          </View>
-          <ThemedText style={{ fontSize: 13, color: theme.textSecondary, lineHeight: 19 }}>
-            {liveStatus.reason}
-            {isPoly ? ' Head to Polymarket and sell your shares before the game turns.' : ''}
-          </ThemedText>
-          <View className="flex-row gap-2">
-            <Pressable
-              onPress={() => onResolve({ id: bet.id, status: 'won' })}
-              className="flex-1 py-3 items-center active:opacity-85"
-              style={{ borderRadius: Radius.md, backgroundColor: Brand[500], ...Shadow.card }}>
-              <ThemedText style={{ fontSize: 14, fontWeight: '800', color: '#06140C' }}>Sold ✓</ThemedText>
-            </Pressable>
-            <Pressable
-              onPress={onDismissSell}
-              className="px-4 py-3 items-center active:opacity-70 border"
-              style={{ borderRadius: Radius.md, borderColor: theme.border }}>
-              <ThemedText style={{ fontSize: 13, fontWeight: '700', color: theme.textSecondary }}>Dismiss</ThemedText>
-            </Pressable>
-          </View>
-        </View>
-      )}
-
-      <View
-        style={{
-          borderRadius: Radius.lg,
-          overflow: 'hidden',
-          backgroundColor: theme.backgroundElement,
-          borderWidth: 1,
-          borderColor: showSell ? Accent.gold + '55' : theme.border,
-          ...Shadow.card,
-        }}>
-        <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, backgroundColor: rc }} />
-        <View style={{ paddingLeft: 18, paddingRight: 14, paddingVertical: 14, gap: 12 }}>
-
-          <View className="flex-row justify-between items-center">
-            <View className="flex-row items-center gap-2.5">
-              <ThemedText style={{ fontSize: 20 }}>{bet.emoji}</ThemedText>
-              <View>
-                <ThemedText style={{ fontSize: 14, fontWeight: '700', color: theme.text }}>{bet.category}</ThemedText>
-                <ThemedText style={{ fontSize: 11, color: theme.textTertiary }}>{bet.platform} · {riskLabel(bet.riskLevel)}</ThemedText>
-              </View>
-            </View>
-            <StatusBadge status={bet.status} isLive={liveStatus?.isLive} />
-          </View>
-
-          <ThemedText style={{ fontSize: 13, color: theme.textSecondary, lineHeight: 19 }} numberOfLines={2}>{bet.description}</ThemedText>
-
-          {bet.line ? (
-            <View
-              className="self-start px-2.5 py-1"
-              style={{ borderRadius: Radius.sm, backgroundColor: theme.backgroundSelected }}>
-              <ThemedText style={{ fontSize: 12, fontWeight: '700', color: theme.text, ...MONO }}>{bet.line}</ThemedText>
-            </View>
-          ) : null}
-
-          {isActive && liveStatus && (
-            <View
-              className="gap-2"
-              style={{
-                borderRadius: Radius.md,
-                padding: 12,
-                backgroundColor: theme.backgroundSelected,
-                borderWidth: 1,
-                borderColor: liveStatus.profitGoalHit ? Brand[500] + '33' : theme.border,
-              }}>
-              <View className="flex-row justify-between items-center">
-                <ThemedText style={{ fontSize: 11, fontWeight: '700', color: theme.textTertiary, letterSpacing: 0.4 }}>
-                  {liveStatus.isLive ? '● LIVE' : 'MONITORING'}
-                </ThemedText>
-                {liveStatus.currentPrice != null && (
-                  <ThemedText style={{ fontSize: 11, fontWeight: '700', color: Brand[500], ...MONO }}>
-                    {(liveStatus.currentPrice * 100).toFixed(0)}¢
-                    {liveStatus.entryPrice != null ? ` · entry ${(liveStatus.entryPrice * 100).toFixed(0)}¢` : ''}
-                  </ThemedText>
-                )}
-              </View>
-
-              {liveStatus.unrealizedPnl !== 0 || liveStatus.currentPrice != null ? (
-                <View className="flex-row items-baseline gap-1.5">
-                  <ThemedText style={{ fontSize: 11, color: theme.textSecondary }}>Unrealized</ThemedText>
-                  <ThemedText
-                    style={{
-                      fontSize: 20,
-                      fontWeight: '800',
-                      color: liveStatus.unrealizedPnl >= goal ? Brand[500] : liveStatus.unrealizedPnl >= 0 ? theme.text : Accent.red,
-                      ...MONO,
-                    }}>
-                    {liveStatus.unrealizedPnl >= 0 ? '+' : '−'}${Math.abs(liveStatus.unrealizedPnl).toFixed(0)}
-                  </ThemedText>
-                  <ThemedText style={{ fontSize: 11, color: theme.textTertiary }}>/ ${goal} goal</ThemedText>
-                </View>
-              ) : null}
-
-              <ThemedText style={{ fontSize: 12, color: theme.textSecondary, lineHeight: 17 }} numberOfLines={3}>
-                {liveStatus.reason}
-              </ThemedText>
-            </View>
-          )}
-
-          <View className="flex-row justify-between items-end">
-            <View>
-              <View className="flex-row items-baseline gap-1.5">
-                <ThemedText style={{ fontSize: 18, fontWeight: '800', color: theme.text, ...MONO }}>${bet.amountWagered}</ThemedText>
-                <ThemedText style={{ fontSize: 12, color: theme.textTertiary }}>staked → </ThemedText>
-                <ThemedText style={{ fontSize: 13, fontWeight: '700', color: Brand[500], ...MONO }}>+${bet.expectedReturn}</ThemedText>
-              </View>
-            </View>
-
-            {isActive && !showSell && (
-              <View className="flex-row gap-2">
-                <Pressable
-                  onPress={() => onResolve({ id: bet.id, status: 'won' })}
-                  className="active:opacity-75"
-                  style={{ borderRadius: Radius.md, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: Brand[500] + '20' }}>
-                  <ThemedText style={{ fontSize: 13, fontWeight: '700', color: Brand[500] }}>Won ✓</ThemedText>
-                </Pressable>
-                <Pressable
-                  onPress={() => onResolve({ id: bet.id, status: 'lost' })}
-                  className="active:opacity-70 border"
-                  style={{ borderRadius: Radius.md, paddingHorizontal: 12, paddingVertical: 8, borderColor: theme.border }}>
-                  <ThemedText style={{ fontSize: 13, fontWeight: '700', color: theme.textSecondary }}>Lost ✗</ThemedText>
-                </Pressable>
-              </View>
-            )}
-          </View>
-        </View>
-      </View>
-    </View>
-  );
-}
-
-const BetCard = memo(BetCardInner);
-
-function StatusBadge({
-  status,
-  isLive,
-}: {
-  status: TrackedBet['status'];
-  isLive?: boolean;
-}): React.ReactElement {
-  const map = {
-    active: { color: isLive ? Brand[500] : Accent.gold, label: isLive ? 'Live' : 'Active' },
-    won: { color: Brand[500], label: 'Won ✓' },
-    lost: { color: Accent.red, label: 'Lost ✗' },
+/** Money in, profit so far (settled plus open) and open count. */
+function positionStats(bets: TrackedBet[], openPnl: number) {
+  // Watched positions never had money in them, so they cannot count as wagered.
+  const wagered = bets
+    .filter((b) => b.status !== 'watching')
+    .reduce((s, b) => s + b.amountWagered, 0);
+  const won = bets.filter((b) => b.status === 'won').reduce((s, b) => s + b.expectedReturn, 0);
+  const lost = bets.filter((b) => b.status === 'lost').reduce((s, b) => s + b.amountWagered, 0);
+  return {
+    wagered,
+    pnl: won - lost + openPnl,
+    active: bets.filter((b) => b.status === 'active').length,
   };
-  const { color, label } = map[status];
-  return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 9, paddingVertical: 4, borderRadius: Radius.pill, backgroundColor: color + '1A' }}>
-      <View style={{ width: 5, height: 5, borderRadius: 999, backgroundColor: color }} />
-      <ThemedText style={{ fontSize: 11, fontWeight: '700', color }}>{label}</ThemedText>
-    </View>
-  );
 }
