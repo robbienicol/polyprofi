@@ -1,0 +1,21 @@
+{
+  "name": "pathey-video",
+  "private": true,
+  "scripts": {
+    "studio": "remotion studio src/index.ts",
+    "render:app": "remotion render src/index.ts AppStory out/pathey-app-story.mp4",
+    "render:pm": "remotion render src/index.ts PredictionMarkets out/pathey-prediction-markets.mp4",
+    "render": "bun run render:app && bun run render:pm"
+  },
+  "dependencies": {
+    "@remotion/cli": "^4.0.0",
+    "@remotion/google-fonts": "4.0.531",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "remotion": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2",
+    "typescript": "~6.0.3"
+  }
+}

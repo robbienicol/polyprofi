@@ -1,106 +1,116 @@
 import { useUser } from '@clerk/clerk-expo';
-import { useRouter } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import { useRouter, type Href } from 'expo-router';
+import React, { useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useGoalsProgress } from '@/api/hooks/useGoalProgress';
 import { usePortfolioProgress } from '@/api/hooks/usePortfolioProgress';
+import { usePortfolioSeries } from '@/api/hooks/usePortfolioSeries';
+import { useDefaultSearch } from '@/api/hooks/useDefaultSearch';
+import { useQuizAnswers } from '@/api/hooks/useQuizAnswers';
+import type { PortfolioProgressPoint } from '@/api/client/storage';
 import { useSavedRoutes } from '@/api/hooks/useSavedRoutes';
-import {
-  PortfolioLineChart,
-  PortfolioRange,
-} from '@/components/molecules/PortfolioLineChart';
+import { useSavingsGoal } from '@/api/hooks/useSavingsGoal';
+import { useTrackedBets } from '@/api/hooks/useTrackedBets';
+import type { PortfolioRange } from '@/components/molecules/PortfolioLineChart';
+import { GoalTrack } from '@/components/portfolio/HomeGoalTrack';
+import { HomeValueCard } from '@/components/portfolio/HomeValueCard';
+import { Icon } from '@/components/ui/Icon';
 import { ThemedText } from '@/components/themed-text';
-import { Accent, Brand, Radius, Shadow } from '@/constants/theme';
+import { Brand, OnBrand, Radius, Semantic, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { describeSearch } from '@/lib/quiz-profile';
+import { cashFlowAdjustedChange } from '@/lib/portfolio-progress';
+import { goalProgressFraction } from '@/lib/savings-goal';
+import { withTabSkeleton } from '@/components/ui/with-tab-skeleton';
+import { usePullRefresh } from '@/hooks/use-pull-refresh';
 
-const MONO = { fontVariant: ['tabular-nums' as const] };
-
-const RANGE_MS: Record<Exclude<PortfolioRange, 'ALL'>, number> = {
-  '1D': 24 * 60 * 60 * 1_000,
-  '1W': 7 * 24 * 60 * 60 * 1_000,
-  '1M': 30 * 24 * 60 * 60 * 1_000,
-};
-
-function relativeUpdate(date: Date | null): string {
-  if (!date) return 'Waiting for first refresh';
-  const seconds = Math.max(0, Math.round((Date.now() - date.getTime()) / 1_000));
-  if (seconds < 15) return 'Updated just now';
-  if (seconds < 60) return `Updated ${seconds}s ago`;
-  const minutes = Math.round(seconds / 60);
-  return `Updated ${minutes}m ago`;
-}
-
-export default function HomeScreen(): React.ReactElement {
+function HomeScreen(): React.ReactElement {
   const theme = useTheme();
   const router = useRouter();
   const { user } = useUser();
+  const { bets } = useTrackedBets();
   const { history } = useSavedRoutes();
+  const { quizAnswers, saveAnswers } = useQuizAnswers();
+  const { answers: defaultSearch } = useDefaultSearch();
+  const [isStartingSearch, setIsStartingSearch] = useState(false);
   const latestSearch = history[0] ?? null;
+  // The quiz prefills from exactly this, in exactly this order, so what the row
+  // below shows is what the form will open on.
+  const lastAnswers = quizAnswers ?? latestSearch?.quizSnapshot ?? null;
   const fallbackBalance = latestSearch?.quizSnapshot.balance ?? 0;
   const progress = usePortfolioProgress(fallbackBalance);
-  const [range, setRange] = useState<PortfolioRange>('1W');
+  const [range, setRange] = useState<PortfolioRange>('1D');
+  // The point under the finger on the chart. While it is set the header reads
+  // that moment instead of now — the whole point of scrubbing.
+  const [scrubbed, setScrubbed] = useState<PortfolioProgressPoint | null>(null);
 
-  const goal = useMemo(() => {
-    if (!latestSearch) return null;
-    const { balance, target, timeframe } = latestSearch.quizSnapshot;
-    const labels: Record<string, string> = {
-      today: 'today', week: 'this week', month: 'this month',
-      '3months': 'in 3 months', '1year': 'this year', '5years': 'in 5 years',
-    };
-    return {
-      from: balance,
-      target,
-      to: balance + target,
-      when: labels[timeframe] ?? timeframe,
-    };
-  }, [latestSearch]);
+  // Home used to be live money only, with the goals a tab away. But the whole
+  // proposition is "here is the goal, here is the route to it", and the first screen
+  // never said how far off the goal was — the distance to the destination was the one
+  // number missing from it. The rollup below is that distance, not a second Goals tab:
+  // the goals still nearest to done, and nothing to act on beyond opening one.
+  // Marking a goal reached still happens in useGoalMaintenance, mounted at the root,
+  // so it doesn't depend on which screen is open.
+  const { goals } = useSavingsGoal();
+  const goalsProgress = useGoalsProgress(goals);
+  // Reached goals drop off: this asks what is left to earn, and a finished goal has
+  // nothing. Closest to done first, so the one worth another route is at the top;
+  // open-ended goals have no fraction and sort last on their own.
+  const openGoals = goals
+      .filter((goal) => !goal.achievedAt)
+      .map((goal) => ({ goal, progress: goalsProgress.progressFor(goal.id) }))
+      .sort((a, b) => (
+        goalProgressFraction(b.progress.netGain, b.goal) - goalProgressFraction(a.progress.netGain, a.goal)
+      ));
+  const shownGoals = openGoals.slice(0, 3);
 
-  const chartPoints = useMemo(() => {
-    const current = {
-      time: progress.updatedAt?.getTime() ?? progress.observedAt,
-      value: progress.value,
-      livePnl: progress.livePnl,
-      projectedPnl: progress.projectedPnl,
-    };
-    if (progress.points.length === 0) {
-      return progress.basisValue > 0
-        ? [{ ...current, time: current.time - 60_000 }, current]
-        : [];
-    }
-    const last = progress.points[progress.points.length - 1];
-    return last.time === current.time && Math.abs(last.value - current.value) < 0.005
-      ? progress.points
-      : [...progress.points, current];
-  }, [progress.basisValue, progress.livePnl, progress.observedAt, progress.points, progress.projectedPnl, progress.updatedAt, progress.value]);
+  const activeBets = bets.filter((bet) => bet.status === 'active');
+  // Now, as the header shows it. The chart ends on exactly this point.
+  const livePoint: PortfolioProgressPoint | null = (
+    progress.activeCount > 0
+      ? {
+        time: progress.updatedAt?.getTime() ?? progress.observedAt,
+        value: progress.value,
+        basisValue: progress.basisValue,
+        livePnl: progress.livePnl,
+        projectedPnl: progress.projectedPnl,
+      }
+      : null
+  );
 
-  const rangeStartValue = useMemo(() => {
-    if (chartPoints.length === 0) return progress.basisValue;
-    if (range === 'ALL') return chartPoints[0].value;
-    const cutoff = chartPoints[chartPoints.length - 1].time - RANGE_MS[range];
-    const first = chartPoints.find((point) => point.time >= cutoff);
-    return first?.value ?? chartPoints[0].value;
-  }, [chartPoints, progress.basisValue, range]);
+  // Drawn from each holding's own price history, not from the moments the app was open.
+  const { series } = usePortfolioSeries({
+    bets: activeBets,
+    range,
+    live: livePoint,
+    positionById: progress.positionById,
+    recorded: progress.points,
+  });
 
-  const change = progress.value - rangeStartValue;
-  const changePct = rangeStartValue > 0 ? (change / rangeStartValue) * 100 : 0;
-  const positive = change >= 0;
-  const changeColor = positive ? Brand[500] : Accent.red;
+  const rangeStartPoint = series.baseline ?? {
+    time: progress.observedAt,
+    value: progress.basisValue,
+    basisValue: progress.basisValue,
+    livePnl: 0,
+    projectedPnl: 0,
+  };
+  // The range as a whole, for the chart's colour. The header below follows the finger.
+  const rangeRising = cashFlowAdjustedChange(rangeStartPoint, progress).amount >= 0;
+
+  // Scrubbing compares the point under the finger with the start of the range,
+  // so both numbers describe the same moment: "here is what it was worth, and
+  // what it had made by then".
+  const headPoint = scrubbed ?? progress;
+  const adjustedChange = cashFlowAdjustedChange(rangeStartPoint, headPoint);
+  const change = adjustedChange.amount;
+  const changePct = adjustedChange.percent;
   const greeting = user?.firstName ? `Hey, ${user.firstName}` : 'Welcome back';
 
-  const trackingLabel = progress.livePositions > 0 && progress.projectedPositions > 0
-    ? `${progress.livePositions} live · ${progress.projectedPositions} projected`
-    : progress.livePositions > 0
-      ? `${progress.livePositions} live market${progress.livePositions === 1 ? '' : 's'}`
-      : progress.projectedPositions > 0
-        ? `${progress.projectedPositions} projected position${progress.projectedPositions === 1 ? '' : 's'}`
-        : progress.activeCount > 0
-          ? `${progress.activeCount} position${progress.activeCount === 1 ? '' : 's'} tracked`
-          : 'No positions yet';
-
-  const goalProgress = goal && goal.target > 0
-    ? Math.max(0, Math.min(1, (progress.value - goal.from) / goal.target))
-    : 0;
+  const pull = usePullRefresh(progress.refresh);
+  // Nothing priced yet and a refresh in flight: the first load, not a refresh.
+  const firstLoad = progress.updatedAt == null && progress.isRefreshing;
 
   return (
     <View className="flex-1" style={{ backgroundColor: theme.background }}>
@@ -109,166 +119,160 @@ export default function HomeScreen(): React.ReactElement {
           showsVerticalScrollIndicator={false}
           refreshControl={(
             <RefreshControl
-              refreshing={progress.isRefreshing}
-              onRefresh={progress.refresh}
+              refreshing={pull.refreshing}
+              onRefresh={pull.onRefresh}
               tintColor={Brand[500]}
             />
           )}
           contentContainerClassName="px-4 pt-4 pb-16 gap-5">
 
-          <View className="flex-row items-center justify-between" style={{ paddingHorizontal: 2 }}>
-            <View>
-              <ThemedText style={{ fontSize: 11, fontWeight: '900', color: Brand[500], letterSpacing: 1.1 }}>
-                POLYPROFIT
-              </ThemedText>
-              <ThemedText style={{ fontSize: 18, fontWeight: '700', color: theme.text, marginTop: 3 }}>
-                {greeting}
-              </ThemedText>
-            </View>
-            <Pressable
-              onPress={() => router.push('/positions')}
-              accessibilityLabel="Open tracked positions"
-              className="active:opacity-65"
-              style={{
-                width: 42,
-                height: 42,
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderRadius: Radius.pill,
-                borderWidth: 1,
-                borderColor: theme.borderStrong,
-                backgroundColor: theme.backgroundElement,
-              }}>
-              <ThemedText style={{ fontSize: 17, color: theme.text }}>↗</ThemedText>
-            </Pressable>
-          </View>
-
-          <View
-            style={{
-              borderRadius: Radius.xl,
-              backgroundColor: theme.backgroundElevated,
-              borderWidth: 1,
-              borderColor: theme.border,
-              paddingHorizontal: 18,
-              paddingTop: 18,
-              paddingBottom: 14,
-              ...Shadow.card,
-            }}>
-            <View className="flex-row items-center justify-between">
-              <ThemedText style={{ fontSize: 12, fontWeight: '800', color: theme.textTertiary, letterSpacing: 0.35 }}>
-                TRACKED VALUE
-              </ThemedText>
-              <View className="flex-row items-center" style={{ gap: 6 }}>
-                <View style={{
-                  width: 7,
-                  height: 7,
-                  borderRadius: Radius.pill,
-                  backgroundColor: progress.livePositions > 0 ? Brand[500] : progress.projectedPositions > 0 ? Accent.gold : theme.textTertiary,
-                }} />
-                <ThemedText style={{ fontSize: 11, fontWeight: '700', color: theme.textSecondary }}>
-                  {trackingLabel}
-                </ThemedText>
-              </View>
-            </View>
-
-            <ThemedText
-              style={{
-                fontSize: 40,
-                lineHeight: 48,
-                fontWeight: '800',
-                color: theme.text,
-                letterSpacing: -1.4,
-                marginTop: 9,
-                ...MONO,
-              }}>
-              ${progress.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          <View style={{ paddingHorizontal: 2 }}>
+            <ThemedText style={{ fontSize: 11, fontWeight: '900', color: Brand[500], letterSpacing: 1.1 }}>
+              PATHEY
             </ThemedText>
-            <View className="flex-row items-center" style={{ gap: 7, marginTop: 2 }}>
-              <ThemedText style={{ fontSize: 14, fontWeight: '800', color: changeColor, ...MONO }}>
-                {positive ? '+' : '-'}${Math.abs(change).toFixed(2)} ({positive ? '+' : '-'}{Math.abs(changePct).toFixed(2)}%)
-              </ThemedText>
-              <ThemedText style={{ fontSize: 12, color: theme.textTertiary }}>{range}</ThemedText>
-            </View>
-
-            <View style={{ marginHorizontal: -3, marginTop: 7 }}>
-              <PortfolioLineChart
-                points={chartPoints}
-                range={range}
-                onRangeChange={setRange}
-                projected={progress.projectedPositions > 0}
-              />
-            </View>
-
-            <View
-              className="flex-row items-center justify-between"
-              style={{ borderTopWidth: 1, borderTopColor: theme.border, paddingTop: 12, marginTop: 4 }}>
-              <ThemedText style={{ fontSize: 11, color: theme.textTertiary }}>
-                {progress.isRefreshing ? 'Refreshing market prices…' : relativeUpdate(progress.updatedAt)}
-              </ThemedText>
-              {progress.projectedPositions > 0 ? (
-                <View className="flex-row items-center" style={{ gap: 5 }}>
-                  <View style={{ width: 6, height: 6, borderRadius: 9, borderWidth: 1, borderColor: Accent.gold }} />
-                  <ThemedText style={{ fontSize: 11, color: Accent.gold }}>includes projected accrual</ThemedText>
-                </View>
-              ) : null}
-            </View>
+            <ThemedText style={{ fontSize: 18, fontWeight: '700', color: theme.text, marginTop: 3 }}>
+              {greeting}
+            </ThemedText>
           </View>
 
-          {goal ? (
-            <View style={{
-              borderRadius: Radius.lg,
-              backgroundColor: theme.backgroundElement,
-              borderWidth: 1,
-              borderColor: theme.border,
-              padding: 16,
-              gap: 11,
-            }}>
-              <View className="flex-row justify-between items-end" style={{ gap: 12 }}>
-                <View className="flex-1">
-                  <ThemedText style={{ fontSize: 13, fontWeight: '800', color: theme.text }}>Latest goal</ThemedText>
-                  <ThemedText style={{ fontSize: 12, color: theme.textSecondary, marginTop: 3 }}>
-                    ${goal.from.toLocaleString()} → ${goal.to.toLocaleString()} {goal.when}
-                  </ThemedText>
-                </View>
-                <ThemedText style={{ fontSize: 15, fontWeight: '800', color: Brand[500], ...MONO }}>
-                  {(goalProgress * 100).toFixed(0)}%
+          <HomeValueCard
+            progress={progress}
+            series={series}
+            range={range}
+            setRange={setRange}
+            scrubbed={scrubbed}
+            setScrubbed={setScrubbed}
+            headValue={headPoint.value}
+            change={change}
+            changePct={changePct}
+            rangeRising={rangeRising}
+            firstLoad={firstLoad}
+          />
+
+          {/* One job on this screen: go make money. Straight to results on the last
+              search, else on what onboarding said — the quiz is optional, one row down. */}
+          <Pressable
+            onPress={() => {
+              if (!defaultSearch) {
+                router.push('/quiz');
+                return;
+              }
+              if (isStartingSearch) return;
+              setIsStartingSearch(true);
+              saveAnswers(defaultSearch, {
+                onSuccess: () => router.push('/(tabs)/routes?generate=1' as Href),
+                onSettled: () => setIsStartingSearch(false),
+              });
+            }}
+            className="py-5 items-center active:opacity-85"
+            style={{ borderRadius: Radius.xl, backgroundColor: Brand[500], ...Shadow.card }}>
+            <ThemedText style={{ fontSize: 17, fontWeight: '900', color: OnBrand, letterSpacing: -0.2 }}>
+              Find live routes →
+            </ThemedText>
+            <ThemedText style={{ fontSize: 11, fontWeight: '700', color: OnBrand, opacity: 0.7, marginTop: 3 }}>
+              Ranked routes from live markets, in under a minute
+            </ThemedText>
+          </Pressable>
+
+          {/* The quiz already reopens on the last answers; nothing on this screen said
+              so, so the only way back into them looked like starting over. */}
+          {lastAnswers ? (
+            <Pressable
+              onPress={() => router.push('/quiz')}
+              accessibilityRole="button"
+              accessibilityLabel="Edit your last search"
+              className="flex-row items-center active:opacity-80"
+              style={{
+                borderRadius: Radius.lg,
+                borderWidth: 1,
+                borderColor: theme.border,
+                backgroundColor: theme.backgroundElevated,
+                paddingHorizontal: 16,
+                paddingVertical: 13,
+                gap: 12,
+                marginTop: -10,
+              }}>
+              <View className="flex-1">
+                <ThemedText style={{ fontSize: 11, fontWeight: '800', color: theme.textTertiary, letterSpacing: 0.35 }}>
+                  YOUR LAST SEARCH
+                </ThemedText>
+                <ThemedText style={{ fontSize: 13, fontWeight: '700', color: theme.text, marginTop: 2 }} numberOfLines={1}>
+                  {describeSearch(lastAnswers)}
                 </ThemedText>
               </View>
-              <View style={{ height: 5, borderRadius: Radius.pill, backgroundColor: theme.border, overflow: 'hidden' }}>
-                <View style={{ width: `${goalProgress * 100}%`, height: '100%', borderRadius: Radius.pill, backgroundColor: Brand[500] }} />
+              <ThemedText style={{ fontSize: 13, fontWeight: '800', color: Brand[500] }}>
+                Edit →
+              </ThemedText>
+            </Pressable>
+          ) : null}
+
+          {/* Distance to the goals still running. Hidden with no open goals — the button
+              below is the whole answer then, and an empty rail would only be furniture. */}
+          {shownGoals.length > 0 ? (
+            <View style={{ gap: 10 }}>
+              <View className="flex-row items-center justify-between" style={{ paddingHorizontal: 2 }}>
+                <ThemedText style={{ fontSize: 11, fontWeight: '800', color: theme.textTertiary, letterSpacing: 0.35 }}>
+                  STILL TO GO
+                </ThemedText>
+                {openGoals.length > shownGoals.length ? (
+                  <Pressable onPress={() => router.push('/(tabs)/goals')} hitSlop={8} className="active:opacity-60">
+                    <ThemedText style={{ fontSize: 12, fontWeight: '800', color: Brand[500] }}>
+                      All {openGoals.length} goals →
+                    </ThemedText>
+                  </Pressable>
+                ) : null}
               </View>
+              {shownGoals.map(({ goal, progress: goalProgress }) => (
+                <GoalTrack
+                  key={goal.id}
+                  goal={goal}
+                  progress={goalProgress}
+                  onPress={() => router.push(`/goal/${goal.id}` as Href)}
+                />
+              ))}
             </View>
           ) : null}
 
-          <View className="flex-row" style={{ gap: 10 }}>
-            {progress.activeCount > 0 ? (
-              <Pressable
-                onPress={() => router.push('/positions')}
-                className="flex-1 py-4 items-center active:opacity-75"
-                style={{ borderRadius: Radius.lg, backgroundColor: theme.backgroundElement, borderWidth: 1, borderColor: theme.borderStrong }}>
-                <ThemedText style={{ fontSize: 14, fontWeight: '800', color: theme.text }}>
-                  View {progress.activeCount} position{progress.activeCount === 1 ? '' : 's'}
-                </ThemedText>
-              </Pressable>
-            ) : null}
+          {/* Only surfaced when a position actually needs a decision. */}
+          {progress.sellAlerts.length > 0 ? (
             <Pressable
-              onPress={() => router.push('/quiz')}
-              className="flex-1 py-4 items-center active:opacity-80"
-              style={{ borderRadius: Radius.lg, backgroundColor: Brand[500] }}>
-              <ThemedText style={{ fontSize: 14, fontWeight: '800', color: '#06140C' }}>
-                {progress.activeCount > 0 ? 'Find another route' : 'Set goal & find routes'}
-              </ThemedText>
+              onPress={() => router.push('/positions')}
+              accessibilityRole="button"
+              className="flex-row items-center active:opacity-80"
+              style={{
+                borderRadius: Radius.lg,
+                borderWidth: 1,
+                borderColor: Semantic.caution + '66',
+                backgroundColor: Semantic.caution + '14',
+                paddingHorizontal: 16,
+                paddingVertical: 14,
+                gap: 12,
+              }}>
+              <Icon glyph="🔔" size={19} color={theme.textSecondary} />
+              <View className="flex-1">
+                <ThemedText style={{ fontSize: 14, fontWeight: '800', color: theme.text }}>
+                  {progress.sellAlerts.length} position{progress.sellAlerts.length === 1 ? '' : 's'} worth a look
+                </ThemedText>
+                <ThemedText style={{ fontSize: 11, color: theme.textSecondary, marginTop: 1 }} numberOfLines={1}>
+                  {progress.sellAlerts[0].reason}
+                </ThemedText>
+              </View>
+              <ThemedText style={{ fontSize: 18, color: Semantic.caution }}>→</ThemedText>
             </Pressable>
-          </View>
+          ) : null}
 
           <ThemedText style={{ fontSize: 11, lineHeight: 16, color: theme.textTertiary, textAlign: 'center', paddingHorizontal: 14 }}>
             Polymarket and supported stocks use refreshed market prices. Savings and Treasury movement is estimated from tracked yield and time to maturity.
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary" className="text-center" style={{ opacity: 0.38 }}>
-            For entertainment only · Not financial advice
+            AI-generated · Not financial advice · Informational only
           </ThemedText>
         </ScrollView>
       </SafeAreaView>
     </View>
   );
 }
+
+
+export default withTabSkeleton(HomeScreen, 'home');
+

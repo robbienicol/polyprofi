@@ -1,7 +1,7 @@
+import { useAuth } from '@clerk/clerk-expo';
 import { useQuery } from '@tanstack/react-query';
-import { useMemo } from 'react';
 
-import { fetchAllBetStatuses } from '@/api/client/bet-monitor';
+import { fetchLiveStatuses } from '@/api/client/live-positions';
 import { useTrackedBets } from '@/api/hooks/useTrackedBets';
 import { BetLiveStatus } from '@/types/bets';
 
@@ -11,22 +11,23 @@ function betMonitoringQueryKey(betIds: string[]) {
 
 export function useBetMonitoring(enabled = true) {
   const { bets } = useTrackedBets();
+  const { getToken } = useAuth();
   const activeIds = bets.filter((b) => b.status === 'active').map((b) => b.id);
 
   const { data, isFetching, refetch, dataUpdatedAt } = useQuery({
     queryKey: betMonitoringQueryKey(activeIds),
-    queryFn: () => fetchAllBetStatuses(bets),
+    queryFn: () => fetchLiveStatuses(bets, getToken),
     enabled: enabled && activeIds.length > 0,
     staleTime: 30_000,
     refetchInterval: enabled && activeIds.length > 0 ? 60_000 : false,
   });
 
-  const statusById = useMemo(() => (data ?? []).reduce<Record<string, BetLiveStatus>>((acc, s) => {
+  const statusById = (data ?? []).reduce<Record<string, BetLiveStatus>>((acc, s) => {
     acc[s.betId] = s;
     return acc;
-  }, {}), [data]);
+  }, {});
 
-  const sellAlerts = useMemo(() => (data ?? []).filter((s) => s.sellRecommended), [data]);
+  const sellAlerts = (data ?? []).filter((s) => s.sellRecommended);
 
   return {
     statuses: data ?? [],

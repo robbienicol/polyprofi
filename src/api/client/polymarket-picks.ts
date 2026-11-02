@@ -1,16 +1,22 @@
 import { MetaculusQuestion } from '@/api/client/market-data';
 import type { MetaculusEdge, PolymarketPickBundle, TaggedPolymarketEvent } from '@/api/client/polymarket-pick-types';
 import { fetchWhaleTrades } from '@/api/client/polymarket-whales';
-import { createInFlightCache } from '@/lib/in-flight-cache';
 import { isRecord, parseJson, responseJson } from '@/lib/runtime-validation';
 import type { RawPick } from '@/types/picks';
 
+// Server-safe: this module runs both in the app and, via `crawlPolymarketPickBundle`,
+// inside the `/api/polymarket-picks` Cloudflare Workers route. It must never import
+// anything React-Native-only (expo-constants, react-native, AsyncStorage) — the
+// client-facing fetch wrapper that needs those lives in `polymarket-picks-client.ts`
+// instead, kept separate so importing this file never drags them into the server bundle.
 export type * from '@/api/client/polymarket-pick-types';
 export * from '@/api/client/polymarket-pick-formatters';
 export { whaleTradesToPicks } from '@/api/client/polymarket-whales';
 
 const GAMMA = 'https://gamma-api.polymarket.com';
-const METACULUS_TOKEN = process.env.EXPO_PUBLIC_METACULUS_API_TOKEN ?? '';
+// Server-only var (no EXPO_PUBLIC_ prefix): this now runs from the crawl route, not
+// the client bundle, so it must be set as an EAS Hosting environment secret.
+const METACULUS_TOKEN = process.env.METACULUS_API_TOKEN ?? '';
 let metaculusTokenWarned = false;
 
 const PM_TAGS = ['politics', 'weather', 'geopolitics'] as const;
@@ -270,13 +276,13 @@ function buildMetaculusEdges(
   return edges.sort((a, b) => Math.abs(b.edgePts) - Math.abs(a.edgePts)).slice(0, 12);
 }
 
-const getPolymarketPickBundle = createInFlightCache<PolymarketPickBundle>(90 * 1000);
-
-export async function fetchPolymarketPickBundle(): Promise<PolymarketPickBundle> {
-  return getPolymarketPickBundle(fetchPolymarketPickBundleInner, 'pm:picks');
-}
-
-async function fetchPolymarketPickBundleInner(): Promise<PolymarketPickBundle> {
+/**
+ * The full tag + comment crawl. Identical for every user at a given moment (no
+ * goal/amount/quiz input reaches it), so it belongs behind the shared server
+ * cache in `/api/polymarket-picks+api.ts`, not re-run per device. Call
+ * `fetchPolymarketPickBundle` (in `polymarket-picks-client.ts`) from the app instead.
+ */
+export async function crawlPolymarketPickBundle(): Promise<PolymarketPickBundle> {
   const taggedEvents: TaggedPolymarketEvent[] = [];
   for (const tag of PM_TAGS) {
     const batch = await fetchTaggedEvents(tag);

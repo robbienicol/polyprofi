@@ -1,0 +1,20 @@
+# Calls the server's scheduled heartbeat (src/app/api/cron/tick+api.ts) every
+# 10 minutes: warms shared market data, refreshes the daily AI slate, sends alerts.
+# Needs the CRON_SECRET repository secret, matching CRON_SECRET in EAS production.
+name: Server tick
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Call /api/cron/tick
+        run: |
+          curl --fail-with-body --silent --show-error --max-time 120 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            https://polyprofit.expo.app/api/cron/tick
