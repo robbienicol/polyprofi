@@ -30,11 +30,23 @@ export async function harvestPolymarketMarkets(): Promise<PolyMarket[]> {
     });
   }
 
+  // An even share per month. Without it the target filled inside the newest window,
+  // so the table described only the last few weeks — mostly same-day sports and crypto
+  // that never had a week or month of history — and halved the usable sample whenever
+  // a refresh landed on a quiet month.
+  const perWindow = Math.ceil(POLYMARKET_TARGET / windows.length);
+  // Pages strided across the offset range rather than the first few, so a month's share
+  // is not just the markets that ended on its first day.
+  const maxOffset = SMOKE ? 100 : 2000;
+  const pages = Math.ceil(perWindow / 100) * 2;
+  const offsets = Array.from({ length: pages }, (_, i) => Math.floor((i * maxOffset) / pages / 100) * 100);
+
   const collected: PolyMarket[] = [];
   const seen = new Set<string>();
   for (const window of windows) {
-    for (let offset = 0; offset <= (SMOKE ? 100 : 2000); offset += 100) {
-      if (collected.length >= POLYMARKET_TARGET) break;
+    let inWindow = 0;
+    for (const offset of offsets) {
+      if (inWindow >= perWindow) break;
       const query = new URLSearchParams({
         closed: 'true',
         limit: '100',
@@ -55,13 +67,13 @@ export async function harvestPolymarketMarkets(): Promise<PolyMarket[]> {
       if (!Array.isArray(payload) || payload.length === 0) break;
       for (const raw of payload) {
         const market = parsePolymarketMarket(raw);
-        if (!market || seen.has(market.slug)) continue;
+        if (!market || seen.has(market.slug) || inWindow >= perWindow) continue;
         seen.add(market.slug);
         collected.push(market);
+        inWindow++;
       }
     }
     console.log(`  polymarket ${window.min.slice(0, 10)} → ${collected.length} resolved markets so far`);
-    if (collected.length >= POLYMARKET_TARGET) break;
   }
   return collected;
 }

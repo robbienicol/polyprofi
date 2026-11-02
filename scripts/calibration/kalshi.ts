@@ -104,22 +104,26 @@ export async function kalshiObservations(
       return [];
     }
 
+    // The last candle marks when the market stopped trading, traded or not.
+    const lastCandleMs = Math.max(0, ...payload.candlesticks.map((candle) =>
+      isRecord(candle) ? (numberOf(candle.end_period_ts) ?? 0) * 1000 : 0));
     const series = payload.candlesticks.flatMap((candle) => {
       if (!isRecord(candle)) return [];
       const ts = numberOf(candle.end_period_ts);
       if (ts == null) return [];
-      // Last trade where the day traded at all; otherwise the mid of the closing quote,
-      // which is what a taker would have actually faced.
+      // Days that actually traded only. A quote-only day's bid/ask mid looked like a fair
+      // fallback and was not: on cross-listed sports, 65–80¢ mids resolved Yes 54% of the
+      // time against 76% for traded closes at the same price, and that one fallback was
+      // the whole gap to Polymarket's curve. Untraded days carry the last trade forward
+      // in observationsFor, the same as a quiet Polymarket market.
+      const volume = numberOf(candle.volume_fp) ?? 0;
       const price = isRecord(candle.price) ? numberOf(candle.price.close_dollars) : null;
-      if (price != null && price > 0) return [{ t: ts * 1000, p: price }];
-      const bid = isRecord(candle.yes_bid) ? numberOf(candle.yes_bid.close_dollars) : null;
-      const ask = isRecord(candle.yes_ask) ? numberOf(candle.yes_ask.close_dollars) : null;
-      if (bid == null || ask == null || ask <= 0) return [];
-      return [{ t: ts * 1000, p: (bid + ask) / 2 }];
+      if (volume <= 0 || price == null || price <= 0) return [];
+      return [{ t: ts * 1000, p: price }];
     });
     const observations = series.length === 0
       ? []
-      : observationsFor('kalshi', market.topic, series, market.yesWon);
+      : observationsFor('kalshi', market.topic, series, market.yesWon, lastCandleMs);
     recordProgress(key, observations);
     return observations;
   });

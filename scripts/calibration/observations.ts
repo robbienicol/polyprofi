@@ -25,10 +25,11 @@ import { DAY_MS, LEAD_TARGETS, type Observation } from './config';
 function priceAtLead(
   series: { t: number; p: number }[],
   lead: LeadBucket,
+  anchorMs?: number,
 ): number | null {
   if (series.length === 0) return null;
   const ordered = [...series].sort((a, b) => a.t - b.t);
-  const anchor = ordered[ordered.length - 1].t;
+  const anchor = anchorMs ?? ordered[ordered.length - 1].t;
   const targetMs = anchor - LEAD_TARGETS[lead].days * DAY_MS;
   // Never existed this far out: a three-day market has no thirty-day price, and its
   // first tick is not one.
@@ -47,10 +48,12 @@ export function observationsFor(
   topic: string,
   series: { t: number; p: number }[],
   yes: boolean,
+  /** When the market stopped trading, if the series can end before that (Kalshi drops untraded days). */
+  anchorMs?: number,
 ): Observation[] {
   const out: Observation[] = [];
   for (const lead of LEAD_BUCKETS) {
-    const price = priceAtLead(series, lead);
+    const price = priceAtLead(series, lead, anchorMs);
     if (price == null) continue;
     const bucket = priceBucketIndex(price * 100);
     if (bucket == null) continue;

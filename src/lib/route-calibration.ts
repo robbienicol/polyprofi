@@ -27,28 +27,6 @@ import { PREDICTION_TOPICS, isPredictionCategory, predictionTopic } from '@/lib/
 import type { MarketComparison } from '@/lib/market-comparison';
 import type { Route } from '@/types/routes';
 
-/**
- * Kalshi's half of the table is harvested but not yet shown, and this flag is the gate.
- *
- * Its numbers disagree with Polymarket's on the same kind of contract by more than
- * sampling noise allows: measured on the current table, 65–80¢ favourites resolved Yes
- * 79.0% of the time on Polymarket and 59.4% on Kalshi. Liquid sports moneylines on the
- * two venues price the same games within a cent or two of each other, so a twelve-point
- * gap in realised outcomes is a measurement fault on one side, not a real edge.
- *
- * The suspect is how a Kalshi price is read back. Polymarket serves a continuous daily
- * mid; Kalshi serves candlesticks whose last trade is absent on days without one, so the
- * harvest falls back to the closing bid/ask mid and the two sources are mixed. Its candle
- * series also stops at different points relative to the event — some markets' last candle
- * is the settlement print, others' is pre-game — so the "one day out" band is not reading
- * the same moment across markets.
- *
- * Until that is pinned down, a prediction pick reads Polymarket's history only, which is
- * also the venue every route the app generates actually lives on. Flip this to true once
- * the Kalshi curve agrees with Polymarket's on cross-listed sports.
- */
-const KALSHI_READINGS_ENABLED = false;
-
 /** Every topic the table can be keyed by, including markets that matched none. */
 export const CALIBRATION_TOPICS: readonly string[] = [
   ...PREDICTION_TOPICS.map((topic) => topic.value),
@@ -104,8 +82,9 @@ export function routeCalibrations(
   const polymarket = readFor('polymarket', comparison?.polymarketRawPrice ?? price, days, route);
   if (polymarket) out.push({ venue: 'polymarket', label: 'Polymarket', reading: polymarket });
 
-  // Kalshi and Robinhood are deliberately not read yet — see KALSHI_READINGS_ENABLED.
-  if (KALSHI_READINGS_ENABLED && comparison) {
+  // Kalshi's history is read from traded days only (see scripts/calibration/kalshi.ts);
+  // quote-only days had pulled its curve twelve points off Polymarket's on the same games.
+  if (comparison) {
     const kalshi = readFor('kalshi', comparison.kalshiRawPrice, days, route);
     if (kalshi) {
       out.push({ venue: 'kalshi', label: 'Kalshi', reading: kalshi });
