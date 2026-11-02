@@ -114,7 +114,6 @@ function CutForm({
   cut,
   percent,
   onPercentChange,
-  destinationLabel,
   onConfirm,
   onCancel,
 }: {
