@@ -95,7 +95,9 @@ function RouteCardInner({ route, requiredInvestment, currentInvestment, odds, ta
   const probabilityWidth = odds
     ? Math.min(odds.hitsGoal ? odds.chance : route.probability, 100)
     : route.meetsTarget ? Math.min(route.probability, 100) : 0;
-  const tone = chanceTone(probabilityWidth);
+  // A pick that can't reach the goal ranks below every one that can, so its market
+  // chance stays neutral rather than looking like a high score out of order.
+  const tone = odds && !odds.hitsGoal ? null : chanceTone(probabilityWidth);
   const play = recommendedPlay(route);
 
   const stake = odds

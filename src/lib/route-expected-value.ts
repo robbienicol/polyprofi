@@ -53,7 +53,13 @@ export function downsidePercent(route: Route): number {
  * longshot's headline payout is not free money.
  */
 export function expectedValue(route: Route, stake: number): number {
-  const p = Math.min(Math.max(route.probability, 0), 100) / 100;
+  // A contract's payout comes from its exact price; the displayed probability is that
+  // price rounded to a whole percent. Weighting by the rounded figure turned a fairly
+  // priced 2.5¢ contract into +$200 of "value", so use the price it pays from.
+  const exactPrice = route.lossProfile === 'binary' && route.entryPrice != null && route.entryPrice > 0 && route.entryPrice < 1
+    ? route.entryPrice
+    : null;
+  const p = exactPrice ?? Math.min(Math.max(route.probability, 0), 100) / 100;
   return p * winProfit(route) - (1 - p) * downsideAtStake(route, stake);
 }
 

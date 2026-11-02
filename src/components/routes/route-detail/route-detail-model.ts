@@ -3,6 +3,7 @@ import type { useMarketComparison } from "@/api/hooks/useMarketComparison";
 import { cancellationActionLabel, cancellationTargetFor } from "@/lib/cancel-links";
 import { preferredTradeDestination, tradeVenuesForRoute } from "@/lib/route-actions";
 import { primaryCalibration, routeCalibrations } from "@/lib/route-calibration";
+import { fundChanceAtStake, isVolatilityPriced } from "@/lib/goal-odds";
 import { goalEffectivenessScore, type ScoreWeights } from "@/lib/score";
 import { rescoreForStake, stakeNeededForReturn } from "@/lib/stake-rescore";
 import type { Route, SavedRoutesBatch } from "@/types/routes";
@@ -48,12 +49,20 @@ export function routeDetailModel({
   );
   const stake = positiveParam(stakeParam) ?? defaultStake;
   const availableInvestment = positiveParam(availableParam) ?? (baseStake || stake);
-  const route = rescoreForStake(
+  const atStake = rescoreForStake(
     [savedRoute],
     baseStake || stake || 1,
     stake || baseStake || 1,
     targetProfit,
   )[0];
+  // A fund's odds depend on the stake: the same figures the list card showed — the
+  // chance of earning the goal at this stake, and the goal as the payoff.
+  const fundChance = isVolatilityPriced(savedRoute)
+    ? fundChanceAtStake(savedRoute, targetProfit, stake, goalDeadlineDays ?? savedRoute.maturesInDays ?? 1)
+    : null;
+  const route = fundChance != null
+    ? { ...atStake, probability: fundChance, expectedReturn: targetProfit, meetsTarget: fundChance > 0 }
+    : atStake;
   const neededToHitGoal = stakeNeededForReturn(
     savedRoute,
     baseStake || stake || 1,

@@ -62,8 +62,14 @@ export function tradingDays(calendarDays: number): number {
   return Math.max(1, Math.round((calendarDays * 252) / 365));
 }
 
-function isVolatilityPriced(route: Route): boolean {
+export function isVolatilityPriced(route: Route): boolean {
   return route.dailyVolatility != null && route.dailyVolatility > 0;
+}
+
+/** Chance, 0-100, that a fund or coin earns `target` on `stake` by the deadline. */
+export function fundChanceAtStake(route: Route, target: number, stake: number, deadlineDays: number): number {
+  if (!isVolatilityPriced(route) || stake <= 0) return 0;
+  return probabilityOfTargetMove(route.dailyVolatility!, (target / stake) * 100, tradingDays(deadlineDays), route.annualDriftPct ?? 0) ?? 0;
 }
 
 function isCashLike(route: Route): boolean {
@@ -128,9 +134,7 @@ export function goalOdds(route: Route, input: GoalOddsInput): GoalOdds {
   // the stake. Use all the room the loss cap leaves, and recompute the odds at that size.
   if (isVolatilityPriced(route)) {
     const stake = Math.floor(cap);
-    const chance = stake > 0
-      ? probabilityOfTargetMove(route.dailyVolatility!, (target / stake) * 100, tradingDays(deadlineDays), route.annualDriftPct ?? 0) ?? 0
-      : 0;
+    const chance = fundChanceAtStake(route, target, stake, deadlineDays);
     return {
       stake,
       chance,
